@@ -112,7 +112,7 @@ describe('合并多组 · 量带归属切换（方案 B）', () => {
     await waitForGeom(container);
     expect(document.body.textContent).toContain('6,000');
     expect(document.body.textContent).not.toContain('2,000');
-    expect(screen.getByTestId('volume-mark-max').textContent).toBe('5 000'); // 图上裸数 = fmtInt 空格千分位（2026-11-10 审计修）
+    expect(screen.getByTestId('volume-mark-max').textContent).toBe('5,000'); // 2026-11-18 P2-13：en-US 逗号千分位（与量轴同源，fmtInt 空格千分位是价格侧惯例）
     // 归属药丸名称行 = 当前候选（2026-11-17：候选菜单取代名称带「量」直切按钮）
     expect(screen.getByTestId('volume-owner-name').textContent).toBe('nova 14 256GB');
   });

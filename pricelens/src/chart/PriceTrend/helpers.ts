@@ -659,6 +659,8 @@ export function yPxOf(g: Geom, v: number): number {
     if (v >= s.min) break; // segs 自上而下（值域降序），找到首个 min ≤ v 的段
   }
   if (v > seg.max) return g.plotTop + seg.pTop; // 高于段顶（不应发生，防御）
+  if (v < seg.min) return g.plotTop + seg.pTop + seg.pH; // 低于段底：Y 下限抬过数据最低点时
+  // 的下缘防御（与上缘对称）——否则 DOM 覆盖层（徽标/隔离胶囊/悬停点）会画越绘图区底
   const t = (seg.max - v) / Math.max(1e-9, seg.max - seg.min);
   return g.plotTop + seg.pTop + t * seg.pH;
 }

@@ -176,6 +176,33 @@ describe('行清洗与派生', () => {
     expect(de.enabled).toBe(false);
     expect(ru.currency).toBe('RUB');
   });
+  it('2026-11-18 审计 P1-1：品牌大小写混杂 → 统一大写后仍判我司（prefixOf 不再翻车）', () => {
+    const result = run([baseRow({ 品牌: 'Huawei' }), baseRow({ 品牌: 'huawei', 平台: 'OZON', 店铺名称: 'OZON 店', 显示店铺名称: 'OZON 店' })]);
+    expect(result.dims.product.every((p) => p.is_own)).toBe(true);
+    expect(result.dims.product.every((p) => p.model_id.startsWith('own-huawei-'))).toBe(true);
+    // 同一品牌两种写法不分裂：两行同键或同型号，model_id 全一致
+    expect(new Set(result.dims.product.map((p) => p.model_id)).size).toBe(1);
+    expect(result.dims.product[0].brand).toBe('HUAWEI');
+  });
+  it('2026-11-18 审计 P1-2：空「型号」行剔除并计数（不再生成 *-x 幻影型号）', () => {
+    const result = run([baseRow({ 型号: '' }), baseRow({ 型号: '  ' }), baseRow()]);
+    expect(result.factRows).toHaveLength(1);
+    expect(result.diag.droppedBy['无型号']).toBe(2);
+    expect(result.dims.product.every((p) => !/-x__/.test(p.sku_id))).toBe(true);
+  });
+  it('2026-11-18 审计 P2-1：未知店铺类型钳制归 3P（对齐 Python where(isin) 兜底）', () => {
+    const result = run([baseRow({ 店铺类型: '官方在线' })]);
+    expect(result.dims.channel[0].store_type).toBe('3P');
+  });
+  it('2026-11-18 审计 P1-1 连锁：品牌小写行 + 大写别名规则仍并组（键两侧同归一）', () => {
+    const result = run([
+      baseRow({ 型号: 'MatePad SE 11', 品类: '平板', 型号规格: '11"/4+128 GB Black', 品牌: 'Huawei' }),
+      baseRow({ 型号: 'MatePad SE', 品类: '平板', 型号规格: '11"/4+128 GB Black', 品牌: 'huawei' }),
+    ], { modelAliasRows: [{ brand: 'HUAWEI', from: 'MatePad SE 11', to: 'MatePad SE' }] });
+    // 两种大小写写法经大写归一后与别名键同域 → 两 SKU 并一型号（正名取组内
+    // 众数型号名，此处两行同票取先入组的 'MatePad SE 11'）
+    expect(new Set(result.dims.product.map((p) => p.model_id))).toEqual(new Set(['own-huawei-matepad-se-11']));
+  });
   it('normkey 剥品牌词/连接词（别名与 id 归一的地基）', () => {
     expect(normkey('HUAWEI', '华为 MatePad SE 11')).toBe('matepad se 11');
     expect(normkey('HUAWEI', 'MatePad SE')).toBe('matepad se');

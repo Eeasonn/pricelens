@@ -20,12 +20,14 @@ export interface SeriesRule {
   series: string;
 }
 
-/** 模板渲染：{n}=第 1 捕获组原样、{w}=trim；配置表系列名同样支持 */
+/** 模板渲染：{n}=第 1 捕获组原样、{w}=trim；配置表系列名同样支持。
+ *  结果整体 trim：捕获组缺席时不留尾随空格（导入校验已拦「模板用了 {n}/{w} 但
+ *  正则无捕获组」，这里是引擎侧双保险）。 */
 export const fillTemplate = (template: string, capture: string | undefined): string =>
   template.replace(/\{([nw])\}/g, (_, kind: string) => {
     if (kind === 'n') return capture ?? '';
     return (capture ?? '').trim();
-  });
+  }).trim();
 
 /** 自定义规则（配置表）解析：`re:` 开头 = 正则；否则前缀。编译失败返回 null（防御坏行） */
 export function compileSeriesRule(rule: SeriesRule): { brand: string; rx: RegExp | null; prefix: string | null; series: string } | null {

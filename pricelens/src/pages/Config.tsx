@@ -909,13 +909,13 @@ export default function Config() {
                   : '无规则 → 型号即系列（我司取型号名首词）')}
                 {previewRow('型号别名', pendingImport.summary.modelAliasCount > 0
                   ? `${pendingImport.summary.modelAliasCount} 条（价格侧 + PSI 销量侧共用）`
-                  : '无自定义 → 仅内置别名')}
+                  : '无 → 无别名（型号原样解析）')}
                 {previewRow('对标矩阵', pendingImport.summary.benchmarkMatrixCount > 0
                   ? `${pendingImport.summary.benchmarkMatrixCount} 条（整体替换矩阵层；人工裁定不受影响）`
                   : '无 → 恢复数据层矩阵')}
                 {previewRow('分档阶梯', pendingImport.summary.tierLadderCount > 0
                   ? `${pendingImport.summary.tierLadderCount} 个产业自定义`
-                  : '无 → 使用系统内置阶梯')}
+                  : '无 → 该产业无档位（—）')}
                 {previewRow('大促档期', pendingImport.summary.promoRowCount > 0
                   ? `${pendingImport.summary.promoRowCount} 个档期`
                   : '无 → 无大促带')}

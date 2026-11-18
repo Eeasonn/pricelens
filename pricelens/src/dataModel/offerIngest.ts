@@ -335,7 +335,8 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
   // 2. 别名表（完全来自配置表——显性语义：没配置就没别名）：品牌|归一键 → 目标归一键
   const aliasMap = new Map<string, string>();
   for (const row of ctx.modelAliasRows ?? []) {
-    const brand = str(row.brand).trim();
+    // 配置表别名行品牌同样归一大写（与行级归一同一口径，键两侧才对得上）
+    const brand = str(row.brand).trim().toUpperCase();
     const from = str(row.from).trim();
     const to = str(row.to).trim();
     if (brand && from && to) aliasMap.set(`${brand}|${normkey(brand, from)}`, normkey(brand, to));
@@ -344,8 +345,12 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
   // 3. 行级归一（行业/国家/周期/平台/店铺类型/nkey+别名）
   const rows: IngestRow[] = [];
   for (const src of offers) {
-    const brand = str(fieldOf(src, '品牌')).trim();
+    // 品牌统一大写后再派生（对齐 ingest_real.py:761 .str.upper()——否则 Huawei/huawei
+    // 写法会被 prefixOf 大小写敏感比较判成竞品、BRAND_TOKENS 查不到、别名键错位）
+    const brand = str(fieldOf(src, '品牌')).trim().toUpperCase();
     const modelRaw = str(fieldOf(src, '型号')).trim();
+    // 空「型号」行剔除（对齐 ingest_real.py:758——否则 slug('')='x' 生成 *-x 幻影型号）
+    if (!modelRaw) { bump(diag.droppedBy, '无型号'); continue; }
     const industry = industryOfCat(fieldOf(src, '品类'));
     if (!industry) { bump(diag.droppedBy, '行业未识别'); continue; }
     const cc = ccOf(fieldOf(src, '国家/地区'));
@@ -358,7 +363,11 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
     const platformRaw = str(fieldOf(src, '平台')).trim();
     const platform = PLATFORM_ALIASES[fold(platformRaw).toLowerCase()] ?? platformRaw;
     const storeRaw = str(fieldOf(src, '店铺类型')).trim();
-    const storeType = STORE_ALIASES[storeRaw] ?? storeRaw;
+    // 店铺类型钳制到合法三值，未知一律归 3P（对齐 ingest_real.py:798 where(isin(...),'3P')）
+    const mappedStore = STORE_ALIASES[storeRaw] ?? storeRaw;
+    const storeType = (['1P', '3P', '独立站'] as readonly string[]).includes(mappedStore)
+      ? (mappedStore as DimChannel['store_type'])
+      : ('3P' as DimChannel['store_type']);
     const crawled = parseDatetimeCell(fieldOf(src, '采集时间'));
     rows.push({
       cc, industry, brand, nkey, modelRaw,
@@ -681,6 +690,12 @@ export function buildFromOffers(offers: OfferSourceRow[], ctx: OfferIngestCtx): 
         ? core
         : [...pfCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([p]) => p);
       region.default_platform = region.core_platforms[0] ?? null;
+    }
+    // 无数据国 enabled 复位（对齐 ingest_real.py:970 "enabled": bool(has)——v3 以内置
+    // 全启用为基座，不复位的话无包数据国仍可选，default_own_models 全靠下游存在性校验兜底）
+    const hadRows = new Set(byCc.keys());
+    for (const region of dimRegion) {
+      if (!hadRows.has(region.country_code)) region.enabled = false;
     }
   }
 

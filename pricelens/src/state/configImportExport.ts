@@ -345,6 +345,15 @@ function validateSeriesRules(raw: unknown, out: ConfigSnapshotKeys): string | nu
       } catch {
         return `seriesRules（系列规则）第 ${i + 1} 行正则无效：${r.pattern}`;
       }
+      // 系列名用了 {n}/{w} 模板但正则没有第 1 捕获组 → 渲染出空串/尾随空格的脏系列名
+      if (/\{[nw]\}/.test(r.series)) {
+        const groups = new RegExp(`${r.pattern.slice(3)}|`).exec('')?.length ?? 1;
+        if (groups - 1 < 1) {
+          return `seriesRules（系列规则）第 ${i + 1} 行系列名用了 {n}/{w} 模板，但正则没有捕获组：${r.pattern}（用 (…) 捕获要填进 {n} 的部分）`;
+        }
+      }
+    } else if (/\{[nw]\}/.test(r.series)) {
+      return `seriesRules（系列规则）第 ${i + 1} 行系列名用了 {n}/{w} 模板，但前缀规则没有捕获组（模板只支持 re: 正则规则）`;
     }
   }
   out.seriesRules = raw as SeriesRule[];
@@ -379,6 +388,8 @@ function validateBenchmarkMatrix(raw: unknown, out: ConfigSnapshotKeys): string 
       return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行缺少我司/竞品型号 id`;
     }
     if (r.country_code != null && typeof r.country_code !== 'string') return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行国家码类型不对`;
+    // 空串国家码永不等于任何真国家码 = 死行；通配请显式置 null（xlsx 解析端已把留空归 null）
+    if (r.country_code === '') return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行国家码留空（通配所有国家请将该字段置 null，不要填空白）`;
     if (r.own_romram != null && typeof r.own_romram !== 'string') return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行配置类型不对`;
     if (typeof r.sort !== 'number' || !Number.isFinite(r.sort)) return `benchmarkMatrix（对标矩阵）第 ${i + 1} 行次序（sort）不是数字`;
   }
@@ -396,6 +407,11 @@ function validateTierLadders(raw: unknown, out: ConfigSnapshotKeys): string | nu
     if (!ind) return 'tierLadders（分档阶梯）存在空产业';
     if (!Array.isArray(value) || value.length === 0 || value.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v <= 0)) {
       return `tierLadders（分档阶梯）${ind} 必须是正数价格点数组`;
+    }
+    // 档位码解析（tierRank/tierBandsOf）全部按整数正则 ^(\d+) 展开，小数价格点会让
+    // 档位比较失分辨力、总览档位带塌成同带——限正整数
+    if ((value as number[]).some((v) => !Number.isInteger(v))) {
+      return `tierLadders（分档阶梯）${ind} 价格点必须是正整数（小数档位码不支持）`;
     }
     const sorted = [...(value as number[])].sort((a, b) => a - b);
     for (let i = 1; i < sorted.length; i++) {

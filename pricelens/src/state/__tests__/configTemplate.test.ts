@@ -90,4 +90,26 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
     expect(validateImportPayload(parsed).ok).toBe(true);
     expect(parsed.keys).toMatchObject({ benchmark: [], prevGen: {}, defaultShop: {}, anomalyRule: null, anomalyMarks: [], marketRules: [], fx: null });
   });
+
+  it('2026-11-18 审计 P1-3/P2-5：带空格平台名不被切碎；矩阵空国家码解析为 null 通配', () => {
+    const bytes = exportConfigWorkbookXlsx({
+      ...snapshot,
+      keys: {
+        ...snapshot.keys,
+        promoRows: [
+          { promo_id: 'MX-BuenFin-MX-2026-11-20', country_code: 'MX', promo_name: 'Buen Fin', start_date: '2026-11-20', end_date: '2026-11-23', depth_hint: '深' as const, platforms: ['Mercado Libre', 'Amazon'], channel_raw: 'Mercado Libre,Amazon' },
+        ],
+        benchmarkMatrix: [
+          { country_code: null, own_model_id: 'own-huawei-mate-80-pro', own_romram: '12+512 GB', competitor_sku_id: 'cmp-x', sort: 0, source: 'matrix' as const },
+        ],
+      },
+    });
+    const parsed = parseConfigWorkbook(bytes);
+    const result = validateImportPayload(parsed);
+    expect(result.ok).toBe(true);
+    // 只按逗号切分：'Mercado Libre' 保持整名（旧实现按空格切碎 → 档期带静默消失）
+    expect(parsed.keys.promoRows?.[0]).toMatchObject({ platforms: ['Mercado Libre', 'Amazon'] });
+    // 空国家码单元格 → null 通配（旧实现空串 = 永不匹配任何国家的死行）
+    expect(parsed.keys.benchmarkMatrix?.[0]).toMatchObject({ country_code: null });
+  });
 });

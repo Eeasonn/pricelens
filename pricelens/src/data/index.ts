@@ -105,8 +105,11 @@ function validateFactPack(pack: FactPack): void {
     if (cols.h[i] < 0 || cols.h[i] >= channels.length) fail(`行 ${i} 的渠道索引越界`);
     const fx = cols.fx[i];
     if (typeof fx !== 'number' || !Number.isFinite(fx) || fx <= 0) fail(`行 ${i} 的汇率非正数（会产生 Infinity 价格）`);
-    if (cols.inst[i] >= dict.inst.length || cols.promo[i] >= dict.promo.length
-      || cols.url[i] >= dict.url.length || cols.shot[i] >= dict.shot.length || cols.seller[i] >= dict.seller.length) {
+    if (cols.inst[i] < 0 || cols.inst[i] >= dict.inst.length
+      || cols.promo[i] < 0 || cols.promo[i] >= dict.promo.length
+      || cols.url[i] < 0 || cols.url[i] >= dict.url.length
+      || cols.shot[i] < 0 || cols.shot[i] >= dict.shot.length
+      || cols.seller[i] < 0 || cols.seller[i] >= dict.seller.length) {
       fail(`行 ${i} 的字典索引越界`);
     }
   }

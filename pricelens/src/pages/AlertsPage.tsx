@@ -92,7 +92,7 @@ import {
   type RomramNode,
 } from '../components/ProductCascader/tree';
 import { CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../components/ProductCascader';
-import { POPOVER_H, pillW, ROW_GAP, StateTag, textW } from '../components/ProductPicker/pickerBits';
+import { POPOVER_H, pillW, ROW_GAP, StateTag, textW, useTopEscClose } from '../components/ProductPicker/pickerBits';
 import PageHeader from '../components/PageHeader';
 import BrandDot, { brandLabelOf } from '../components/BrandMark';
 import { AlertDetailDrawer, alertDigest, TypePill, TYPE_STYLE, pctText, useAlerts } from '../components/AlertCenter';
@@ -1595,6 +1595,10 @@ function AddMonitorControl({ prominent, onAdded }: {
   const { message } = AntdApp.useApp();
   const narrow = useNarrowViewport();
   const [menuOpen, setMenuOpen] = useState(false);
+  // P2-16：capture 直关的时刻戳——触发器按钮在弹层外，按下即被直关；随后
+  // rc-trigger 的 click 看到 open=false 会请求 onOpenChange(true)。350ms 窗内
+  // 该开窗请求视为同一次点击的关窗意图，忽略——否则「点了关不掉还立即重开」。
+  const monitorClosedAtRef = useRef(0);
   // 关闭接管（同 ProductPickerModal 的直 setState 关闭兜底思路；2026-11-18 Eason 报
   // 「点型号层整窗关闭、＋全部型号无反应」终修）：点型号行展开第四列时 CascadePanel
   // 内容全量重建，click 冒泡到 document 时原 target 已 detach，rc-trigger 的外部
@@ -1603,20 +1607,30 @@ function AddMonitorControl({ prominent, onAdded }: {
   // 直关（pointerdown 先于 click，语义为「按下时在哪」——detach 不影响判定）。
   useEffect(() => {
     if (!menuOpen) return undefined;
-    const closeAll = (): void => { setMenuOpen(false); setSearch(''); setTier(null); };
+    const closeAll = (): void => {
+      monitorClosedAtRef.current = Date.now();
+      setMenuOpen(false);
+      setSearch('');
+      setTier(null);
+    };
     const onDocPointerDown = (e: PointerEvent): void => {
       const path = (e.composedPath?.() ?? []) as Node[];
       const inPopup = path.some((n) => n instanceof Element && n.closest('.lpl-monitor-pop') != null);
       if (!inPopup) closeAll();
     };
-    const onDocKeyDown = (e: KeyboardEvent): void => { if (e.key === 'Escape') closeAll(); };
     document.addEventListener('pointerdown', onDocPointerDown, true);
-    document.addEventListener('keydown', onDocKeyDown, true);
     return () => {
       document.removeEventListener('pointerdown', onDocPointerDown, true);
-      document.removeEventListener('keydown', onDocKeyDown, true);
     };
   }, [menuOpen]);
+  // P2-17：Esc 走栈顶判定正典（useTopEscClose）——内层 antd 弹层（档位 Select 下拉）
+  // 在场时让位，一次 Esc 只收下拉不连整窗全关；自己是栈顶才关
+  useTopEscClose(menuOpen, () => {
+    monitorClosedAtRef.current = Date.now();
+    setMenuOpen(false);
+    setSearch('');
+    setTier(null);
+  });
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
   const [modelSort, setModelSort] = useState<ModelSortMode>('default');
@@ -1768,13 +1782,14 @@ function AddMonitorControl({ prominent, onAdded }: {
       getPopupContainer={(t) => (t.parentElement as HTMLElement) ?? document.body}
       onOpenChange={(open) => {
         if (!open) return; // 关闭统一由上方 capture 监听接管（外点/Esc 直关；detach 误判请求忽略）
+        // P2-16：capture 刚直关（点触发器按钮）后 rc-trigger 又请求开窗——同一次
+        // 点击的关窗意图，忽略（350ms 窗）
+        if (Date.now() - monitorClosedAtRef.current < 350) return;
         setMenuOpen(open);
-        if (open) {
-          setSearch('');
-          setTier(null); // 开窗回全部档位（与看板浮窗同约定）
-          const b0 = tree[0];
-          setPath([b0?.key ?? '', b0?.series[0]?.key ?? '', b0?.series[0]?.models[0]?.modelId ?? '']);
-        }
+        setSearch('');
+        setTier(null); // 开窗回全部档位（与看板浮窗同约定）
+        const b0 = tree[0];
+        setPath([b0?.key ?? '', b0?.series[0]?.key ?? '', b0?.series[0]?.models[0]?.modelId ?? '']);
       }}
       styles={{ body: { padding: 10 } as const }}
       content={

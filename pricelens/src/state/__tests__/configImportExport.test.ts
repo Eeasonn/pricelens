@@ -174,6 +174,42 @@ describe('validateImportPayload · 坏文件一律拒绝（不半写入）', () 
     expect(res.payload?.keys.marketRules?.[0]).toMatchObject({ countryCode: 'ZA', financingTerms: [24, 36] });
   });
 
+  it('2026-11-18 审计 P2-4/5/6：模板无捕获组、阶梯小数、矩阵空串国家码 → 拒绝', () => {
+    // P2-4：{n}/{w} 模板但正则无捕获组 → 拒
+    expect(validateImportPayload({
+      ...base(),
+      keys: { ...base().keys, seriesRules: [{ brand: 'HUAWEI', pattern: 're:Watch GT', series: 'WATCH GT {n}' }] },
+    }).error).toContain('捕获组');
+    // P2-4：前缀规则没有捕获组，用模板 → 拒
+    expect(validateImportPayload({
+      ...base(),
+      keys: { ...base().keys, seriesRules: [{ brand: 'HUAWEI', pattern: 'Watch GT', series: 'WATCH GT {n}' }] },
+    }).error).toContain('前缀规则');
+    // P2-6：阶梯小数价格点（档位码解析按整数正则展开）→ 拒
+    expect(validateImportPayload({
+      ...base(),
+      keys: { ...base().keys, tierLadders: { phone: [200.5, 400] } },
+    }).error).toContain('正整数');
+    // P2-5：矩阵空串国家码 = 死行（通配须显式 null）→ 拒
+    expect(validateImportPayload({
+      ...base(),
+      keys: { ...base().keys, benchmarkMatrix: [{ country_code: '', own_model_id: 'own-x', own_romram: '12+256 GB', competitor_sku_id: 'cmp-x', sort: 1, source: 'matrix' }] },
+    }).error).toContain('国家码留空');
+  });
+
+  it('2026-11-18 审计：正则带捕获组的模板与 null 通配国家码 → 合法', () => {
+    const res = validateImportPayload({
+      ...base(),
+      keys: {
+        ...base().keys,
+        seriesRules: [{ brand: 'APPLE', pattern: 're:^iPhone (\\d+)', series: 'iPhone {n}' }],
+        benchmarkMatrix: [{ country_code: null, own_model_id: 'own-x', own_romram: '12+256 GB', competitor_sku_id: 'cmp-x', sort: 1, source: 'matrix' }],
+        tierLadders: { phone: [200, 400, 800] },
+      },
+    });
+    expect(res.ok).toBe(true);
+  });
+
   it('好文件（含全部键）通过校验', () => {
     seedConfig();
     const res = validateImportPayload(JSON.parse(JSON.stringify(exportConfigSnapshot())));

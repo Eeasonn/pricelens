@@ -135,7 +135,8 @@ export function readBenchmarkMatrix(): DimBenchmark[] | null {
     const r = item as Partial<DimBenchmark>;
     if (!isStr(r.own_model_id) || !isStr(r.competitor_sku_id)) continue;
     rows.push({
-      country_code: typeof r.country_code === 'string' ? r.country_code : '',
+      // null = 通配所有国家（空串是死值：永不等于任何真国家码）
+      country_code: typeof r.country_code === 'string' && r.country_code ? r.country_code : null,
       own_model_id: r.own_model_id,
       own_romram: typeof r.own_romram === 'string' ? r.own_romram : '',
       competitor_sku_id: r.competitor_sku_id,

@@ -13,7 +13,7 @@ import { BarChart, LineChart } from 'echarts/charts';
 import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { CSSProperties } from 'react';
-import { COMPETITORS, COST_HISTORY, MARKET_HISTORY, type ProductCase } from './mockData';
+import { COMPETITORS, COST_HISTORY, MARKET_HISTORY, UNCERTAINTY_BAND, type ProductCase } from './mockData';
 import type { ForecastPoint, ForecastSeries } from './pricingModel';
 import { costMoM, marketQoQ } from './pricingModel';
 import { color, font, fontSize } from '../../theme/tokens';
@@ -293,7 +293,7 @@ export function ForecastChart({ series }: { series: ForecastSeries }) {
           const prevRef = ps.find((p) => p.seriesName === '上一代同期基线');
           return `<div style="font-weight:600;color:${color.ink};margin-bottom:4px">${ps[0]?.axisValue ?? ''}</div>` +
             (actual?.value != null ? `<div>实际周销 ${actual.value.toFixed(1)} 千台</div>` : '') +
-            (mid?.value != null ? `<div>预估中枢 ${mid.value.toFixed(1)} 千台（区间 ±${Math.round((mid.value * 0.12) * 10) / 10}）</div>` : '') +
+            (mid?.value != null ? `<div>预估中枢 ${mid.value.toFixed(1)} 千台（区间 ±${Math.round((mid.value * UNCERTAINTY_BAND) * 10) / 10}）</div>` : '') +
             (prevRef?.value != null ? `<div>上一代同期基线 ${prevRef.value.toFixed(1)} 千台</div>` : '');
         },
       },

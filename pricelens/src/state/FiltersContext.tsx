@@ -23,6 +23,7 @@ import type {
   PlatformSelection,
   ProductSelection,
 } from './filtersTypes';
+import type { Granularity } from '../dataModel/types';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimProduct, dimRegion, dimTime, factPriceMonthly } from '../data';
 import { lowestPriceColorSku, platformSelectionForCountry, sellersOfChannel } from '../dataModel/aggregate';
@@ -669,6 +670,10 @@ function swapRangeSnapshot(prev: FiltersState, scoped: FiltersState, explicitTim
   try {
     sessionStorage.setItem(rangeSnapKeyOf(prev.countryCode, prev.industry), JSON.stringify({
       adaptive: prev.adaptive, rangeStart: prev.rangeStart, rangeEnd: prev.rangeEnd,
+      // 2026-11-18 P1-5：快照必须带粒度。否则 RU(周)→ZA(锁月)→RU 会恢复成
+      // 「month 粒度 + RU 周桶 id」——filterBounds indexOf 落空图表显全集，且错配
+      // 被 URL/持久化写盘跨会话钉死
+      granularity: prev.granularity,
     }));
   } catch {
     /* 存储不可用时跳过快照 */
@@ -678,13 +683,31 @@ function swapRangeSnapshot(prev: FiltersState, scoped: FiltersState, explicitTim
   try {
     const raw = sessionStorage.getItem(rangeSnapKeyOf(scoped.countryCode, scoped.industry));
     if (raw) {
-      const snap = JSON.parse(raw) as { adaptive?: unknown; rangeStart?: unknown; rangeEnd?: unknown };
+      const snap = JSON.parse(raw) as { adaptive?: unknown; rangeStart?: unknown; rangeEnd?: unknown; granularity?: unknown };
       if (typeof snap.adaptive === 'boolean') {
+        let granularity = scoped.granularity;
+        let rangeStart = typeof snap.rangeStart === 'string' ? snap.rangeStart : scoped.rangeStart;
+        let rangeEnd = typeof snap.rangeEnd === 'string' ? snap.rangeEnd : scoped.rangeEnd;
+        const snapGran = snap.granularity;
+        const isGranularity = (v: unknown): v is Granularity => v === 'week' || v === 'month' || v === 'quarter';
+        if (isGranularity(snapGran) && snapGran !== granularity) {
+          // 快照粒度与目标态不一致：非锁粒度国恢复快照粒度（桶 id 与粒度同对还原）；
+          // 锁粒度国（ZA 月度）不许恢复——保持锁定粒度，把快照范围换算到锁定粒度
+          const profile = marketDataProfileOf(scoped.countryCode);
+          if (!profile.granularityLocked) {
+            granularity = snapGran;
+          } else {
+            const conv = convertRangeBuckets(rangeStart, rangeEnd, snapGran, granularity);
+            rangeStart = conv.start;
+            rangeEnd = conv.end;
+          }
+        }
         return {
           ...scoped,
           adaptive: snap.adaptive,
-          rangeStart: typeof snap.rangeStart === 'string' ? snap.rangeStart : scoped.rangeStart,
-          rangeEnd: typeof snap.rangeEnd === 'string' ? snap.rangeEnd : scoped.rangeEnd,
+          rangeStart,
+          rangeEnd,
+          granularity,
         };
       }
       return scoped;

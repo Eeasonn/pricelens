@@ -1027,12 +1027,10 @@ export default function VolumePrice() {
                           break;
                         }
                       }
-                      const row = summaryRows.find((item) => item.key === p.key);
-                      const windowLo = row ? Math.min(row.windowStart, row.windowEnd) : 0;
-                      const windowHi = row ? Math.max(row.windowStart, row.windowEnd) : -1;
-                      const volumeSlice = row ? row.volumes.slice(windowLo, windowHi + 1) : [];
-                      // 万单位档：区间内非空值全部 ≥1 万才开（混合量级开万档会把小值抹成「0万」）
-                      const volumeWan = shouldUseWanUnits(volumeSlice);
+                      // 万单位档：按共享窗口的显示序列判定（与下方 mergedVolumes[p.idx]
+                      // 取数同窗）——面板独立查看窗口判档会在共享窗低量周显示「0万」
+                      // （区间内非空值全部 ≥1 万才开，混合量级开万档会把小值抹成「0万」）
+                      const volumeWan = shouldUseWanUnits(mergedVolumes[p.idx] ?? []);
                       const formatVolume = (value: number) => formatVolumeAmount(value, volumeWan);
                       const detail = weekDetailModel({
                         granularity: state.granularity,

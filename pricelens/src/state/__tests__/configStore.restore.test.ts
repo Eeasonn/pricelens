@@ -94,9 +94,9 @@ describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
 
     clearBenchmarkEntry(CC, MID, ROM);
 
-    const after = [...(rawBench() ?? [])].sort((a, b) => a.country_code.localeCompare(b.country_code));
+    const after = [...(rawBench() ?? [])].sort((a, b) => (a.country_code ?? '').localeCompare(b.country_code ?? ''));
     // DE 的人工行原样保留；RU 组补回维表默认 2 款
-    expect(after).toEqual([deManual, ...targetRows].sort((a, b) => a.country_code.localeCompare(b.country_code)));
+    expect(after).toEqual([deManual, ...targetRows].sort((a, b) => (a.country_code ?? '').localeCompare(b.country_code ?? '')));
     expect(after.filter((r) => r.country_code === 'DE')).toEqual([deManual]);
   });
 

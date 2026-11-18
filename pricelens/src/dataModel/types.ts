@@ -112,7 +112,8 @@ export interface DimPromo {
 
 /** §7.1 分国默认竞品矩阵（我司型号×配置 → 竞品代表色 SKU） */
 export interface DimBenchmark {
-  country_code: string;
+  /** null = 通配所有国家（配置表矩阵行国家码留空的语义）；空串是非法值（读取端永不匹配） */
+  country_code: string | null;
   own_model_id: string;
   own_romram: string;
   competitor_sku_id: string;

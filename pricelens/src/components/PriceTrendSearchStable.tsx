@@ -87,6 +87,12 @@ export default function PriceTrendSearch() {
   const { page } = usePage();
   const { state, actions } = useFilters();
   const { open: agentOpen, openAgent, send, running, runStatus, activeRun } = useAgent();
+  // latest-ref：NL 补丁先经 actions.set 提交（国家/产品/时间词换算），Provider 随即
+  // 重渲染出携带新 context 的 send。下方 setTimeout 闭包捕获的是点击那一刻的旧
+  // send——用它会把答案按旧国家/旧主品计算，且结束时指纹比对整体判 stale_context
+  // （回看/追问按钮全禁用）。走 ref 取提交后的新 send。
+  const sendRef = useRef(send);
+  sendRef.current = send;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -186,7 +192,8 @@ export default function PriceTrendSearch() {
     // Let the filter context commit the NL country/product handoff before the
     // Agent snapshots its context. The response still comes from the local
     // deterministic engine or configured remote-with-fallback client.
-    window.setTimeout(() => void send(trimmed), 0);
+    // （sendRef：见上方 latest-ref 注释——必须用提交后的新 send 快照新 context）
+    window.setTimeout(() => void sendRef.current(trimmed), 0);
   };
 
   const selectProduct = (hit: ProductHit, skuId = hit.skuId) => {

@@ -934,7 +934,9 @@ export function buildVolumeMarks(p: {
   const colW = p.plotWidth / p.n;
   const bandBottom = p.bandTop + p.bandH;
   const items: AvoidItem[] = labeled.map((i) => {
-    const text = fmtInt(Math.round(val(i)));
+    // 销量标注走 en-US 逗号千分位（与量轴刻度/悬停量卡同源；fmtInt 是价格侧
+    // ru-RU 空格千分位——同一根柱图上标「4 582」轴上读「4,582」的混排不再）
+    const text = Math.round(val(i)).toLocaleString('en-US');
     const w = Math.round(text.length * 6.2) + 2; // 10px 等宽数字（无框，只留描边余量）
     const left = Math.max(p.plotLeft, Math.min(p.plotLeft + colW * (i + 0.5) - w / 2, p.plotLeft + p.plotWidth - w));
     const pointY = bandBottom - volumeBarHeightOf(val(i), p.vMax, p.bandH);

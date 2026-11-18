@@ -118,11 +118,15 @@ interface Spec {
   romram: string;
 }
 
-/** 从系列 key（`${modelId}__${配置去空格}`）反查型号名与展示配置 */
+/** 从系列 key（`${modelId}__${配置去空格}`）反查型号名与展示配置。
+ *  ZA 融资系列 key 带 `__i24/__i36/__i48/__pp` 尾缀（aggregate 月度口径）——先剥
+ *  尾缀再反查，否则 romram 恒不命中、「配置」列恒空（seriesPillMetaOf/pickChannel
+ *  2026-11-16 已修同族，此处当时漏网）。 */
 function specOfKey(key: string, label: string): Spec {
-  const sep = key.indexOf('__');
-  const modelId = sep >= 0 ? key.slice(0, sep) : key;
-  const rom = sep >= 0 ? key.slice(sep + 2) : '';
+  const core = key.replace(/__(?:i\d+|pp)$/, '');
+  const sep = core.indexOf('__');
+  const modelId = sep >= 0 ? core.slice(0, sep) : core;
+  const rom = sep >= 0 ? core.slice(sep + 2) : '';
   const hit = dimProduct.find((p) => p.model_id === modelId && p.romram.replace(/\s+/g, '') === rom);
   return hit ? { modelName: hit.model_name, romram: hit.romram } : { modelName: dedupeSpecText(label), romram: '' };
 }

@@ -333,11 +333,12 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
       const { container } = render(<Chart {...props} volumeMode={mode} /> as ReactElement);
       await waitForGeom(container);
       // 2026-11-10 审计修：4 根有效柱 ≤ 8 → 全部标注（不再是 5 柱只标 3 根的「渲染遗漏」观感）；
-      // 文案走 fmtInt 图上裸数惯例（空格千分位，与价格标签同）
-      expect(screen.getByTestId('volume-mark-max').textContent).toBe('6 100');
-      expect(screen.getByTestId('volume-mark-min').textContent).toBe('3 000');
-      expect(screen.getByTestId('volume-mark-latest').textContent).toBe('4 000');
-      expect(screen.getByTestId('volume-mark-idx-0').textContent).toBe('5 200'); // 普通柱也带数
+      // 2026-11-18 审计 P2-13：文案改 en-US 逗号千分位（与量轴刻度/悬停量卡同源；
+      // fmtInt 的空格千分位是价格侧惯例，同图混排退役）
+      expect(screen.getByTestId('volume-mark-max').textContent).toBe('6,100');
+      expect(screen.getByTestId('volume-mark-min').textContent).toBe('3,000');
+      expect(screen.getByTestId('volume-mark-latest').textContent).toBe('4,000');
+      expect(screen.getByTestId('volume-mark-idx-0').textContent).toBe('5,200'); // 普通柱也带数
       // 去框：纯数字文本（品牌色 / 10px / 等宽数字），无底色无边框
       for (const kind of ['max', 'min', 'latest']) {
         const mark = screen.getByTestId(`volume-mark-${kind}`);
@@ -377,7 +378,7 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(rising.y + VOL_MARK_H).toBeLessThanOrEqual(pointY(4500));
     // 同桶身兼最低+最新 → 只一枚（该桶保留最低位）；全标下其余柱照标
     const merged = buildVolumeMarks({ ...base, values: [5200, 4800, null, 6100, 3900] });
-    expect(merged.map((m) => m.text)).toEqual(['5 200', '4 800', '6 100', '3 900']);
+    expect(merged.map((m) => m.text)).toEqual(['5,200', '4,800', '6,100', '3,900']); // 2026-11-18 P2-13：en-US 逗号千分位
     // 只一个有值桶 → 一枚；全空 → 不标
     expect(buildVolumeMarks({ ...base, values: [null, 2000, null, null, null] }).length).toBe(1);
     expect(buildVolumeMarks({ ...base, values: [null, null, null, null, null] })).toEqual([]);

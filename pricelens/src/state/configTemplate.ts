@@ -492,7 +492,9 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
     to: textValue(get(row, '目标型号')),
   })).filter((row) => row.brand && row.from && row.to);
   const benchmarkMatrix: DimBenchmark[] = benchmarkMatrixRows.map((row) => ({
-    country_code: textValue(get(row, 'country_code', '国家码')),
+    // 国家码留空 = 全国家通配（null 语义与 JSON 快照一致；空串在读取端永不等于
+    // 任何真国家码，会把整行变死行）
+    country_code: textValue(get(row, 'country_code', '国家码')).trim() || null,
     own_model_id: textValue(get(row, 'own_model_id', '我司型号 id', '我司型号ID')),
     own_romram: textValue(get(row, 'own_romram', 'own_romram（配置）', '配置')),
     competitor_sku_id: textValue(get(row, 'competitor_sku_id', '竞品 sku id', '竞品SKU')),
@@ -518,7 +520,11 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
     const end = textValue(get(row, '结束日期'));
     const depthRaw = textValue(get(row, '深浅（浅/中/深）', '深浅'));
     const platformsRaw = textValue(get(row, '平台（逗号分隔，留空=全部）', '平台'));
-    const platforms = platformsRaw ? platformsRaw.split(/[,，\s]+/).filter(Boolean) : null;
+    // 只按逗号切分（段两端 trim）：平台名本身可含空格（Mercado Libre），连空格切
+    // 会让碎片段在档期带匹配中永不命中、档期静默消失
+    const platforms = platformsRaw
+      ? platformsRaw.split(/[,，]+/).map((s) => s.trim()).filter(Boolean)
+      : null;
     const depthHint: DimPromo['depth_hint'] = depthRaw === '浅' || depthRaw === '中' ? depthRaw : '深';
     return {
       promo_id: `${cc}-${name}-${start}`,

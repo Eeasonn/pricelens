@@ -941,7 +941,10 @@ export default function Chart(props: ChartProps) {
     ? Math.max(40, Math.round(props.volumeHeight ?? (gridTop + scale.plotHeight + GRID.bottom) * 0.3))
     : 0;
   const volInlineH = volOn && props.volumeInline === true
-    ? Math.max(40, Math.round(scale.plotHeight * 0.3))
+    // 页面（量价页）按「压缩前总高 × 30%」推导 volumeHeight 并已据此压缩价格区——
+    // inline 分支必须用同一规划值；此前按压缩后 plotHeight×30% 再取，实际量带只有
+    // 页面规划的 ~2/3。未传 volumeHeight 的调用方回落 plotHeight×30%
+    ? Math.max(40, Math.round(props.volumeHeight ?? scale.plotHeight * 0.3))
     : 0;
   const gridRight = props.gridRight ?? (volOn ? VOL_AXIS_RIGHT_W : GRID.right);
   const chartH = gridTop + Math.round(animH) + GRID.bottom + volBandH;
@@ -1027,7 +1030,11 @@ export default function Chart(props: ChartProps) {
   useEffect(() => {
     if (!rulerOn || !brushSet) return;
     const onKey = (ev: KeyboardEvent): void => {
-      if (ev.key === 'Escape') props.onBrushChange?.(null, true);
+      if (ev.key !== 'Escape') return;
+      // 输入控件内的 Esc = 取消本次编辑（Y 轴上下限/销量上限输入框等），不清图内选区
+      const t = ev.target as HTMLElement | null;
+      if (t != null && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      props.onBrushChange?.(null, true);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1713,7 +1720,7 @@ export default function Chart(props: ChartProps) {
               [vMax, volBase - effBandH],
               [vMax / 2, volBase - effBandH / 2],
               [0, volBase],
-            ] as [number, number][]).map(([v, y]) => ({ label: Math.round(v).toLocaleString('en-US'), y }))
+            ] as [number, number][]).map(([v, y]) => ({ label: v.toLocaleString('en-US', { maximumFractionDigits: 1 }), y }))
           : [];
         const bars = volVals.map((v, i) => {
           if (v == null || !Number.isFinite(v) || v <= 0 || vMax <= 0) return null;
@@ -2617,6 +2624,18 @@ export default function Chart(props: ChartProps) {
             const priceW = Math.max(Math.round(priceCh * 8.4) + 8, tipHeaderW(priceHeader)); // 数值 14px tabular：数字 ≈0.6em
             const rrpW = Math.max(30, Math.round(rrpCh * 7.2) + 8, tipHeaderW(rrpHeader)); // 数值 12px tabular
             const rateLabel = props.tipMode === 'discount' ? '折扣率' : '周环比';
+            // 环比基线 = 上一「可信点」：跳过被隔离点与缺价列（与 buildChangeMarks 的
+            // 基线链同口径——否则隔离周后悬停卡会拿被隔离的异常价当基线，与图上
+            // ↓/↑ 变化徽标的读数互相矛盾）
+            const prevTrustedPriceOf = (row: (typeof series)[number]): number | null => {
+              for (let i = tipIdx - 1; i >= 0; i--) {
+                const pt = row.points[i];
+                if (pt.suspect === 'quarantined') continue;
+                const v = primaryPriceOf(pt, priceTypes);
+                if (v != null) return v;
+              }
+              return null;
+            };
             const rateValues = rows.map(({ s, v }) => {
               const pt = s.points[tipIdx];
               if (props.tipMode === 'discount') {
@@ -2625,7 +2644,7 @@ export default function Chart(props: ChartProps) {
                 const pct = Math.round(Math.abs(disc) * 100);
                 return pct === 0 ? '0%' : `${disc < 0 ? '−' : '+'}${pct}%`;
               }
-              const prevV = tipIdx > 0 ? primaryPriceOf(s.points[tipIdx - 1], priceTypes) : null;
+              const prevV = prevTrustedPriceOf(s);
               const wow = prevV != null && prevV > 0 && v != null ? v / prevV - 1 : null;
               return wow == null ? '' : fmtSignedPct(wow);
             });
@@ -2705,7 +2724,7 @@ export default function Chart(props: ChartProps) {
                   const dim = litKeys != null && !litKeys.includes(s.key);
                   const items = offerRows[ri];
                   // 周环比（第一百八十轮）：本列折后价相对上一列；首列/缺采 = null
-                  const prevV = tipIdx > 0 ? primaryPriceOf(s.points[tipIdx - 1], priceTypes) : null;
+                  const prevV = prevTrustedPriceOf(s);
                   const wow = prevV != null && prevV > 0 && v != null ? v / prevV - 1 : null;
                   // 折扣率胶囊（第五十二轮）：与时点卡同语言（vs RRP；仅折后价口径出）
                   const disc =
