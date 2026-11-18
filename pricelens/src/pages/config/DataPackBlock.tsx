@@ -7,6 +7,11 @@
 //  - 导出当前数据包：当前内存态（内置或已导入）序列化下载——迁移 = 拷
 //    PriceLens.html + 数据包两个文件；
 //  - 还原内置数据：清持久化 + 刷新（内置数据始终兜底，不会被导入破坏）。
+// 2026-11-18 服务模式（前后端分离）：探测到本机 Python 服务器（server/server.py）
+//    时导入/重派生/还原改走服务器 API——导入 = File 直接做 POST body 流式上传
+//    （前端零内存压力，117MB 级全量包根治「浏览器导不进」）、服务器 Python 引擎
+//    派生 + SQLite 落库、刷新后 bootstrap 从 GET /api/pack 装载 gzip v2 包。
+//    单文件模式（file:// 双击打开）链路原样保留（兜底）。
 // 查阅者（RBAC）：只读——导入/还原置灰（改的是本机数据承载），导出不限制。
 // 数据校验与置换全部在 data/index.ts applyDataPack（先解码校验后整体提交）。
 // ============================================================
@@ -16,6 +21,7 @@ import { Button, Popconfirm, Tooltip, message } from 'antd';
 import { DownloadOutlined, ReloadOutlined, RollbackOutlined, UploadOutlined } from '@ant-design/icons';
 import { buildDataPack, dataMeta, applyDataPack, type DataPackMeta } from '../../data';
 import { clearDataPack, loadDataPack, saveDataPack } from '../../data/dataPackStore';
+import { isServiceMode } from '../../data/serviceMode';
 import { useConfigVersion } from '../../state/configStore';
 import { canEditConfig } from '../../access/role';
 import { color } from '../../theme/tokens';
@@ -39,10 +45,24 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
   const meta: DataPackMeta = dataMeta();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const serviceMode = isServiceMode();
+
+  // 服务器 API 结果（服务模式导入/重派生返回的 {ok, error, diag, meta}）
+  const postServer = async (path: string, body?: BodyInit): Promise<{ error?: string; diag?: DataPackMeta['offersDiag'] }> => {
+    const res = await fetch(path, {
+      method: 'POST',
+      ...(body != null ? { body } : {}),
+      headers: body != null ? { 'Content-Type': 'application/json' } : undefined,
+    });
+    const info = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; diag?: DataPackMeta['offersDiag'] } | null;
+    if (!res.ok || !info?.ok) throw new Error(info?.error || `服务器响应异常（HTTP ${res.status}）`);
+    return { diag: info.diag };
+  };
 
   // 2026-11-18 配置表化：原表模式（v3）包的派生结果依赖当前配置表（系列规则/型号
   // 别名/对标矩阵/分档阶梯/大促档期）。配置表导入后点此按钮 = 用持久化包重跑归一
   // 派生（不改包本身，只重算维表/事实），避免「改了表还要重新选文件导一遍」。
+  // 服务模式：POST /api/rederive（服务器用已存原包 + 服务器配置重跑 Python 引擎）。
   const onRederive = async (): Promise<void> => {
     if (busy) return;
     if (!canEditConfig()) {
@@ -51,6 +71,13 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
     }
     setBusy(true);
     try {
+      if (serviceMode) {
+        const info = await postServer('/api/rederive');
+        const diagRows = info.diag?.rowsOut;
+        message.success(`已按服务器当前配置重新派生${diagRows != null ? `（${diagRows.toLocaleString()} 事实行）` : ''}，即将刷新页面`);
+        window.setTimeout(() => window.location.reload(), 700);
+        return;
+      }
       const stored = await loadDataPack();
       if (!stored) {
         message.warning('本机没有持久化的数据包（当前数据为内置或未持久化），无需重新派生');
@@ -81,6 +108,24 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
     }
     setBusy(true);
     try {
+      if (serviceMode) {
+        // File 直接做 POST body：浏览器流式发送，前端不读全文不 JSON.parse——
+        // 117MB 级全量包在服务器 Python 进程处理（内存无压力），根治浏览器端
+        // 「五份全量内存拷贝」的崩溃链。上传 + 派生同步等待（本机 localhost，
+        // 全量约 10-60s），期间按钮 loading。
+        const loading = message.loading('已上传服务器，正在派生（全量包约 1 分钟内）…', 0);
+        try {
+          const info = await postServer('/api/datapack', file);
+          window.setTimeout(loading, 0);
+          const diagRows = info.diag?.rowsOut;
+          message.success(`数据包已导入服务器（${diagRows != null ? `${diagRows.toLocaleString()} 事实行` : '已生效'}），即将刷新页面`);
+          window.setTimeout(() => window.location.reload(), 700);
+        } catch (error) {
+          window.setTimeout(loading, 0);
+          throw error;
+        }
+        return;
+      }
       const text = await file.text();
       let parsed: unknown;
       try {
@@ -123,6 +168,18 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
   };
 
   const onReset = async (): Promise<void> => {
+    if (serviceMode) {
+      try {
+        await postServer('/api/datapack/reset');
+      } catch (error) {
+        message.error(`还原失败：${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+      await clearDataPack(); // 本机旧包一并清掉（服务模式优先服务器包，但防回退混淆）
+      message.success('服务器数据已清空，即将刷新页面（回落内置数据）');
+      window.setTimeout(() => window.location.reload(), 700);
+      return;
+    }
     // cleared=false（删除失败）时不能刷新：刷新后 applyPersistedDataPack 会把
     // 没删掉的包重新载入，界面说「已还原」而数据原封不动（2026-11-16 审视修复）
     const { cleared } = await clearDataPack();
@@ -141,7 +198,9 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
       <div style={infoLine}>
         当前数据来源：
         <span style={{ fontWeight: 600, color: meta.source === 'imported' ? '#0062d9' : undefined }}>
-          {meta.source === 'imported' ? `导入数据包（v${meta.packVersion}${meta.packVersion === 3 ? ' · 原表模式' : ''}）` : '内置数据'}
+          {serviceMode
+            ? (meta.source === 'imported' ? `服务器数据包（v${meta.packVersion} · Python 引擎派生）` : '服务器模式 · 内置数据（服务器尚无数据包）')
+            : meta.source === 'imported' ? `导入数据包（v${meta.packVersion}${meta.packVersion === 3 ? ' · 原表模式' : ''}）` : '内置数据'}
         </span>
         {'　'}数据包生成时间：{fmtTime(meta.generatedAt)}
         {'　'}导入应用时间：{fmtTime(meta.appliedAt)}
@@ -187,8 +246,8 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
         <Button icon={<DownloadOutlined />} aria-label="导出当前数据包" onClick={onExport} disabled={busy}>
           导出当前数据包
         </Button>
-        {meta.packVersion === 3 && (
-          <Tooltip title={canEdit ? '配置表（系列规则/型号别名/对标矩阵/分档阶梯/大促档期）更新后，用持久化数据包重跑归一派生' : readOnlyHint}>
+        {(meta.packVersion === 3 || serviceMode) && (
+          <Tooltip title={canEdit ? (serviceMode ? '配置表导入后，服务器用已存原包重跑 Python 引擎派生' : '配置表（系列规则/型号别名/对标矩阵/分档阶梯/大促档期）更新后，用持久化数据包重跑归一派生') : readOnlyHint}>
             <Button icon={<ReloadOutlined />} disabled={!canEdit || busy} aria-label="用当前配置表重新派生" onClick={onRederive}>
               用当前配置表重新派生
             </Button>
@@ -218,9 +277,12 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
         />
       </div>
       <div style={{ ...infoLine, color: 'rgba(0,0,0,0.45)' }}>
-        便携迁移：把 PriceLens.html（应用）与本数据包拷到目标电脑 → 双击打开应用 → 配置页「导入数据包」。导入保存在本机浏览器
-        IndexedDB，不影响其他人；「还原内置数据」随时可回出厂口径。导入只替换价格/维表数据，不改动个人配置（选品、模板、阈值用
-        「配置导入导出」另行搬运）。
+        {serviceMode
+          ? '服务器模式：数据承载在本机 PriceLens 服务器（SQLite + data/ 目录），导入不再受浏览器内存限制（117MB 级全量包可直导）；'
+            + '关闭服务器后可直接双击打开单文件 PriceLens.html 走离线兜底（数据以浏览器 IndexedDB 为准）。'
+          : '便携迁移：把 PriceLens.html（应用）与本数据包拷到目标电脑 → 双击打开应用 → 配置页「导入数据包」。导入保存在本机浏览器'
+            + 'IndexedDB，不影响其他人；「还原内置数据」随时可回出厂口径。导入只替换价格/维表数据，不改动个人配置（选品、模板、阈值用'
+            + '「配置导入导出」另行搬运）。'}
       </div>
     </div>
   );

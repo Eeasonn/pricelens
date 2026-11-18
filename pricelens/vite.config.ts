@@ -57,8 +57,14 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // 精确规则在前：/api/agent → Node Agent 网关（8787），其余 /api/* →
+      // Python 本机数据服务器（8321，server/server.py——2026-11-18 前后端分离）
       '/api/agent': {
         target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://127.0.0.1:8321',
         changeOrigin: true,
       },
     },
