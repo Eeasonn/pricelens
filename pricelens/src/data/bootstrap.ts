@@ -27,9 +27,9 @@ import { LPL } from '../state/lplKeys';
  *  被服务器旧配置静默覆盖丢失）。 */
 const SYNC_PENDING_KEY = 'LPL3.config.syncPending';
 
-async function mirrorServerConfig(): Promise<void> {
+async function mirrorServerConfig(): Promise<Array<[string, string | null]> | null> {
   const store = typeof localStorage !== 'undefined' ? localStorage : null;
-  if (!store) return;
+  if (!store) return null;
   // 待发队列先行：上次同步失败的配置快照重发（成功才清；服务器仍不可达则保留）
   const pending = store.getItem(SYNC_PENDING_KEY);
   if (pending) {
@@ -49,11 +49,15 @@ async function mirrorServerConfig(): Promise<void> {
     const res = await fetch('/api/config', { cache: 'no-store' });
     if (res.ok) cfg = (await res.json()) as Record<string, unknown> | null;
   } catch {
-    return; // 服务器未启动 / 超时——本地配置原样保留
+    return null; // 服务器未启动 / 超时——本地配置原样保留
   }
   if (!cfg || typeof cfg !== 'object' || Object.keys(cfg).length === 0) {
-    return; // 服务器无配置（新装/坏档）≠ 显性清空：不动本地键
+    return null; // 服务器无配置（新装/坏档）≠ 显性清空：不动本地键
   }
+  // 回滚快照（2026-11-18 审计：服务器包 apply 失败回落 IndexedDB 时，配置已被
+  // 镜像成服务器新配置而数据是旧配置派生的——混合态。写前留 9 键旧值，失败时
+  // 整套恢复）
+  const snapshot: Array<[string, string | null]> = [];
   const dicts = (cfg.dictionaries ?? null) as Record<string, unknown> | null;
   const mapping: Array<[string, string, Record<string, unknown> | null]> = [
     [LPL.cfgSeriesRules, 'seriesRules', null],
@@ -68,9 +72,26 @@ async function mirrorServerConfig(): Promise<void> {
   ];
   for (const [key, src, section] of mapping) {
     const value = section != null ? section[src] : cfg[src];
+    snapshot.push([key, store.getItem(key)]);
     try {
       if (value == null) store.removeItem(key);
       else store.setItem(key, JSON.stringify(value));
+    } catch {
+      /* 存储不可用：静默降级 */
+    }
+  }
+  return snapshot;
+}
+
+/** 镜像回滚：恢复 9 键快照（server 包 apply 失败回落 IndexedDB 时调用——配置
+ *  回到本地旧值，与本地旧包派生口径一致） */
+function restoreConfigSnapshot(snapshot: Array<[string, string | null]> | null): void {
+  const store = typeof localStorage !== 'undefined' ? localStorage : null;
+  if (!store || !snapshot) return;
+  for (const [key, raw] of snapshot) {
+    try {
+      if (raw == null) store.removeItem(key);
+      else store.setItem(key, raw);
     } catch {
       /* 存储不可用：静默降级 */
     }
@@ -79,7 +100,7 @@ async function mirrorServerConfig(): Promise<void> {
 
 export async function applyPersistedDataPack(): Promise<void> {
   if (await detectServiceMode()) {
-    await mirrorServerConfig();
+    const snapshot = await mirrorServerConfig();
     try {
       const serverPack = await fetchServerPack();
       if (serverPack) {
@@ -93,9 +114,11 @@ export async function applyPersistedDataPack(): Promise<void> {
           return;
         }
         console.warn('[PriceLens 数据] 服务器数据包无效，回落本机持久化数据：', applied.error);
+        restoreConfigSnapshot(snapshot); // 配置回滚到本地旧值（与旧包派生口径一致）
       }
     } catch (error) {
       console.warn('[PriceLens 数据] 服务器数据包读取失败，回落本机持久化数据：', error);
+      restoreConfigSnapshot(snapshot);
     }
   }
   // 离线模式：挂离线自愈看门（服务器中途出现自动切入服务模式）——但拿到的是

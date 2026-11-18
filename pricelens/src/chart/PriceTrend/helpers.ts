@@ -1201,7 +1201,7 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: 
   const dy: Record<string, Record<number, number>> = {};
   const names: AvoidResult['names'] = [];
   const GAP = 4;
-  const placed: { left: number; right: number; top: number; h: number }[] = [];
+  const placed: { left: number; right: number; top: number; h: number; saturated?: boolean }[] = [];
   const collides = (l: number, r: number, t: number, h: number): boolean =>
     placed.some((q) => l < q.right && q.left < r && t < q.top + q.h + GAP && t + h + GAP > q.top);
   // 第一遍：必放项
@@ -1211,6 +1211,9 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: 
   for (const it of pinned) {
     let top = it.top;
     for (const q of placed) {
+      // 饱和盒（底界钳制极端停住的）不作为上推基准——它位置已失真，以它为基准
+      // 会连锁产生不成比例的上推（2026-11-18 审计 #5）；障碍判定照常参与
+      if (q.saturated) continue;
       const xOverlap = it.left < q.right && q.left < it.right;
       if (xOverlap) top = Math.min(top, q.top - it.h - GAP);
     }
@@ -1221,6 +1224,7 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: 
     // 装得下，此处只是兜底防线）。锚定模式名称塔保持旧语义（互不相交优先，
     // 金测「盒互不相交」钉此契约）
     const clampBottom = bottom != null && (it.kind === 'price' || it.zone === true);
+    let saturated = false;
     for (let guard = 0; guard < 64; guard++) {
       const hit = placed.find(
         (q) =>
@@ -1229,11 +1233,15 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: 
       if (!hit) break;
       const next = hit.top + hit.h + GAP;
       const capped = clampBottom ? Math.min(next, bottom! - it.h) : next;
-      if (capped <= top) { top = capped; break; } // 底界吸收后不再前进：停（极端防线）
+      if (capped <= top) { top = capped; saturated = clampBottom; break; } // 底界吸收后不再前进：停（标记饱和）
       top = capped;
     }
-    if (clampBottom) top = Math.max(plotTop + 2, Math.min(top, bottom! - it.h)); // 上界防御：盒高超绘图区的退化输入不再把标签顶到图上方
-    placed.push({ left: it.left, right: it.right, top, h: it.h });
+    if (clampBottom) {
+      const capped = Math.max(plotTop + 2, Math.min(top, bottom! - it.h)); // 上界防御：盒高超绘图区的退化输入不再把标签顶到图上方
+      if (capped < top) saturated = true;
+      top = capped;
+    }
+    placed.push({ left: it.left, right: it.right, top, h: it.h, ...(saturated ? { saturated: true } : {}) });
     if (it.kind === 'price') {
       (dy[it.seriesKey] ??= {})[it.pointIdx] = top - it.top;
     } else {

@@ -147,44 +147,15 @@ import OfferPopover from './OfferPopover';
 import ChartToolbar from './ChartToolbar';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 
-/** 悬停摘要浮层横向定位（纯函数，2026-11-03 防边缘遮挡）：跟随十字线右移 16px；
- *  右缘放不下时翻到十字线左侧；翻转后仍越绘图区左缘（最左列 + 宽浮层时 left
- *  可为负、被容器裁掉）则钳回 plotLeft+8——宁盖住悬停列也不出界消失 */
-export function tipOverlayLeft(plotLeft: number, plotWidth: number, x0: number, w: number): number {
-  const flip = x0 + 16 + w > plotLeft + plotWidth;
-  return Math.max(plotLeft + 8, flip ? x0 - 16 - w : x0 + 16);
-}
-
-/** 悬停卡组定位（2026-11-05 Eason 看真机）：销毛卡 / 销量卡 / 价格主卡是一组，由主卡定侧，
- *  翻转判定与 tipOverlayLeft 同源。edgeX = 主卡贴触发线的那条边：卡在右 = 主卡左缘，
- *  卡在左 = 主卡右缘（含左翻越界钳回的情况，边界仍跟主卡实际位置走）。小卡贴这条边对齐。 */
+/** 悬停卡组定位（2026-11-18 审计清理：现行语义 = 内联 group 构造（left 恒 x0）
+ *  + transform 锚定 + portal 视口钳制两层；旧「估算宽 + plot 级钳回」三函数
+ *  （tipOverlayLeft/tipGroupPlacement/tipGroupAnchor）已无调用方，随死代码删除。
+ *  TipGroupPlacement 接口保留——现行 group 构造的返回形态。 */
 export interface TipGroupPlacement {
   mainLeft: number;
   side: 'right' | 'left';
   edgeX: number;
 }
-export function tipGroupPlacement(
-  plotLeft: number,
-  plotWidth: number,
-  x0: number,
-  mainW: number,
-  /** 区间量尺（2026-11-06）：量尺在选区右侧时传 'left'——放得下就放左，不盖住量尺 */
-  prefer?: 'left',
-): TipGroupPlacement {
-  if (prefer === 'left' && x0 - 16 - mainW >= plotLeft) {
-    const left = x0 - 16 - mainW;
-    return { mainLeft: left, side: 'left', edgeX: left + mainW };
-  }
-  const mainLeft = tipOverlayLeft(plotLeft, plotWidth, x0, mainW);
-  const side = x0 + 16 + mainW > plotLeft + plotWidth ? 'left' : 'right';
-  return { mainLeft, side, edgeX: side === 'left' ? mainLeft + mainW : mainLeft };
-}
-
-/** 小卡贴组边对齐的定位样式：左侧组用 translateX(-100%)，右缘对齐不依赖估算卡宽 */
-const tipGroupAnchor = (g: TipGroupPlacement): CSSProperties => ({
-  left: g.edgeX,
-  transform: g.side === 'left' ? 'translateX(-100%)' : undefined,
-});
 
 export interface ChartProps {
   series: Series[];
@@ -767,21 +738,6 @@ export default function Chart(props: ChartProps) {
   const [ , setScrollTick] = useState(0);
   const hoverLiveRef = useRef(false);
   useEffect(() => {
-    let raf = 0;
-    const bump = (): void => {
-      if (!hoverLiveRef.current || raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        setScrollTick((t) => t + 1);
-      });
-    };
-    window.addEventListener('scroll', bump, true); // capture：页面级+横滚容器全捕获
-    return () => {
-      window.removeEventListener('scroll', bump, true);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-  useEffect(() => {
     if (!ownerMenuOpen) return undefined;
     const onDocPointerDown = (e: PointerEvent): void => {
       const path = (e.composedPath?.() ?? []) as Node[];
@@ -965,17 +921,43 @@ export default function Chart(props: ChartProps) {
   const chartH = gridTop + Math.round(animH) + GRID.bottom + volBandH;
   const totalH = chartH + (tipBoxOn ? TIP_BOX_H : 0);
 
-  // ---- 容器宽度（ResizeObserver） ----
+  // ---- 容器宽度（ResizeObserver）+ 视口 rect 缓存（2026-11-18 审计 #挂账-性能：
+  //  portal 悬停卡渲染期同步读 getBoundingClientRect 每次 mousemove 强制 reflow
+  //  → rect 缓存到 ref，由 ResizeObserver / scroll bump 事件驱动更新，渲染只读缓存）----
+  const rectCacheRef = useRef<DOMRect | null>(null);
+  const updateRectCache = useCallback((): void => {
+    rectCacheRef.current = wrapRef.current?.getBoundingClientRect() ?? null;
+  }, []);
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       for (const en of entries) setWidth(en.contentRect.width);
+      updateRectCache();
     });
     ro.observe(el);
     setWidth(el.clientWidth);
-    return () => ro.disconnect();
-  }, []);
+    updateRectCache();
+    // portal 悬停卡滚动跟随（2026-11-18 审计）：卡坐标 = rect 缓存，而页面滚动/
+    // 横滚容器拖动不触发任何状态变化 → fixed 卡钉死旧视口位置飘移。悬停存续时
+    // 监听 scroll（capture 捕获一切滚动容器），rAF 合帧更新 rect 缓存 + 强制一次
+    // 重渲染（卡坐标随缓存重算）；未悬停零开销。
+    let raf = 0;
+    const bump = (): void => {
+      if (!hoverLiveRef.current || raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        updateRectCache(); // 缓存随滚动更新（渲染读缓存，不再同步 reflow）
+        setScrollTick((t) => t + 1);
+      });
+    };
+    window.addEventListener('scroll', bump, true); // capture：页面级+横滚容器全捕获
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('scroll', bump, true);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [updateRectCache]);
 
   // ---- ECharts 实例 ----
   useEffect(() => {
@@ -1571,11 +1553,21 @@ export default function Chart(props: ChartProps) {
       ? volCands.map((c) => ({ key: c.key, text: c.text, color: c.color, v: c.volumes[volHoverIdx] ?? null }))
       : null;
     const x0 = xPxOf(geom, volHoverIdx);
+    // 面板内水平钳制（2026-11-18 审计挂账项全修）：卡宽按内容估算（名称 11px 截
+    // 132 + 「销量」行/数值/色点/padding chrome），锚点钳进 [8, 容器宽−估宽−8]——
+    // 分图窄面板右放/左翻贴线越出面板（撑横滚/叠邻面板）的根治。容器宽未实测
+    // （jsdom/首帧 width=0）不钳，保持各路径原生形态（居中/贴线）测试兼容
+    const estName = rows ? Math.max(...rows.map((r) => measureText(r.text) * 0.85)) : 0;
+    const estW = rows ? 118 + Math.min(estName, 132) : 150;
+    const clampL = (l: number): number =>
+      width > 0 ? Math.max(8, Math.min(l, Math.max(8, width - estW - 8))) : l;
     const anchorStyle: CSSProperties = align
       ? align.side === 'left'
-        ? { left: align.x, transform: 'translateX(-100%)' }
-        : { left: align.x }
-      : { left: x0, transform: 'translateX(-50%)' };
+        ? // 右缘贴线（translateX(-100%)）：窄面板左缘越界时钳 left ≥ 8（右缘随
+          // 之右移——极窄下宁可偏离贴线也不出面板）
+          { left: width > 0 ? Math.max(8, align.x) : align.x, transform: 'translateX(-100%)' }
+        : { left: width > 0 ? Math.min(align.x, Math.max(8, width - estW - 8)) : align.x } // 左缘贴线（右放越面板右缘钳回）
+      : { left: width > 0 ? Math.max(estW / 2 + 8, Math.min(x0, Math.max(estW / 2 + 8, width - estW / 2 - 8))) : x0, transform: 'translateX(-50%)' };
     if (!rows) {
       return (
         <div
@@ -1836,11 +1828,15 @@ export default function Chart(props: ChartProps) {
                       <span
                         aria-hidden
                         style={{
-                          fontSize: 9, lineHeight: '12px', fontWeight: 600, color: '#b45309',
-                          background: '#fff7e6', borderRadius: radius.pill, padding: '0 5px',
+                          fontSize: 9, lineHeight: '12px', fontWeight: 600,
+                          // 销量口径徽标（2026-11-18）：PSI 真实销量 = 绿「PSI」（tokens evidence.verified）；
+                          // 估算口径维持琥珀「模拟」。此前字面量「模拟」在真实口径下误标（演示事故级）。
+                          color: salesSourceOf() === 'psi-weekly' ? '#15803d' : '#b45309',
+                          background: salesSourceOf() === 'psi-weekly' ? '#f0fdf4' : '#fff7e6',
+                          borderRadius: radius.pill, padding: '0 5px',
                         }}
                       >
-                        模拟
+                        {salesSourceOf() === 'psi-weekly' ? 'PSI' : '模拟'}
                       </span>
                     </div>
                   )}
@@ -3080,13 +3076,14 @@ export default function Chart(props: ChartProps) {
               </div>
             );
             // 2026-11-18 portal 化：图内坐标（left/top 相对图容器原点）+ 容器视口 rect
-            // = fixed 视口坐标。rect 在渲染期现读（鼠标移动即重算，滚动后随下一次
-            // 重渲染校正）；jsdom rect 全 0 → 视口坐标 = 图内坐标原值（测试兼容）。
+            // = fixed 视口坐标。rect 读缓存（ResizeObserver/scroll bump 事件驱动更新，
+            // 渲染零同步 reflow——2026-11-18 审计挂账项）；jsdom rect 全 0 → 视口坐标
+            // = 图内坐标原值（测试兼容）。
             // 水平视口钳制（分图窄面板真机发现）：卡比面板宽且左翻时视觉左缘可越出
             // 视口被屏幕切掉——垂直锚定不动（严格钉点），水平按「transform 后的视觉
             // 左缘」钳回 [8, vw-卡宽-8] 再还原 style.left（右放 = left 本身；左翻 =
             // left-卡宽）。Eason「完全覆盖在界面之上」的完整性之义
-            const hostRect = wrapRef.current?.getBoundingClientRect();
+            const hostRect = rectCacheRef.current;
             const cardW = W + TIP_MAIN_CHROME_W;
             const rawLeft = (hostRect?.left ?? 0) + left;
             const vw = typeof window !== 'undefined' ? window.innerWidth : 0;

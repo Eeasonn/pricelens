@@ -75,31 +75,31 @@
 20. ✅ GET /api/pack、/api/config 无中止纪律 → 重建期启动白屏整个重建时长。
     修复：pack 非阻塞化（rebuilding 回 503，前端 watcher 兜底）+ 4s 超时。
 
-## 挂账（记录不修，附理由）
+## 挂账 → 二轮全修（2026-11-18 深夜 Eason「全部修复」）
 
-- 📌 **location.reload 无用户协商**：轮询刷新会销毁进行中的本地 UI 态（导入预
-  览框、编辑浮层）。轻量修法（顶栏「有新数据」横幅）留待后续迭代；当前受益方
-  「编辑完自动生效」语义优先，且 15s 粒度下撞上手工编辑窗口的概率低。
-- 📌 **mirror 先于包 apply、apply 失败回落 IndexedDB 时配置与数据口径错位**：
-  mirror 必须先于 App 渲染（呈现层读时消费），错位仅在「服务器包损坏」这一
-  罕见路径出现，重新派生可自愈。挂账观察。
-- 📌 **syncConfigToServer 整体替换语义**：运维手工往 config.json 追加的自定义
-  段会被前端配置导入覆盖。当前 config.json 只由该链写入，属假设性场景；P2
-  RBAC 立项时一并收口（服务器 merge）。
-- 📌 **resolveCollisions guard 死路 break 的重叠盒毒化后续基准**：降级单行后
-  实际不可达（单行必装得下 ≤8 系列；>8 走聚焦模式名称退场）。防御线保留。
-- 📌 **tipOverlayLeft/tipGroupPlacement 死函数 + volumeLayer 过时断言**：现行
-  定位语义 = 内联 group + transform 锚定 + portal 钳制；死代码清理与断言改指
-  向留一轮专门做（纯卫生，无行为影响）。
-- 📌 **销量卡（多候选 ~220px）分图窄面板右放越界**：合并图已验证；分图最右/
-  最左列的对齐+钳制留下一轮（需卡宽实测或翻转，比主卡钳制复杂）。
-- 📌 **渲染期同步 getBoundingClientRect 的 reflow 开销**：mousemove 频率下实
-  测无感；rect 缓存（scroll/resize 驱动）属性能优化，挂账。
-- 📌 **Excel 锁定 data 文件时 os.replace 抛 PermissionError**（拆写路径）：
-  边缘场景（编辑中上传新包），500 兜底已有；后续可加重试。
-- 📌 **Python 审计第三路代理连续网络失败**：Python 侧改由本轮亲核完成（锁语
-  义/stamp 推进、CSV None/restkey 流、空文件、Excel 替换 vs mtime、HTTP 长度
-  头、资源关闭逐项过）——发现并修复 #14 fx 除零；其余确认无误项见下。
+- ✅ **location.reload 无用户协商**：轮询发现新包时先探页面浮层（antd
+  Modal/Drawer/Popover/Dropdown 可见性）——无浮层自动 reload（保持「编辑完自
+  动生效」）；有浮层改顶栏横幅「服务器数据已更新 + 立即刷新」（幂等注入）。
+- ✅ **mirror 先于包 apply 失败回落时配置与数据口径错位**：mirrorServerConfig
+  写前留 9 键旧值快照；server 包 apply 失败/异常回落 IndexedDB 时整套恢复——
+  配置回到本地旧值，与旧包派生口径一致。
+- ✅ **syncConfigToServer 整体替换抹自定义段**：前端 null 显式化（?? null），
+  server POST /api/config 改 merge 语义——已知段 null=删除、非 null=覆盖，
+  existing 独有键（运维自定义）原样保留。
+- ✅ **resolveCollisions guard 死路重叠盒毒化后续基准**：底界停住的盒标记
+  `saturated`，不再作为后续 pinned 项的上推基准（障碍判定照常）。
+- ✅ **tipOverlayLeft/tipGroupPlacement/tipGroupAnchor 死函数 + 过时断言**：
+  三函数删除（TipGroupPlacement 接口保留——现行 group 形态）；tipOverlayLeft
+  .test.ts 删除、volumeLayer 纯函数用例删除。
+- ✅ **销量卡分图窄面板越界**：面板内水平钳制——卡宽按内容估算（名称
+  measureText×0.85 截 132 + chrome ~118），右放/左翻/独立三路径锚点钳进
+  [8, 容器宽−估宽−8]；容器宽未实测（jsdom/首帧）不钳保原生形态测试兼容。
+- ✅ **渲染期同步 getBoundingClientRect reflow**：rect 缓存到 ref，
+  ResizeObserver/scroll bump 事件驱动更新，渲染只读缓存（零同步 reflow）。
+- ✅ **Excel 锁定 os.replace PermissionError**：_write_json/_write_rows_csv 统一
+  _write_with_retry（3 次 × 0.4s 间隔），仍失败抛 500 兜底。
+- ✅（注记）**Python 审计第三路代理网络失败**：已由本轮亲核覆盖并修复 #14；
+  本条不再构成缺口。
 
 ## 确认无误（抽查过没问题）
 

@@ -663,20 +663,21 @@ const SYNC_PENDING_KEY = 'LPL3.config.syncPending';
 async function syncConfigToServer(raw: ConfigSnapshotV1): Promise<void> {
   const { isServiceMode } = await import('../data/serviceMode');
   if (!isServiceMode()) return;
+  // null 显式化（JSON.stringify 保留 null）：服务器据此区分「清空该段」与
+  //「未发」——merge 语义（2026-11-18 审计挂账：整体替换会抹掉运维手工追加的
+  // config.json 自定义段）
   const serverConfig = {
-    seriesRules: raw.keys.seriesRules ?? undefined,
-    modelAliases: raw.keys.modelAliases ?? undefined,
-    tierLadders: raw.keys.tierLadders ?? undefined,
-    promoRows: raw.keys.promoRows ?? undefined,
-    benchmarkMatrix: raw.keys.benchmarkMatrix ?? undefined,
-    dictionaries: raw.keys.countryAliases || raw.keys.platformAliases || raw.keys.storeAliases || raw.keys.industryOfCat
-      ? {
-        countryCodes: raw.keys.countryAliases ?? undefined,
-        platformAliases: raw.keys.platformAliases ?? undefined,
-        storeAliases: raw.keys.storeAliases ?? undefined,
-        industryOfCat: raw.keys.industryOfCat ?? undefined,
-      }
-      : undefined,
+    seriesRules: raw.keys.seriesRules ?? null,
+    modelAliases: raw.keys.modelAliases ?? null,
+    tierLadders: raw.keys.tierLadders ?? null,
+    promoRows: raw.keys.promoRows ?? null,
+    benchmarkMatrix: raw.keys.benchmarkMatrix ?? null,
+    dictionaries: {
+      countryCodes: raw.keys.countryAliases ?? null,
+      platformAliases: raw.keys.platformAliases ?? null,
+      storeAliases: raw.keys.storeAliases ?? null,
+      industryOfCat: raw.keys.industryOfCat ?? null,
+    },
   };
   try {
     const controller = new AbortController();

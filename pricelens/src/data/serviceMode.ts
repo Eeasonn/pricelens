@@ -70,6 +70,41 @@ export async function fetchServerPack(): Promise<unknown | null> {
  *  - 离线模式（探测失败过）：持续重探——服务器中途启动/从挂死恢复时自动
  *    reload 切入服务模式（修复审计「探测负结果永久缓存 × 服务器恢复不可达」）。
  *  幂等：watcherStarted 护栏，重复调用只挂一个 interval。 */
+/** 页面是否有打开的浮层（antd Modal/Drawer/Popover/Dropdown）——有则不自动
+ *  reload（销毁进行中的预览/编辑），改顶栏横幅让用户点刷新（2026-11-18 审计
+ *  挂账「reload 无用户协商」） */
+function hasBlockingOverlay(): boolean {
+  try {
+    const visible = (el: Element): boolean => {
+      const s = getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden';
+    };
+    if (Array.from(document.querySelectorAll('.ant-modal-wrap')).some(visible)) return true;
+    if (document.querySelector('.ant-drawer-open')) return true;
+    if (Array.from(document.querySelectorAll('.ant-popover:not(.ant-popover-hidden)')).some(visible)) return true;
+    if (document.querySelector('.ant-dropdown-open')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** 顶栏刷新横幅（幂等）：「服务器数据已更新」+ 立即刷新按钮 */
+function showRefreshBanner(): void {
+  if (document.getElementById('lpl-server-refresh-banner')) return;
+  const bar = document.createElement('div');
+  bar.id = 'lpl-server-refresh-banner';
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;background:#1f3864;color:#fff;font-size:13px;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+  const text = document.createElement('span');
+  text.textContent = '服务器数据已更新（data/ 文件变更已重新派生）';
+  const btn = document.createElement('button');
+  btn.textContent = '立即刷新';
+  btn.style.cssText = 'padding:4px 14px;border:1px solid rgba(255,255,255,0.6);background:transparent;color:#fff;font-size:13px;border-radius:4px;cursor:pointer;';
+  btn.onclick = (): void => window.location.reload();
+  bar.append(text, btn);
+  document.body.prepend(bar);
+}
+
 export function watchServerPack(baselineGeneratedAt: string | null, intervalMs = 15000): void {
   if (typeof window === 'undefined' || watcherStarted) return;
   watcherStarted = true;
@@ -99,7 +134,10 @@ export function watchServerPack(baselineGeneratedAt: string | null, intervalMs =
         lastGen = gen; // 未传基线（兜底）：首拍建立基线
         return;
       }
-      if (gen !== lastGen) window.location.reload();
+      if (gen !== lastGen) {
+        if (hasBlockingOverlay()) showRefreshBanner(); // 浮层打开中：横幅协商，不打断
+        else window.location.reload();
+      }
     } catch {
       // 服务器暂不可达：静默，下拍再试
     }

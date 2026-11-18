@@ -27,6 +27,7 @@ API（前端 vite dev proxy 与生产同源相对路径共用）：
 静态：GET / 与 /assets… → web/ 下文件。
 """
 import csv
+import time
 import json
 import os
 import re
@@ -97,16 +98,18 @@ def _read_rows(path):
 def _write_rows_csv(path, rows):
     """行数组写 CSV（utf-8-sig BOM：中文 Windows Excel 双击直开不乱码；\r\n 行尾）。
     表头 = 首行键序（保持列序稳定，编辑器里不跳列）；空数组只写空文件占位。"""
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.writer(f)
-        if rows:
-            headers = list(rows[0].keys())
-            writer.writerow(headers)
-            for r in rows:
-                writer.writerow(["" if r.get(h) is None else r.get(h) for h in headers])
-    os.replace(tmp, path)
+    def writer(p):
+        os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            if rows:
+                headers = list(rows[0].keys())
+                w.writerow(headers)
+                for r in rows:
+                    w.writerow(["" if r.get(h) is None else r.get(h) for h in headers])
+        os.replace(tmp, p)
+    _write_with_retry(path, writer)
 
 
 def _folder_mtime():
@@ -228,12 +231,29 @@ def _read_json(path):
         return None
 
 
+def _write_with_retry(path, writer, attempts=3, delay=0.4):
+    """原子写 + 重试（2026-11-18 审计挂账：Windows 上目标文件被 Excel 锁定时
+    os.replace 抛 PermissionError——间隔重试 3 次，仍失败抛给调用方 500 兜底）"""
+    last = None
+    for i in range(attempts):
+        try:
+            writer(path)
+            return
+        except PermissionError as e:
+            last = e
+            if i < attempts - 1:
+                time.sleep(delay)
+    raise last  # type: ignore[misc]
+
+
 def _write_json(path, obj):
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
-    os.replace(tmp, path)
+    def writer(p):
+        os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp, p)
+    _write_with_retry(path, writer)
 
 
 def _pack_meta():
@@ -377,6 +397,17 @@ class Handler(BaseHTTPRequestHandler):
                 config = json.loads(raw.decode("utf-8")) if raw else {}
                 if not isinstance(config, dict):
                     return self._send_json({"error": "配置必须是 JSON 对象"}, 400)
+                # merge 语义（2026-11-18 审计：整体替换会抹掉运维手工追加的
+                # config.json 自定义段）：已知段 null=删除、非 null=覆盖；
+                # existing 独有键（运维自定义）原样保留
+                existing = _read_json(CONFIG_PATH) or {}
+                merged = dict(existing)
+                for k, v in config.items():
+                    if v is None:
+                        merged.pop(k, None)
+                    else:
+                        merged[k] = v
+                config = merged
                 _write_json(CONFIG_PATH, config)
                 # 有数据源时自动重派生（配置是派生输入；文件夹源由 maybe_rebuild
                 # 的 mtime 变化在下一次请求触发，此处主动立即跑一次给前端诊断回执）
