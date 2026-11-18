@@ -11,7 +11,9 @@
 //
 // 用法：
 //   node scripts/build_sample_raw_datapack.mjs                # 全量（约 9.6 万行）
-//   node scripts/build_sample_raw_datapack.mjs --countries RU,PL --max-rows 20000
+//   node scripts/build_sample_raw_datapack.mjs --countries RU,PL,DE --with-sales
+// --with-sales：附 PSI 形态模拟销量（与 build_sample_datapack.mjs 同源生成逻辑，
+// 按样例国家过滤）——导入后量价页量带切「PSI 真实销量」口径，完整演示。
 // 产物（不入库，docs/ 已 ignore）：docs/底表样例/pricelens-sample-raw-datapack-<日期>.json
 // ============================================================
 import fs from 'node:fs';
@@ -32,6 +34,8 @@ const onlyCountries = argOf('--countries') ? new Set(argOf('--countries').split(
 const maxRows = Number(argOf('--max-rows') ?? 0) || 0;
 
 const dimRegion = readJson('dim_region.json');
+const regionCodeByName = new Map(dimRegion.map((r) => [r.country_name, r.country_code]));
+const readRegionName = (name) => regionCodeByName.get(String(name ?? '').trim()) ?? null;
 const dimProduct = readJson('dim_product.json');
 const dimTime = readJson('dim_time.json');
 const dimChannel = readJson('dim_channel.json');
@@ -115,12 +119,71 @@ for (let i = 0; i < n; i++) {
   if (maxRows && offers.length >= maxRows) break;
 }
 
+// ---- --with-sales：PSI 形态模拟销量（同 build_sample_datapack.mjs 生成口径，按样例国家过滤） ----
+let sales = [];
+if (args.includes('--with-sales')) {
+  const dimTimeSim = readJson('dim_time.json');
+  const simWeeks = [...new Set(dimTimeSim.map((t) => t.week_id))].sort();
+  const simCountries = [...new Set(offers.map((o) => readRegionName(o['国家/地区'])).filter(Boolean))];
+  const INDUSTRY_BASE = { phone: 6000, tablet: 1800, wearable: 2600, audio: 3800 };
+  const COUNTRY_W = { RU: 1.0, BR: 1.2, MX: 0.9, ID: 1.1, JP: 1.0, DE: 0.8, GB: 0.75, FR: 0.7, IT: 0.6, ES: 0.55, TR: 0.7, PL: 0.4, RO: 0.2, CO: 0.35, AR: 0.3, PE: 0.2, ZA: 0.3, SA: 0.4, AE: 0.25, MY: 0.3, SG: 0.12, TH: 0.45, PH: 0.5, VN: 0.5 };
+  const countryW = (cc) => COUNTRY_W[cc] ?? 0.3;
+  const normModelKeySim = (name) => String(name).normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  // 可解析型号守卫（样例排除 pc/iot，与 offers 同域）
+  const nameKeyOwners = new Map();
+  const nameKeyAll = new Map();
+  for (const p of dimProduct) {
+    if (p.industry === 'pc' || p.industry === 'iot') continue;
+    const key = normModelKeySim(p.model_name);
+    if (p.is_own) nameKeyOwners.set(key, p.model_id);
+    if (!nameKeyAll.has(key)) nameKeyAll.set(key, new Set());
+    nameKeyAll.get(key).add(p.model_id);
+  }
+  const resolvable = [];
+  const seenModels = new Set();
+  for (const p of dimProduct) {
+    if (p.industry === 'pc' || p.industry === 'iot') continue;
+    const key = normModelKeySim(p.model_name);
+    const ok = nameKeyAll.get(key)?.size === 1 || nameKeyOwners.get(key) === p.model_id;
+    if (!ok || seenModels.has(p.model_id)) continue;
+    if (!p.countries.some((c) => simCountries.includes(c))) continue;
+    seenModels.add(p.model_id);
+    resolvable.push(p);
+  }
+  const hash01 = (key) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < key.length; i++) {
+      h ^= key.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return (h >>> 0) / 4294967296;
+  };
+  for (const p of resolvable) {
+    const base = INDUSTRY_BASE[p.industry] ?? 800;
+    for (const cc of p.countries.filter((c) => simCountries.includes(c))) {
+      for (const week of simWeeks) {
+        const noise = 0.75 + 0.5 * hash01(`${cc}|${p.model_id}|${week}`);
+        if (noise < 0.85) continue;
+        const qty = Math.max(1, Math.round(base * countryW(cc) * noise));
+        sales.push({
+          country: cc,
+          product: p.model_name,
+          category1: p.cat1 ?? null,
+          category2: p.cat2 ?? null,
+          periodId: `${week.slice(0, 4)}0${week.slice(4)}`,
+          qty,
+        });
+      }
+    }
+  }
+}
+
 const outPack = {
   kind: 'pricelens-data-pack',
   v: 3,
   generatedAt: new Date().toISOString(),
   offers,
-  sales: [],
+  sales,
   monthly: [],
 };
 
@@ -132,4 +195,5 @@ const outPath = path.join(outDir, `pricelens-sample-raw-datapack-${stamp}${suffi
 fs.writeFileSync(outPath, JSON.stringify(outPack));
 console.log(`原表模式样例包 → ${outPath}`);
 console.log(`offer 原样行 ${offers.length}（国家 ${onlyCountries ? [...onlyCountries].join(',') : '全部'}；pc/iot 规格不可逆推不含）`);
+console.log(`PSI 模拟销量 ${sales.length} 行${sales.length ? `（型号 ${new Set(sales.map((x) => x.product)).size}）` : ''}`);
 console.log(`包大小 ${(fs.statSync(outPath).size / 1024 / 1024).toFixed(1)} MB`);
