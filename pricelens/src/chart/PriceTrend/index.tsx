@@ -2046,9 +2046,6 @@ export default function PriceTrend(props: {
                         paneLabels // 2026-11-06：图层标注
                         paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行
                         tipDiffBaseKey={panelExtra[p.key]?.diffBaseKey ?? null} // 第196轮整改1：价差列基准 = 本卡主品
-                        tipPanelClamp // 2026-11-17：分图面板被 split 滚动容器 overflowY:hidden 裁顶
-                        //（transform 溢出 zIndex 46 挡不住 clip）→ 与量价页分离面板同款钳制路径：
-                        // 卡片钳回本面板绘图区内完整可见，不再越顶被切头
                         margins={panelExtra[p.key]?.margins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）
                         marginMiniOn={marginOn} // 2026-11-17：销毛率小卡开关（与合并图同开关）
                         volumeOn={volumeOn} // 第196轮整改5：量层（面板各自主品销量）

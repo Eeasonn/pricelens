@@ -356,7 +356,8 @@ describe('品牌进名称带与悬停卡（2026-11-07 Eason 采纳 A）', () => 
     const wrap = container.firstElementChild as HTMLElement;
     fireEvent.mouseMove(wrap, { clientX: plotLeft + colW * 1.5, clientY: 200 });
     await Promise.resolve();
-    const nameCell = container.querySelector('span[title="Huawei Mate 70 12"]');
+    // 2026-11-18 悬停卡 portal 到 document.body（整页最上层）——查询走 body 不再走 render container
+    const nameCell = document.body.querySelector('span[title="Huawei Mate 70 12"]');
     expect(nameCell).not.toBeNull();
     expect(nameCell?.textContent).toBe('Huawei Mate 70 12');
   });

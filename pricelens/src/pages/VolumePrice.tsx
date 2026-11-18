@@ -1253,7 +1253,6 @@ export default function VolumePrice() {
                           paneLabels // 图层标注：价格 USD / 销量 台·模拟（有成本时价格行写「价格 / 成本」）
                           paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行、左缘对齐轴列
                           tipDiffBaseKey={p.vis[0]?.key ?? null}
-                          tipPanelClamp // 悬停卡钳制路径：面板祖先 .lpl-card-scroll/section 裁溢出，卡片不出面板（2026-11-17）
                           margins={hasCost ? (marginMasked ?? undefined) : undefined} // 销毛迷你卡（我司）
                           costs={hasCost ? (costs ?? undefined) : undefined} // 成本细线（我司；Y 轴已把成本算进来）
                           volumeOn // 量带恒开、恒为柱（本页不提供「量」开关，同拍板）

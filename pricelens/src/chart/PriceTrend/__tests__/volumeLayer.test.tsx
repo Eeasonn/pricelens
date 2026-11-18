@@ -540,32 +540,31 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(px(card.style.top)).toBe(px(layer.style.top) + 4);
   });
 
-  it('tipPanelClamp（量价页分离面板）：主卡走「估算+钳制」路径——无 transform、top 被 Math.min 钳回绘图区、销量/销毛卡直接坐标不出面板', async () => {
-    const { container } = render(<Chart {...props} margins={margins} tipPanelClamp /> as ReactElement);
+  it('2026-11-18 两 BUG 修复：主卡 portal 到 document.body + fixed（任何位置不被图容器/页卡裁剪），分图同款 transform 锚定（十字线右上角展开）', async () => {
+    // tipPanelClamp 已退役（分图/量价分离面板旧「估算+钳制」左下角路径删除）：
+    // portal(document.body) + position:fixed 绕开 .price-trend-split-scroll /
+    // .lpl-card-scroll / section 的 overflow 裁剪——高处卡片完整浮在整页之上
+    const { container } = render(<Chart {...props} margins={margins} /> as ReactElement);
     await waitForGeom(container);
     const layer = layerOf(container);
     // 悬停最右列量带：指针在量带内 hoverY=null → 锚绘图区底缘；mousemove 冒泡主卡同列在场
     fireEvent.mouseMove(layer, { clientX: colX(4), clientY: px(layer.style.top) + 120 });
     const { main, margin, volume } = cardEls(container);
-    const plotBottom = px(layer.style.top);
-    // 主卡钳制：tipContentH = 2 价格行 × 20 = 40 → top = min(max(484, plotTop+8),
-    // plotBottom−36−40)；销毛迷你卡槽下移 38 后仍被同一上限 Math.min 钳回
-    expect(px(main.style.top)).toBe(plotBottom - 36 - 40);
-    expect(main.style.transform).toBe(''); // 钳制路径直接坐标，无 translateY
-    expect(main.style.zIndex).toBe('20'); // 面板内（transform 路径 = 46 溢出全局）
-    // 左翻 + 左缘钳制：右缘放不下 → left = max(plotLeft+8, x0−mainW) 落在列中心左侧
-    //（transform 路径 left 恒 = x0，此处必不等）
-    expect(px(main.style.left)).toBeLessThan(colX(4));
-    expect(px(main.style.left)).toBeGreaterThanOrEqual(GRID_LEFT + 8);
-    // 销毛迷你卡：wrapper 子元素 bottom 锚（主卡上方 8px），无 translateY；钳制路径
-    // wrapper top 已含迷你卡槽下移（Math.min 钳回），叠放由 bottom 相对主卡高度表达
-    expect(margin.style.transform).toBe('');
+    // portal 化：定位 wrapper 挂在 document.body（不在 render container 内），
+    // position:fixed + zIndex 46 = 整页最上层；jsdom 下 rect 全 0 → 视口坐标 = 图内坐标
+    expect(main.parentElement).toBe(document.body);
+    expect(main.style.position).toBe('fixed');
+    expect(main.style.zIndex).toBe('46');
+    // 统一 transform 锚定（与合并模式一致，右缘放不下 → translate(-100%,-100%) 左翻，
+    // 底边钉十字线 = 右上/左上展开，绝无「顶边贴锚点下垂」的左下角形态）
+    expect(px(main.style.left)).toBeCloseTo(colX(4), 5);
+    expect(main.style.transform).toBe('translate(-100%, -100%)');
+    // 销毛迷你卡：仍是 wrapper 子元素、bottom 锚叠主卡正上方（portal 内一体跟随）
+    expect(margin.parentElement).toBe(main);
     expect(margin.style.bottom).toBe('calc(100% + 8px)');
     expect(margin.style.right).toBe('0px');
-    expect(margin.parentElement).toBe(main);
-    // 销量卡：直接坐标钳回面板内（右缘 −150 半宽兜底），无 transform
-    expect(volume.style.transform).toBe('');
-    expect(px(volume.style.left)).toBe(GRID_LEFT + plotWidth - 150);
-    expect(px(volume.style.top)).toBe(plotBottom + 4);
+    // 销量卡：不 portal（贴量带顶、图内不出界），恒居中锚列
+    expect(volume.style.transform).toBe('translateX(-50%)');
+    expect(px(volume.style.top)).toBe(px(layer.style.top) + 4);
   });
 });
