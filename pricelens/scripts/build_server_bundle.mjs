@@ -57,6 +57,27 @@ cpSync(distDir, join(outDir, 'web'), { recursive: true });
 mkdirSync(join(outDir, '配置表'), { recursive: true });
 copyFileSync(join(pricelensRoot, 'public', 'handoff-config.xlsx'), join(outDir, '配置表', `pricelens-config-预填-${ymd}.xlsx`));
 
+// 预置 data/config.json（2026-11-19 开箱即用：与预填 xlsx 同源——起服务器即带
+// 全量规则，无需先手动导配置表；后续业务变更仍走「导入配置」或直接编辑此文件）
+mkdirSync(join(outDir, 'data'), { recursive: true });
+const genCfg = spawnSync('python3', ['-X', 'utf8', 'scripts/build_server_config.py', join(outDir, 'data', 'config.json')], { cwd: pricelensRoot, stdio: 'inherit' });
+if (genCfg.status !== 0) console.warn('[server-bundle] 预置 config.json 生成失败（不影响装配，首启后手动导配置表即可）');
+else {
+  writeFileSync(
+    join(outDir, 'data', '数据编辑说明.txt'),
+    [
+      '本文件夹是服务器的数据源（可直接编辑，保存后约 10-60 秒自动生效）：',
+      '  offers.csv   街价原表行（一行一条采集记录，列头中文原样；替换本文件 = 换全量数据）',
+      '  sales.csv    PSI 周销量行（可空）',
+      '  config.json  配置（系列规则/矩阵/阶梯/档期/字典；已预置全量，可编辑）',
+      '',
+      '注意：用 Excel 编辑保存时请选「CSV UTF-8」格式（普通 CSV 的 GBK 编码服务器也能自动识别）。',
+      'pricelens.db / latest-pack.json 是派生产物，会被自动重建覆盖，不要手编。',
+    ].join('\r\n'),
+    'utf8',
+  );
+}
+
 writeFileSync(
   join(outDir, '启动PriceLens.bat'),
   [
@@ -106,10 +127,14 @@ const usage = `# PriceLens 服务器版（${ymd}）
 
 ## 数据导入（配置页完成）
 
-1. **导入配置表**：选 \`配置表/pricelens-config-预填-${ymd}.xlsx\`（系列规则 133 /
-   矩阵 950 / 档期 66 / 阶梯 6 / 别名 1 + C3 字典四页签全量——规则唯一源，必导）。
-2. **导入数据包**：选内部 Agent 产出的 v3 JSON（原表模式）。117MB 级全量包直接
-   可导（服务器 Python 引擎派生，约 10-60 秒）；浏览器只收 gzip 编码包。
+配置已**预置**在 data/config.json（与预填 xlsx 同源：系列规则 133 / 矩阵 950 /
+档期 66 / 阶梯 6 / 别名 1 + C3 字典 57）——起服务器即带全量规则，无需先导配置；
+后续业务变更走「导入配置」或直接编辑该文件。
+
+数据替换（内部真实数据到位时）：
+- 方式 A：配置页「导入数据包」上传 v3 JSON（117MB 级直导，自动拆写进 data/）；
+- 方式 B：直接把新的 offers.csv 替换 data/offers.csv（Excel 编辑同理）——
+  保存后约 10-60 秒自动重新派生，前端 ~15 秒内自动刷新生效，无需任何手动操作。
 
 ## 数据文件夹（可直接编辑，改完自动生效）
 

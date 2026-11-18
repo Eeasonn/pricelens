@@ -85,12 +85,20 @@ def _sales_path():
 
 def _read_rows(path):
     """CSV/JSON 统一读为行 dict 数组：CSV 用 utf-8-sig（BOM 自剥）+ DictReader
-    （RFC4180 引号内逗号/换行自动处理），值全字符串——引擎归一层原样收。"""
+    （RFC4180 引号内逗号/换行自动处理），值全字符串——引擎归一层原样收。
+    编码降级（2026-11-19 部署加固）：中文 Windows Excel「另存为 CSV」默认
+    ANSI/GBK——内部用户编辑保存成 GBK 时 utf-8-sig 直读会炸，降级 gb18030
+    （GBK 超集）再读，数据照常生效。"""
     if path is None:
         return []
     if path.endswith(".csv"):
-        with open(path, "r", encoding="utf-8-sig", newline="") as f:
-            return [dict(r) for r in csv.DictReader(f)]
+        for enc in ("utf-8-sig", "gb18030"):
+            try:
+                with open(path, "r", encoding=enc, newline="") as f:
+                    return [dict(r) for r in csv.DictReader(f)]
+            except UnicodeDecodeError:
+                continue
+        raise UnicodeDecodeError("utf-8", b"", 0, 1, "CSV 既不是 UTF-8 也不是 GBK 编码（请用 Excel 另存为「CSV UTF-8」或记事本转存 UTF-8）")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -514,7 +522,7 @@ def main():
     os.makedirs(DATA_DIR, exist_ok=True)
     _migrate_last_import_to_folder()
     addr = ("127.0.0.1", PORT)
-    httpd = ThreadingHTTPServer(addr, Handler)
+    httpd = _make_server(addr)
     url = f"http://localhost:{PORT}"
     print(f"[pricelens-server] {url}  web={WEB_DIR}  data={DATA_DIR}")
     src = "data/ 文件夹（offers.csv + sales.csv + config.json，可直接编辑）" if _offers_path() is not None \
@@ -524,6 +532,17 @@ def main():
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\n[pricelens-server] 已停止")
+
+
+def _make_server(addr):
+    try:
+        return ThreadingHTTPServer(addr, Handler)
+    except OSError as e:
+        if e.errno in (48, 10048):  # EADDRINUSE（macOS/Windows 端口占用）
+            print(f"[pricelens-server] 端口 {addr[1]} 已被占用——可能已有一个 PriceLens 服务器在跑。")
+            print("[pricelens-server] 处理：①直接用浏览器打开 http://localhost:%d；或 ②换端口：set PRICLENS_PORT=8322 后重新启动本 bat。" % addr[1])
+            sys.exit(1)
+        raise
 
 
 if __name__ == "__main__":
