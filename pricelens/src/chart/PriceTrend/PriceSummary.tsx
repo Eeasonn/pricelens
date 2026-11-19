@@ -188,7 +188,8 @@ export default function PriceSummary({
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
           {/* 列序（第一百八十四轮，Eason）：RRP → 折后价 → 比率，与悬停小卡同序 */}
           {it.rrp != null && (
-            <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>
+            /* RRP（2026-11-19 Eason：去删除线与灰字，正常正文黑） */
+            <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.body, whiteSpace: 'nowrap' }}>
               {formatPrice(it.rrp, currency)}
             </span>
           )}
@@ -241,7 +242,8 @@ export default function PriceSummary({
       {/* 中区：价格信息（RRP → 现价 → 折扣率，第一百八十四轮改序与悬停小卡同序） */}
       <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         {it.rrp != null && (
-          <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, textDecoration: 'line-through', whiteSpace: 'nowrap' }}>
+          /* RRP（2026-11-19 Eason：去删除线与灰字，正常正文黑） */
+          <span className="tnum" title="RRP（官方建议零售价）" style={{ fontSize: 11, lineHeight: '15px', color: color.body, whiteSpace: 'nowrap' }}>
             {formatPrice(it.rrp, currency)}
           </span>
         )}

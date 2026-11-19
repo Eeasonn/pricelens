@@ -15,7 +15,7 @@ import {
   computeYAxis,
   yPxOf,
 } from '../helpers';
-import { ZONE_CFG_ROW_H, ZONE_LINE_H, buildLabelPlan, nameZoneWidthOf } from '../chartModel';
+import { LIFECYCLE_ROW_H, NAME_ZONE_STACK_GAP, ZONE_CFG_ROW_H, ZONE_LINE_H, ZONE_PILL_PAD_V, buildLabelPlan, nameZonePillH, nameZoneTwoRowDegraded, nameZoneWidthOf } from '../chartModel';
 import type { Series } from '../../../dataModel/types';
 
 const mk = (key: string, label: string, prices: number[]): Series => ({
@@ -42,7 +42,7 @@ const mk = (key: string, label: string, prices: number[]): Series => ({
 
 const priceTypes = { discounted: true, rrp: false };
 const marks = new Map();
-const PILL_H = ZONE_LINE_H + 6; // 名称药丸盒高（单行 + 内边距）
+const PILL_H = ZONE_LINE_H + ZONE_PILL_PAD_V; // 名称药丸盒高（单行 + 内边距；2026-11-19 收紧 6→4）
 
 describe('第196轮整改3：名称带位置（刻度标签右侧、绘图区左缘之间）', () => {
   // 合并图布局：gridLeft = 轴列 70 + 带 188，plotLeft = 258 —— 带必须落在
@@ -174,7 +174,7 @@ describe('第196轮整改3：名称带对齐（折线首桶 y + 最小位移避�
       nameZone: { width: ZONE_W },
     });
     for (const nm of qPlan.names) {
-      expect(nm.h).toBe(ZONE_LINE_H + 6 + 14); // 药丸行 + 生命周期行
+      expect(nm.h).toBe(ZONE_LINE_H + ZONE_PILL_PAD_V + LIFECYCLE_ROW_H); // 药丸行 + 生命周期行
     }
   });
 
@@ -254,7 +254,7 @@ describe('名称带两行药丸（2026-11-13 Eason）：pillSpecOf 注入', () =
     expect(nm.nameText).toBe('Mate 70');
     expect(nm.brandWord).toBe('Huawei');
     expect(nm.cfgText).toBe('12+256 GB');
-    expect(nm.h).toBe(ZONE_LINE_H + ZONE_CFG_ROW_H + 6); // 行1 + chip 行 + 内边距
+    expect(nm.h).toBe(ZONE_LINE_H + ZONE_CFG_ROW_H + ZONE_PILL_PAD_V); // 行1 + chip 行 + 内边距
   });
 
   it('无配置层级（cfg 空）：不出 cfgText 字段、盒高回落单行，brandWord 照带', () => {
@@ -273,7 +273,7 @@ describe('名称带两行药丸（2026-11-13 Eason）：pillSpecOf 注入', () =
     expect(nm.cfgText).toBeUndefined();
     expect(nm.brandWord).toBeNull();
     expect(nm.nameText).toBe('Watch 4');
-    expect(nm.h).toBe(ZONE_LINE_H + 6);
+    expect(nm.h).toBe(ZONE_LINE_H + ZONE_PILL_PAD_V);
   });
 
   it('不传 pillSpecOf：zone 项无两行字段、几何与旧版一致（金测不受影响）', () => {
@@ -284,13 +284,13 @@ describe('名称带两行药丸（2026-11-13 Eason）：pillSpecOf 注入', () =
     expect(nm.nameText).toBeUndefined();
     expect(nm.brandWord).toBeUndefined();
     expect(nm.cfgText).toBeUndefined();
-    expect(nm.h).toBe(ZONE_LINE_H + 6);
+    expect(nm.h).toBe(ZONE_LINE_H + ZONE_PILL_PAD_V);
   });
 });
 
 describe('2026-11-18 Eason「不能出现卡片重叠」：两行药丸放不下 → 降级单行 + 底界钳制', () => {
-  // 6 条两行药丸（每盒 38px，Σ228+间隙 20=248）：plotHeight 压到 160 → 两行总高
-  // 必然装不下 → 全带降级单行（盒 22），栈总高 152 ≤ 160 装得下、互不相交、不越底
+  // 6 条两行药丸（每盒 35px，Σ210+间隙 15=225）：plotHeight 压到 160 → 两行总高
+  // 必然装不下 → 全带降级单行（盒 20），栈总高 135 ≤ 160 装得下、互不相交、不越底
   const many = (n: number): Series[] =>
     Array.from({ length: n }, (_, k) =>
       mk(`OWN__${k}`, `HUAWEI Model ${k} 12GB`, [800 + k * 8, 805 + k * 8, 810 + k * 8]));
@@ -312,7 +312,7 @@ describe('2026-11-18 Eason「不能出现卡片重叠」：两行药丸放不下
   });
 
   it('降级后互不相交且全部盒在绘图区内（不侵量带——真机重叠根治断言）', () => {
-    const GAP = 4;
+    const GAP = NAME_ZONE_STACK_GAP;
     const bottom = g6.plotTop + g6.plotHeight;
     for (const nm of plan6.names) {
       expect(nm.y + nm.h).toBeLessThanOrEqual(bottom + 1e-6);
@@ -339,5 +339,25 @@ describe('2026-11-18 Eason「不能出现卡片重叠」：两行药丸放不下
       nameZone: { width: 188 }, pillSpecOf: pillOf,
     });
     expect(planFit.names.every((nm) => nm.cfgText === '12+256 GB')).toBe(true);
+  });
+});
+
+describe('2026-11-19 同源化：降级判定唯一入口 nameZoneTwoRowDegraded（buildLabelPlan 与带宽 memo 共用）', () => {
+  const cfgs = ['12+256 GB', '12+512 GB', '8+128 GB', '8+256 GB', '12+256 GB', '8+512 GB'];
+  it('盒高唯一算法 nameZonePillH（两行/单行/生命周期）', () => {
+    expect(nameZonePillH('12+256 GB', false)).toBe(ZONE_LINE_H + ZONE_CFG_ROW_H + ZONE_PILL_PAD_V);
+    expect(nameZonePillH('', false)).toBe(ZONE_LINE_H + ZONE_PILL_PAD_V);
+    expect(nameZonePillH('12+256 GB', true)).toBe(ZONE_LINE_H + ZONE_CFG_ROW_H + ZONE_PILL_PAD_V + LIFECYCLE_ROW_H);
+  });
+  it('判定与 buildLabelPlan 同条件（放得下=两行、放不下=降级），临界一致', () => {
+    const total = cfgs.reduce((acc, c) => acc + nameZonePillH(c, false), 0) + NAME_ZONE_STACK_GAP * (cfgs.length - 1);
+    // 刚好装下（Σ ≤ plotH − 4）→ 不降级
+    expect(nameZoneTwoRowDegraded(cfgs, total + 4, () => false)).toBe(false);
+    // 差 1px 装不下 → 降级
+    expect(nameZoneTwoRowDegraded(cfgs, total + 3, () => false)).toBe(true);
+    // 生命周期行计入（同高 +14px/条 → 更早触发降级）
+    expect(nameZoneTwoRowDegraded(cfgs, total + 4, () => true)).toBe(true);
+    // 空带不降级
+    expect(nameZoneTwoRowDegraded([], 100)).toBe(false);
   });
 });

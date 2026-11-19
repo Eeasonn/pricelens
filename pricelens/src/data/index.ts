@@ -310,6 +310,23 @@ const rebuildFxIndex = (): void => {
   for (const f of [...dimFx].sort((a, b) => (a.month_id < b.month_id ? -1 : 1))) latestFxByCurrency.set(f.currency, f.per_usd);
 };
 
+/** sku → 主数据行活索引（2026-11-19）：applyDataPack 置换 dimProduct 后必须重建。
+ *  原先 chartModel / BrandLegendStrip / aggregate 各自模块级 new Map(dimProduct)
+ *  只在模块首帧建一次，服务器/导入模式换数据后查全空（药丸退单行、品牌词消失、
+ *  选品 skuIds 被整批过滤）。消费方一律走 productRowBySku，不许再自建快照 Map。 */
+let productIndex: Map<string, DimProduct> | null = null;
+const rebuildProductIndex = (): void => {
+  productIndex = new Map(dimProduct.map((p) => [p.sku_id, p]));
+};
+export function productRowBySku(skuId: string): DimProduct | undefined {
+  let idx = productIndex;
+  if (!idx || idx.size !== dimProduct.length) {
+    idx = new Map(dimProduct.map((p) => [p.sku_id, p]));
+    productIndex = idx;
+  }
+  return idx.get(skuId);
+}
+
 /** 事实行数组 → 列式包 gzip+base64（encodeFactPack 与 decodePack 严格对称：
  *  列存本币价（rrp_local/price_local）、fx 正数、五字典去重长文本） */
 function encodeFactPackB64(rows: FactPriceWeekly[]): string {
@@ -462,6 +479,7 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     currentPackVersion = p0.v;
     currentOffersRaw = p0.v === 3 ? (p0 as RawPricelensDataPack).offers : [];
     rebuildFxIndex();
+    rebuildProductIndex();
     const counts: DataPackMeta['counts'] = {
       factWeekly: factPriceWeekly.length,
       factMonthly: factPriceMonthly.length,

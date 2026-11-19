@@ -104,11 +104,12 @@ export default function PanelHoverTip(props: {
         {m.date}
         {m.period && <span style={{ marginLeft: 5, fontSize: 11, fontWeight: 400, color: color.mute }}>{m.period}</span>}
       </div>
-      {/* RRP（删除线参照）+ 折后价 + 环比：一行放不下自然折行，不截断 */}
+      {/* RRP（2026-11-19 Eason：去删除线，正常正文黑色——「电商划线价」语言退役，
+          与价格走势悬停卡/时点卡同轮统一）+ 折后价 + 环比：一行放不下自然折行，不截断 */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: 3, minWidth: 0 }}>
         {m.rrp != null && (
           <>
-            <span className="tnum" title={`RRP ${m.rrp}`} style={{ flexShrink: 0, fontSize: 11, lineHeight: '20px', color: color.mute, textDecoration: 'line-through', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            <span className="tnum" title={`RRP ${m.rrp}`} style={{ flexShrink: 0, fontSize: 11, lineHeight: '20px', color: color.body, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
               RRP {m.rrp}
             </span>
             <span style={SEP} aria-hidden />

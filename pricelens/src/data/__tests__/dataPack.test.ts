@@ -12,7 +12,7 @@
 // ============================================================
 import { beforeEach, describe, expect, it } from 'vitest';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
-import { applyDataPack, buildDataPack, currencyOfCountry, dataMeta, dimBenchmark, dimProduct, dimTier, factPriceWeekly, factSalesWeekly, type PricelensDataPack } from '../index';
+import { applyDataPack, buildDataPack, currencyOfCountry, dataMeta, dimBenchmark, dimProduct, dimTier, factPriceWeekly, factSalesWeekly, productRowBySku, type PricelensDataPack } from '../index';
 import { clearDataPack, loadDataPack, saveDataPack } from '../dataPackStore';
 import { salesSourceOf, volumeOfConfig } from '../../dataModel/volume';
 import { effectiveSeriesOf } from '../../state/deriveConfig';
@@ -81,6 +81,24 @@ describe('buildDataPack / applyDataPack round-trip', () => {
     expect(dataMeta().source).toBe('imported');
     restore();
     expect(currencyOfCountry('RU')).not.toBe('XYZ');
+  });
+
+  it('改一包维表（换 SKU 集）后应用：productRowBySku 反映新行、aggregate 缓存随包重建（2026-11-19 陈旧索引根治）', () => {
+    // 部署主场景：内部替换 offers.csv → 新 SKU 集合。原先 chartModel/aggregate 的
+    // 模块级 Map 只在首帧建一次，applyDataPack 后查全空（药丸退单行/选品被过滤）。
+    const pack = buildDataPack();
+    const mutated = JSON.parse(JSON.stringify(pack)) as PricelensDataPack;
+    const first = mutated.dims.product[0];
+    const renamed = { ...first, sku_id: 'cmp-test-brand-fresh-sku__12-256gb__x', romram: '12+256 GB', brand_inline: true };
+    mutated.dims.product = [renamed, ...mutated.dims.product.slice(1).filter((p) => p.sku_id !== first.sku_id)];
+    expect(applyDataPack(mutated).ok).toBe(true);
+    // 新 SKU 直查命中（活索引随 apply 重建），被移除的旧 SKU 查空
+    expect(productRowBySku(renamed.sku_id)?.romram).toBe('12+256 GB');
+    expect(productRowBySku(renamed.sku_id)?.brand_inline).toBe(true);
+    expect(productRowBySku(first.sku_id)).toBeUndefined();
+    restore();
+    expect(productRowBySku(first.sku_id)).toBeDefined();
+    expect(productRowBySku(renamed.sku_id)).toBeUndefined();
   });
 
   it('数据包重导出保真：应用某包后 buildDataPack 的事实包 b64 = 该包原文（导入数据不会被内置版顶掉）', () => {

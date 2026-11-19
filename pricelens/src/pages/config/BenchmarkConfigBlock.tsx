@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Empty, Popover, Segmented, Tooltip } from 'antd';
 import { EditOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
-import { dimProduct } from '../../data';
+import { dimProduct, productRowBySku } from '../../data';
 import { buildOverviewMatrix, TIER_LABELS } from '../../dataModel/aggregate';
 import { INDUSTRY_LABELS, industriesOfCountry } from '../../dataModel/scope';
 import type { DimBenchmark, Industry } from '../../dataModel/types';
@@ -84,7 +84,6 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
     [bench, state.currency, cc, industry],
   );
   const ownModels = useMemo(() => bands.flatMap((b) => b.models).filter((m) => m.isOwn), [bands]);
-  const productById = useMemo(() => new Map(dimProduct.map((p) => [p.sku_id, p])), []);
 
   const compsOf = (modelId: string, romram: string): DimBenchmark[] =>
     bench
@@ -182,7 +181,7 @@ export default function BenchmarkConfigBlock({ canEdit = true }: { canEdit?: boo
                         <span style={{ fontSize: 12, color: color.mute }}>暂无对标竞品</span>
                       ) : (
                         comps.map((b) => {
-                          const p = productById.get(b.competitor_sku_id);
+                          const p = productRowBySku(b.competitor_sku_id);
                           return (
                             <span
                               key={b.competitor_sku_id}

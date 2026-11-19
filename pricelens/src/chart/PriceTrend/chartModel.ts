@@ -10,7 +10,7 @@
 import type { EChartsOption } from 'echarts';
 import type { CurrencyMode, DimPromo, Granularity, Industry, OfferDetail, OfferInfo, OfferKind, Series, SeriesPoint } from '../../dataModel/types';
 import { tierBandsOf } from '../../dataModel/aggregate';
-import { dimProduct } from '../../data';
+import { productRowBySku } from '../../data';
 import { pillBrandLabel } from '../../components/BrandMark';
 import { color, font, fontSize } from '../../theme/tokens';
 // 第196轮整改3：名称带宽度按名称真实像素宽自适应（measureText = 13px canvas 量宽，
@@ -62,9 +62,35 @@ export const ZONE_LINE_H = 16;
 /** 生命周期第二行占高（第三十二轮）：11px 字号 13px 行高 + 行距 1——
  *  必须计入名称避让盒，否则相邻名称互压 ~14px（用户底线：名称互不遮挡） */
 export const LIFECYCLE_ROW_H = 14;
-/** 名称带两行药丸的第二行（配置 chip）占高（2026-11-13 Eason）：10px 字号 14px
- *  行高 + 行距 2——同样计入避让盒（计划盒 = 渲染盒纪律同生命周期行） */
-export const ZONE_CFG_ROW_H = 16;
+/** 名称带两行药丸的第二行（配置 chip）占高：10px 字号 14px 行高 + 行距 1
+ *  （2026-11-19 收紧：行距 2→1——六系列合并图在量层压缩后的绘图区 ~250px
+ *  上，整带两行药丸贴着降级阈值，行距+内边距各省 1px 就能多保住整段两行）。
+ *  同样计入避让盒（计划盒 = 渲染盒纪律同生命周期行） */
+export const ZONE_CFG_ROW_H = 15;
+/** 名称药丸纵向内边距（2026-11-19 收紧：NAME_PILL_BOX 上下 3px→2px，同轮） */
+export const ZONE_PILL_PAD_V = 4;
+/** 带内相邻药丸堆叠间隙（2026-11-19 收紧：4→3，与上行同因） */
+export const NAME_ZONE_STACK_GAP = 3;
+/** 名称药丸计划盒高（2026-11-19 与 index.tsx 带宽 memo 共享的唯一算法） */
+export function nameZonePillH(cfgText: string, lifecycle: boolean): number {
+  return ZONE_LINE_H + (cfgText ? ZONE_CFG_ROW_H : 0) + ZONE_PILL_PAD_V + (lifecycle ? LIFECYCLE_ROW_H : 0);
+}
+/** 名称带「整带降级单行」判定（2026-11-19 同源化，原 buildLabelPlan 内联 +
+ *  index memo 带 18px 保守余量的两套口径合并）：Σ盒高 + 间隙 ×(n−1) > 绘图区高 − 4
+ *  = 装不下 → 整带降级单行（名称+配置并一行）。两侧必须同一函数——口径漂移会造成
+ *  「带宽按单行预留、实际渲染两行」（宽度方向安全但带虚宽）或反向（单行全名被
+ *  带宽截断）。cfgTexts 顺序 = 带内候选顺序；lifecycleOf(i) = 第 i 个候选是否带
+ *  生命周期行（季粒度），缺省无。 */
+export function nameZoneTwoRowDegraded(
+  cfgTexts: readonly string[],
+  plotHeight: number,
+  lifecycleOf?: (i: number) => boolean,
+): boolean {
+  if (cfgTexts.length === 0) return false;
+  const total = cfgTexts.reduce((acc, cfg, i) => acc + nameZonePillH(cfg, lifecycleOf?.(i) ?? false), 0)
+    + NAME_ZONE_STACK_GAP * (cfgTexts.length - 1);
+  return total > plotHeight - 4;
+}
 /** 聚焦模式阈值（第三十二轮）：系列数 > 阈值时图面名称/生命周期行退场，
  *  识别走「悬停折线高亮单系列」+ 钉顶图例卡——0 个常驻名称 = 0 遮挡 */
 export const FOCUS_MODE_THRESHOLD = 8;
@@ -120,14 +146,14 @@ export function curveNameOf(s: Series): string {
   return s.financeTag ? `${base} · ${s.financeTag}` : base;
 }
 
-/** sku → 主数据行（品牌内联判定用；dimProduct 静态导入，模块级建一次索引） */
-const productBySku = new Map(dimProduct.map((p) => [p.sku_id, p]));
-
 /** 名称带两行药丸元信息单一来源（2026-11-13 Eason；图顶药丸带 BrandLegendStrip
  *  同款拆行口径）：curveNameOf 全名剥配置后缀 = 行1 产品名，后缀 = 行2 chip 文案
  *  （romram '—'/'规格未标明' = 无配置层级，不出 chip）；品牌词按清洗层
  *  dim_product.brand_inline（型号级同值，按系列首个 SKU 查回；无行 = null）。
- *  分期标注（financeTag）留在行1——多期数勾选时同名系列靠它分辨月供档。
+ *  SKU 查行走 src/data 活索引 productRowBySku（2026-11-19：原模块级 Map 在
+ *  applyDataPack 置换 dimProduct 后不刷新——服务器/导入模式换数据后全部查空，
+ *  药丸静默退单行、品牌词消失）。分期标注（financeTag）留在行1——多期数勾选时
+ *  同名系列靠它分辨月供档。
  *  2026-11-16 审视修复：配置后缀匹配必须先剥掉「 · {financeTag}」再对基名做
  *  endsWith——ZA 月度系列行1 = 「名 配置 · 36期」，此前对全名盲匹配失败后仍按
  *  后缀长度从尾部砍字符，把「36期」切掉、配置重复进行1、行尾悬空「·」，
@@ -135,7 +161,7 @@ const productBySku = new Map(dimProduct.map((p) => [p.sku_id, p]));
  *  （与 BrandLegendStrip 的守卫口径对齐）。 */
 export function seriesPillMetaOf(s: Series): NameZonePillSpec {
   const text = curveNameOf(s);
-  const row = s.skuIds.length ? productBySku.get(s.skuIds[0]) : undefined;
+  const row = s.skuIds.length ? productRowBySku(s.skuIds[0]) : undefined;
   const romRaw = (row?.romram ?? '').trim();
   const rom = romRaw === '—' || romRaw === '规格未标明' ? '' : romRaw;
   const romBase = rom.replace(/\s*GB$/i, '').trim();
@@ -504,26 +530,22 @@ export function buildLabelPlan(p: {
     // 缺省（未传 pillSpecOf）= 单行，几何与字段与旧版一致
     const pillSpec = p.pillSpecOf?.(s);
     const cfgText = pillSpec?.cfg || '';
-    const fullH = ZONE_LINE_H + (cfgText ? ZONE_CFG_ROW_H : 0) + 6 + (p.lifecycleRow?.(s.key) ? LIFECYCLE_ROW_H : 0);
+    const fullH = nameZonePillH(cfgText, p.lifecycleRow?.(s.key) ?? false);
     nameCandidates.push({ s, hidden, pillSpec, cfgText, fullH, fi, px, py, nameText, nw });
   };
   for (const s of series) collectNameItem(s, p.hiddenKeys?.has(s.key) ?? false);
   for (const s of p.nameOnlySeries ?? []) {
     if (!series.some((v) => v.key === s.key)) collectNameItem(s, true);
   }
-  // 带内两行药丸装得下判定（名称带同 x 一列纵排）：Σ盒高 + 4px 间隙 > 绘图区高
-  // → 全带降级单行（盒高 16+6=22，配置并进名称行；两行字段不再携带 → 渲染走
-  // 单行路径）。生命周期行保留（行高另计，随 fullH 重算）。
-  const ZONE_STACK_GAP = 4;
-  if (zone && nameCandidates.length > 0) {
-    const totalTwoRow = nameCandidates.reduce((acc, c) => acc + c.fullH, 0) + ZONE_STACK_GAP * (nameCandidates.length - 1);
-    if (totalTwoRow > geom.plotHeight - 4) {
-      for (const c of nameCandidates) {
-        if (!c.cfgText) continue;
-        c.pillSpec = c.pillSpec ? { ...c.pillSpec, cfg: '' } : undefined;
-        c.cfgText = '';
-        c.fullH = ZONE_LINE_H + 6 + (p.lifecycleRow?.(c.s.key) ? LIFECYCLE_ROW_H : 0);
-      }
+  // 带内两行药丸装得下判定（2026-11-19 抽共享函数 nameZoneTwoRowDegraded——与
+  // index.tsx 带宽 memo 同一条件；盒高 16+4=20，配置并进名称行；两行字段不再携带
+  // → 渲染走单行路径）。生命周期行保留（行高另计，随 fullH 重算）。
+  if (zone && nameZoneTwoRowDegraded(nameCandidates.map((c) => c.cfgText), geom.plotHeight, (i) => p.lifecycleRow?.(nameCandidates[i].s.key) ?? false)) {
+    for (const c of nameCandidates) {
+      if (!c.cfgText) continue;
+      c.pillSpec = c.pillSpec ? { ...c.pillSpec, cfg: '' } : undefined;
+      c.cfgText = '';
+      c.fullH = nameZonePillH('', p.lifecycleRow?.(c.s.key) ?? false);
     }
   }
   for (const c of nameCandidates) {

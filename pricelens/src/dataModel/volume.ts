@@ -20,7 +20,9 @@ import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 
 const normRom = (s: string): string => s.replace(/\s+/g, '');
 
-const timeRows: typeof dimTime = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : a.week_id > b.week_id ? 1 : 0));
+// 时间维快照（2026-11-19：数据包置换后随 CONFIG_CHANGED_EVENT 重建，原 const
+// 首帧一次终身查旧——同 aggregate 装载索引同类问题）
+let timeRows: typeof dimTime = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : a.week_id > b.week_id ? 1 : 0));
 
 /** 产业周销基准（台/周）：量级锚，仅供估算 */
 const INDUSTRY_BASE: Record<Industry, number> = {
@@ -198,9 +200,13 @@ const volCache = new Map<string, Map<string, number>>();
 // 默认平台店铺配置变化 → 促销档期的平台锚点（defaultPlatformAnchorOf）随之变化，
 // 缓存整包失效（2026-11-01 审查；Config 页承诺「看板取价即时生效」，不失效会让
 // 量价页销量估算沿用旧平台口径一整个会话）。node 测试环境无 window，守卫跳过。
+// 2026-11-19 扩：shareCache（参考价含事实行中位数）与时间维快照同批重建——
+// applyDataPack 换数据后照旧查旧会让估算沿旧包口径跑。
 if (typeof window !== 'undefined') {
   window.addEventListener(CONFIG_CHANGED_EVENT, () => {
     volCache.clear();
+    shareCache.clear();
+    timeRows = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : a.week_id > b.week_id ? 1 : 0));
   });
 }
 

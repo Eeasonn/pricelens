@@ -400,7 +400,7 @@ const NAME_PILL_BOX: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: 4,
-  padding: '3px 8px',
+  padding: '2px 8px', // 2026-11-19 收紧 3px→2px（六系列两行药丸整带贴降级阈值，省 1px 多保两行；计划盒 nameZonePillH 同步）
   background: color.canvas,
   borderRadius: radius.pill,
 };
@@ -593,7 +593,7 @@ function ZoneNamePill(props: {
           // 两行药丸（2026-11-13 Eason 名称带改版）：行1 = 色点+[品牌词]+产品名、
           // 行2 = 配置 chip——叠 column 方向；单行/锚定模式布局不变
           ...(nm.cfgText
-            ? { flexDirection: 'column' as const, alignItems: 'flex-start' as const, rowGap: 2 }
+            ? { flexDirection: 'column' as const, alignItems: 'flex-start' as const, rowGap: 1 } // 2026-11-19 收紧 2→1（计划盒 ZONE_CFG_ROW_H = 14 行高 + 1 行距）
             : {}),
           maxWidth: nm.maxW ?? 200,
           border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : color.hairline}`,
@@ -2774,9 +2774,11 @@ export default function Chart(props: ChartProps) {
                             对齐；原右对齐 + 表头 ch 宽随字号缩水导致表头错位）。
                             现价字号=折线上价格标签同款 14px；span 用 inline-block 使
                             width+textAlign 生效 */}
+                        {/* RRP 列（2026-11-19 Eason：去删除线与灰字，正常正文黑——
+                            「划线价」语言退役；空值仍透明占位保列宽） */}
                         <span
                           className="tnum"
-                          style={{ width: rrpW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.mute : 'transparent', textDecoration: 'line-through' }}
+                          style={{ width: rrpW, textAlign: 'center', flexShrink: 0, display: 'inline-block', fontSize: 12, color: pt?.rrp != null ? color.body : 'transparent' }}
                         >
                           {pt?.rrp != null ? moneyPlain(Math.round(pt.rrp), currency) : '0'}
                         </span>

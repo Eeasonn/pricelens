@@ -59,15 +59,12 @@ import { Popover } from 'antd';
 import ChannelSelectPopover from '../../components/ChannelSelectPopover';
 import { DownOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf, fullModelName } from '../../components/BrandMark';
-import { dimProduct } from '../../data';
+import { dimProduct, productRowBySku } from '../../data';
 import { COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import { curveNameOf } from './chartModel';
 import type { LegendGroup } from './tableModel';
 import { color, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import { scrollBehaviorOf } from '../../theme/motion';
-
-/** sku → 主数据行（品牌内联判定用；dimProduct 静态导入，模块级建一次索引） */
-const productBySku = new Map(dimProduct.map((p) => [p.sku_id, p]));
 
 /** 块内对比区最宽 = 3 颗药丸预算（与每组对比硬上限同值；主品药丸不占此预算、
  *  恒可见）。空间不足时对比区压缩，实测溢出才出块内 ‹›。 */
@@ -435,7 +432,7 @@ function GroupBlock({
     const suffix = text.endsWith(rom) ? rom : romBase;
     // 品牌内联（2026-11-13）：清洗层 dim_product.brand_inline（型号级同值），按系列
     // 首个 SKU 查回；未带列的旧数据 = undefined → 第一行恒带品牌词（旧口径兜底）
-    const firstRow = s.skuIds.length ? productBySku.get(s.skuIds[0]) : undefined;
+    const firstRow = s.skuIds.length ? productRowBySku(s.skuIds[0]) : undefined;
     return {
       key: s.key,
       brand: s.brand,

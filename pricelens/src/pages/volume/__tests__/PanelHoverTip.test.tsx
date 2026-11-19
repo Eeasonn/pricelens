@@ -44,7 +44,7 @@ const mount = (model: Partial<WeekDetailModel> = {}, props: Partial<Parameters<t
   );
 
 describe('PanelHoverTip · 主品悬停浮窗', () => {
-  it('日期/桶号、RRP（删除线参照）、折后价、环比胶囊、销量与 ARIA 关联齐备', () => {
+  it('日期/桶号、RRP（2026-11-19 去删除线，正常正文黑）、折后价、环比胶囊、销量与 ARIA 关联齐备', () => {
     mount();
     expect(screen.getByText('10-14')).toBeDefined();
     expect(screen.getByText('2026W42')).toBeDefined();

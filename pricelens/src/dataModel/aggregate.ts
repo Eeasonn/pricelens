@@ -30,8 +30,9 @@ import type {
   SeriesQuery,
   SkuGroupQuery,
 } from './types';
-import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimRegion, dimTier, dimTime, factPriceMonthly, factPriceWeekly } from '../data';
+import { dimBenchmark, dimChannel, dimProduct, dimPromo, dimRegion, dimTier, dimTime, factPriceMonthly, factPriceWeekly, productRowBySku } from '../data';
 import prefillJson from '../data/dim_default_channel.json';
+import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import { defaultShopOverrideOf, productDefaultShopOverrideOf } from '../state/defaultShopStore';
 import { brandColorOf } from '../theme/tokens';
 import { DEFAULT_DATA_SCOPE, isDataScopeSupported } from './scope';
@@ -45,13 +46,16 @@ import { anomalyManualOf, detectSuspects, promoBandHitOf, readAnomalyRule, type 
 const normRom = (s: string): string => s.replace(/\s+/g, '');
 const daysBetween = (from: string, to: string): number =>
   Math.round((Date.parse(to) - Date.parse(from)) / 86400000);
-/** 周锚日（周三）速查：异常判定促销带豁免按锚日比对 */
-const wedByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.week_wed_date]));
+/** 周锚日（周三）速查：异常判定促销带豁免按锚日比对。
+ *  2026-11-19：装载索引整体改为「数据包置换后可重建」——原先模块级 const 只在
+ *  首帧建一次，服务器/导入模式 applyDataPack 换数据后全部查旧（此前靠 reload
+ *  刷新掩盖；boot 内 apply 不 reload 时即命中）。重建通道 = CONFIG_CHANGED_EVENT
+ *  （applyDataPack 末尾已派发，量价 volCache 同款）。 */
+let wedByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.week_wed_date]));
 
-// ---------------- 装载索引（模块内懒构建一次） ----------------
-const timeRows: DimTime[] = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : a.week_id > b.week_id ? 1 : 0));
-const productById = new Map<string, DimProduct>(dimProduct.map((p) => [p.sku_id, p]));
-const channelById = new Map<string, DimChannel>(dimChannel.map((c) => [c.channel_id, c]));
+// ---------------- 装载索引（懒构建 + 数据包置换后重建，见 resetAggregateCaches） ----------------
+let timeRows: DimTime[] = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : a.week_id > b.week_id ? 1 : 0));
+let channelById = new Map<string, DimChannel>(dimChannel.map((c) => [c.channel_id, c]));
 
 type FactIndex = Map<string, Map<string, Map<string, FactPriceWeekly[]>>>;
 let factIdx: FactIndex | null = null;
@@ -75,6 +79,20 @@ function factIndex(): FactIndex {
     }
   }
   return factIdx;
+}
+
+/** 数据包置换后的装载索引重建（2026-11-19）：applyDataPack 末尾派发
+ *  CONFIG_CHANGED_EVENT（与量价 volCache 失效同通道），此处重建时间/渠道快照并
+ *  作废事实索引——下一次查询按新数据懒建。sku 维度不走快照（productRowBySku 活索引）。 */
+export function resetAggregateCaches(): void {
+  timeRows = [...dimTime].sort((a, b) => (a.week_id < b.week_id ? -1 : a.week_id > b.week_id ? 1 : 0));
+  wedByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.week_wed_date]));
+  quarterByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.quarter_id]));
+  channelById = new Map<string, DimChannel>(dimChannel.map((c) => [c.channel_id, c]));
+  factIdx = null;
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener(CONFIG_CHANGED_EVENT, resetAggregateCaches);
 }
 /** 某国某 SKU 某周的全部渠道行（店铺级） */
 export function factRows(countryCode: string, skuId: string, weekId: string): FactPriceWeekly[] {
@@ -133,13 +151,13 @@ function resolveGroup(g: SkuGroupQuery): ResolvedGroup | null {
   const prefix = g.modelId + '__';
   const modelRows = dimProduct.filter((p) => p.sku_id.startsWith(prefix));
   if (modelRows.length === 0) return null;
-  let skuIds = g.skuIds.filter((id) => productById.has(id));
+  let skuIds = g.skuIds.filter((id) => productRowBySku(id) != null);
   if (skuIds.length === 0) {
     // 防御：未带 SKU 时回落到该型号+配置的全部颜色
     skuIds = modelRows.filter((p) => normRom(p.romram) === normRom(g.romram)).map((p) => p.sku_id);
   }
   if (skuIds.length === 0) return null;
-  const repr = productById.get(skuIds[0]) ?? modelRows[0];
+  const repr = productRowBySku(skuIds[0]) ?? modelRows[0];
   return {
     skuIds,
     brand: repr.brand,
@@ -324,7 +342,7 @@ function implausiblyLowRow(row: Partial<FactPriceWeekly>): boolean {
   if (p == null) return false;
   if (p <= 0) return true;
   if (row.rrp_usd != null && p < row.rrp_usd * MIN_PLAUSIBLE_PRICE_FRACTION) return true;
-  const ref = productById.get(row.sku_id ?? '')?.ref_price_usd;
+  const ref = productRowBySku(row.sku_id ?? '')?.ref_price_usd;
   return ref != null && p < ref * MIN_PLAUSIBLE_PRICE_FRACTION;
 }
 
@@ -523,7 +541,7 @@ export function platformPriceSpreadOfSelection(
   currency: CurrencyMode,
   scope?: PlatformQuery | null,
 ): { members: number; wholeConfig: boolean; rows: Array<{ platform: string; price: number; skuCount: number }> } {
-  let skuIds = sel.skuIds.filter((id) => productById.has(id));
+  let skuIds = sel.skuIds.filter((id) => productRowBySku(id) != null);
   const wholeConfig = skuIds.length === 0;
   if (wholeConfig) {
     const prefix = sel.modelId + '__';
@@ -571,7 +589,7 @@ export function latestPricedWeekOfSelection(
   currency: CurrencyMode,
   scope?: PlatformQuery | null,
 ): string | null {
-  let skuIds = sel.skuIds.filter((id) => productById.has(id));
+  let skuIds = sel.skuIds.filter((id) => productRowBySku(id) != null);
   if (!skuIds.length) {
     skuIds = dimProduct.filter((p) => p.sku_id.startsWith(sel.modelId + '__') && normRom(p.romram) === normRom(sel.romram)).map((p) => p.sku_id);
   }
@@ -1094,7 +1112,7 @@ export function pricedChannelIdsOfSelection(
   countryCode: string,
 ): string[] {
   const configRows = dimProduct.filter((p) => p.sku_id.startsWith(sel.modelId + '__') && normRom(p.romram) === normRom(sel.romram));
-  const skuIds = sel.skuIds.length ? sel.skuIds.filter((id) => productById.has(id)) : configRows.map((p) => p.sku_id);
+  const skuIds = sel.skuIds.length ? sel.skuIds.filter((id) => productRowBySku(id) != null) : configRows.map((p) => p.sku_id);
   if (skuIds.length === 0) return [];
   const countryChannels = dimChannel.filter((c) => c.country_code === countryCode);
   const byChannel = new Map<string, FactPriceWeekly[]>(countryChannels.map((c) => [c.channel_id, []]));
@@ -1124,7 +1142,7 @@ export interface LaunchInfo {
 }
 
 export function launchInfoOf(skuIds: string[], countryCode: string = getCurrentCountry()): LaunchInfo | null {
-  const prows = skuIds.map((id) => productById.get(id)).filter((p): p is DimProduct => !!p);
+  const prows = skuIds.map((id) => productRowBySku(id)).filter((p): p is DimProduct => !!p);
   if (prows.length === 0) return null;
   const channels = new Set(effectiveChannelIds(countryCode, null));
   let launchPriceLocal: number | null = null;
@@ -1158,7 +1176,7 @@ const quarterIdOfDate = (date: string): string => {
   const [y, m] = date.split('-').map(Number);
   return `${y}Q${Math.floor((m - 1) / 3) + 1}`;
 };
-const quarterByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.quarter_id]));
+let quarterByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.quarter_id]));
 
 /**
  * 生命周期调价幅度：「首销季 → 末季」季均折后价(本币) 变化（缺省国家 = 当前分析国）。
@@ -1167,7 +1185,7 @@ const quarterByWeek = new Map<string, string>(dimTime.map((w) => [w.week_id, w.q
  * - 仅季粒度消费；周/月粒度不渲染
  */
 export function lifecycleDeltaOf(skuIds: string[], countryCode: string = getCurrentCountry()): LifecycleDelta | null {
-  const prows = skuIds.map((id) => productById.get(id)).filter((p): p is DimProduct => !!p);
+  const prows = skuIds.map((id) => productRowBySku(id)).filter((p): p is DimProduct => !!p);
   if (prows.length === 0) return null;
   const launchDate = prows.map((p) => p.launch_date).sort()[0];
   const eolDate = prows.map((p) => p.eol_date).filter((d): d is string => !!d).sort()[0] ?? null;
@@ -1454,7 +1472,7 @@ export function buildOverviewMatrix(
     }
     const comps: OverviewCompRow[] = [];
     for (const [skuId, agg] of compMap) {
-      const p = productById.get(skuId);
+      const p = productRowBySku(skuId);
       if (!p || !p.countries.includes(cc)) continue;
       const lat = latestOf(skuId, cc, currency, channels);
       const points = sparkPoints(skuId, cc, currency, channels);

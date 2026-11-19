@@ -58,7 +58,7 @@ import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
-import { buildSeries, defaultPlatformAnchorOf, effectiveLinePlatform, tierOf, tierOrderOf } from '../../dataModel/aggregate';
+import { buildSeries, defaultPlatformAnchorOf, effectiveLinePlatform, lifecycleDeltaOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART, COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
@@ -84,6 +84,7 @@ import {
   collectTierValues,
   curveNameOf,
   dedupeSpecText,
+  nameZoneTwoRowDegraded,
   nameZoneWidthOf,
   seriesPillMetaOf,
   type LineShapeChoice,
@@ -1469,21 +1470,27 @@ export default function PriceTrend(props: {
   const splitYFinal = splitVolPlan && volumeOn ? splitVolPlan.scale : splitYCfg;
   // 名称带宽预留与「两行降级单行」判定同源（2026-11-18 审计：降级后单行全文
   // 「名称 + 配置」比两行的任一行都宽——带宽仍按两行预留会横向溢出名称带压进
-  // 绘图区）。同一条件（Σ两行盒高+间隙 vs 绘图区高，多留 18px 保守余量对齐
-  // 生命周期行的近似）→ 降级时按单行全文重预留。buildLabelPlan 内做真实判定
-  // （geom.plotHeight 同源 scale.plotHeight），两侧判定一致。
+  // 绘图区）。2026-11-19 起判定走共享函数 nameZoneTwoRowDegraded（与
+  // buildLabelPlan 同一函数同一条件，含生命周期行精确计高，原 18px 保守余量
+  // 退役）。分离模式按面板独立判定（候选 = p.all 含隐藏药丸，与 plan 候选集合
+  // 一致；面板共享同一 plotH），带宽取面板最大 = 每个面板都装得下。
   const nameZoneW = useMemo(() => {
-    const pills = (splitActive ? panelViews.flatMap((p) => p.vis) : chartSeries).map((s) => seriesPillMetaOf(s));
     const zoneScale = splitActive ? splitYFinal : yFinal;
     const zonePlotH = zoneScale?.plotHeight ?? Number.POSITIVE_INFINITY;
-    const GAP = 4;
-    const twoRowH = (p: ReturnType<typeof seriesPillMetaOf>): number => 16 + (p.cfg ? 16 : 0) + 6;
-    const totalTwoRow = pills.reduce((acc, p) => acc + twoRowH(p), 0) + GAP * Math.max(0, pills.length - 1);
-    if (totalTwoRow > zonePlotH - 4 - 18) {
-      return nameZoneWidthOf(pills.map((p) => (p.cfg ? { ...p, name: `${p.name} ${p.cfg}`.trim(), cfg: '' } : p)));
-    }
-    return nameZoneWidthOf(pills);
-  }, [splitActive, panelViews, chartSeries, splitYFinal, yFinal]);
+    const quarter = state.granularity === 'quarter';
+    const widthOf = (list: Series[]): number => {
+      const pills = list.map((s) => seriesPillMetaOf(s));
+      const degraded = nameZoneTwoRowDegraded(
+        pills.map((p) => p.cfg || ''),
+        zonePlotH,
+        (i) => quarter && lifecycleDeltaOf(list[i].skuIds) != null,
+      );
+      return nameZoneWidthOf(
+        degraded ? pills.map((p) => (p.cfg ? { ...p, name: `${p.name} ${p.cfg}`.trim(), cfg: '' } : p)) : pills,
+      );
+    };
+    return Math.max(...(splitActive ? panelViews.map((p) => widthOf(p.all)) : [widthOf(visSeries)]));
+  }, [splitActive, panelViews, visSeries, splitYFinal, yFinal, state.granularity]);
   const gridLeft = estGridLeft(state.currency, showYTicks, showTiers, yAxisTickTexts, nameZoneW);
 
   const splitVolH = splitVolPlan && volumeOn ? splitVolPlan.volH : 0;
