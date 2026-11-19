@@ -58,19 +58,20 @@ export const NAME_FONT_SIZE = 13;
 export const NAME_LINE_HEIGHT = 18;
 const NAME_LOGO_W = 12; // 系列名前置品牌色小点（8px）+ 间距 4，避让宽度估算用
 export const ZONE_FONT = 12; // 名称预留带内字号（小一号）+ 两行换行
-export const ZONE_LINE_H = 16;
+export const ZONE_LINE_H = 15; // 2026-11-19 二次收紧 16→15（11px 字号 15px 行高）——量层开启压缩绘图区后六系列两行药丸仍贴阈值
 /** 生命周期第二行占高（第三十二轮）：11px 字号 13px 行高 + 行距 1——
  *  必须计入名称避让盒，否则相邻名称互压 ~14px（用户底线：名称互不遮挡） */
 export const LIFECYCLE_ROW_H = 14;
-/** 名称带两行药丸的第二行（配置 chip）占高：10px 字号 14px 行高 + 行距 1
- *  （2026-11-19 收紧：行距 2→1——六系列合并图在量层压缩后的绘图区 ~250px
- *  上，整带两行药丸贴着降级阈值，行距+内边距各省 1px 就能多保住整段两行）。
- *  同样计入避让盒（计划盒 = 渲染盒纪律同生命周期行） */
-export const ZONE_CFG_ROW_H = 15;
-/** 名称药丸纵向内边距（2026-11-19 收紧：NAME_PILL_BOX 上下 3px→2px，同轮） */
+/** 名称带两行药丸的第二行（配置 chip）占高：10px 字号 11px 行高 + 行距 1
+ *  （2026-11-19 收紧 16→12：行距 2→1、行高 14→13→11——Eason 真机「量+销毛率」
+ *  六系列场景绘图区仅 201px（5 格 × 40.2px），纯数字配置文案 10px 字号在 11px
+ *  行高内可读）。同样计入避让盒（计划盒 = 渲染盒纪律同生命周期行） */
+export const ZONE_CFG_ROW_H = 12;
+/** 名称药丸纵向内边距（2026-11-19 收紧：NAME_PILL_BOX 上下 3px→2px） */
 export const ZONE_PILL_PAD_V = 4;
-/** 带内相邻药丸堆叠间隙（2026-11-19 收紧：4→3，与上行同因） */
-export const NAME_ZONE_STACK_GAP = 3;
+/** 带内相邻药丸堆叠间隙（2026-11-19 收紧：4→1，与上行同因——真机实测绘图区
+ *  201px：盒高 31×6 + 间隙 1×5 = 191 ≤ 197 预算，六系列两行不再触发整带降级） */
+export const NAME_ZONE_STACK_GAP = 1;
 /** 名称药丸计划盒高（2026-11-19 与 index.tsx 带宽 memo 共享的唯一算法） */
 export function nameZonePillH(cfgText: string, lifecycle: boolean): number {
   return ZONE_LINE_H + (cfgText ? ZONE_CFG_ROW_H : 0) + ZONE_PILL_PAD_V + (lifecycle ? LIFECYCLE_ROW_H : 0);

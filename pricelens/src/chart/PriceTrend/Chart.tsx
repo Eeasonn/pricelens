@@ -404,7 +404,7 @@ const NAME_PILL_BOX: CSSProperties = {
   background: color.canvas,
   borderRadius: radius.pill,
 };
-const NAME_PILL_TEXT: CSSProperties = { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' };
+const NAME_PILL_TEXT: CSSProperties = { fontSize: 11, lineHeight: '15px', color: color.body, whiteSpace: 'nowrap' }; // 2026-11-19 收紧 16→15（计划盒 ZONE_LINE_H 同步）
 /** 「模拟」徽标（销毛迷你卡原样式；图层标注、成本药丸、成本脚行共用） */
 const SIM_BADGE: CSSProperties = {
   padding: '0 4px',
@@ -653,7 +653,7 @@ function ZoneNamePill(props: {
               style={{
                 flexShrink: 0,
                 fontSize: 10,
-                lineHeight: '14px',
+                lineHeight: '11px', // 2026-11-19 收紧 13→11（计划盒 ZONE_CFG_ROW_H = 11 行高 + 1 行距；纯数字配置 10px 字号可读）
                 color: color.mute,
                 whiteSpace: 'nowrap',
               }}
