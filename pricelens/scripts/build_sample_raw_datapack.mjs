@@ -167,9 +167,8 @@ if (args.includes('--with-sales')) {
         const qty = Math.max(1, Math.round(base * countryW(cc) * noise));
         sales.push({
           country: cc,
-          product: p.model_name,
-          category1: p.cat1 ?? null,
-          category2: p.cat2 ?? null,
+          // PSI 4 列口径（2026-11-20 拍板）：无 category1/2 列，product 为含规格串原文（引擎从 product 拆解维度）
+          product: [p.model_name, p.cat1].filter(Boolean).join(" "),
           periodId: `${week.slice(0, 4)}0${week.slice(4)}`,
           qty,
         });
