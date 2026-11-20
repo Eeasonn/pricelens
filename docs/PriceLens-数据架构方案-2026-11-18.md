@@ -107,6 +107,8 @@
 |---|---|---|---|
 | 维度1 | `cat1` | phone/tablet=存储规范形（`12+512 GB`）；wearable=表盘（≥2 尺寸型号）；audio=null | 销量 join 键、第四列 |
 | 维度2 | `cat2` | tablet=屏幕（`11.5"`）；其余 null | 销量 join 键、第四列 |
+| 维度3（2026-11-20 增） | `cat3` | **平板柔光屏**：`PaperMatte`（含友商同类柔光屏词）/ 空（标准版或非平板）。DWD 拆列时从规格原文特殊屏词识别（当前此类词并入 `color` 变体，落地时剥离进 cat3） | 版本区分、对标配对（便宜对便宜/同形态）；PSI 源暂无对应列，join 预留 |
+| 维度4（2026-11-20 增） | `cat4` | **预留**：恒空；未来新匹配维度先占位（建表即含列，避免后补迁移） | 预留 |
 | 次级信息 | `info`/`color` | 颜色、联网方式、特殊屏、材质等 | 版本胶囊（不进销量键） |
 | **品牌系列** | `series` | 配置表 C1-1 规则派生；未命中兜底：我司=型号名首词、竞品=型号名本身 | 产品树第三列（仅呈现层，不进匹配键） |
 | 价格档位 | `tier_code` / `tier_by_country` | 配置表 C1-4 阶梯 × 参考价（rrp 中位数，缺则成交价中位）；分国中位价落档 | 档位筛选、便宜对便宜配对 |
@@ -136,27 +138,28 @@ promo_text, url, screenshot, crawled_at, crawl_status`。
 
 ## 2. PSI 周销量底表（ODS-B）+ 拓展维度
 
-### 2.1 ODS-B：`stg_psi_weekly_sales`（源样层，一行 = Product×维度×周期）
+### 2.1 ODS-B：`stg_psi_weekly_sales`（源样层，一行 = Product×周期）
 
-> 对应数据包 `sales[]`，六字段（字段名固定英文，值原样）：
+> 对应数据包 `sales[]`。**2026-11-20 拍板：四字段**（字段名固定英文，值原样）——
+> PSI 原表无 Category1/2 列，存储/表盘/屏幕维度全部由 `product` 串拆解（与 offer
+> 侧同一套规则，见 §1.2）：
 
 | 字段 | 来源列 | 类型 | 说明 |
 |---|---|---|---|
 | `country` | Management Country/Region | string | 国家码/中文名/英文名均收 |
-| `product` | Product | string | 型号名原文；解析失败挂 `salesProductAliases` |
-| `category1` | Category1 | string \| null | 手机/平板=存储；穿戴=表盘；音频=null |
-| `category2` | Category2 | string \| null | 平板=屏幕（裸数字按英寸收）；其余=null |
+| `product` | Product | string | **产品 SKU 原文（含规格串，如 `Mate 70 Pro 12+512 GB`、`Watch 6 42mm`）**；解析失败挂 `salesProductAliases`；维度由系统从本串拆解 |
 | `periodId` | PeriodID | string | **YYYY0WW**（`2026043`）；兼容 YYYYWW |
 | `qty` | QTY | number | 台；≤0/非法行计入 skipped |
 
-**粒度**：QTY 按 `Product + Category1 + Category2 + 国家 + PeriodID` 汇总；
+**粒度**：QTY 按 `Product + 国家 + PeriodID` 汇总；
 同键多行自动求和；颜色等次级信息**不进**销量。
 
 ### 2.2 规范化与 join（导入时自动）
 
-周期/国家/维度归一（与 §1.2 同一套字典）；型号解析 = 别名表 → 归一键 →
-**我司优先**（同名撞竞品归我司）；join 键：
-`(country, product, category1, category2, week) → (model_id, cat1, cat2, week_id)`。
+周期/国家归一（与 §1.2 同一套字典）；型号解析 = 别名表 → 归一键 →
+**我司优先**（同名撞竞品归我司）；维度拆解同 offer 侧（§1.2 拆列规则）；
+join 键：
+`(country, product 拆解维度, week) → (model_id, cat1, cat2, week_id)`。
 **口径**：型号×国家存在任何销量行 → 该型号该国整模型走真实销量（同维度不同
 info 共享同一销量，不摊分）；无销量行的型号回落估算（不混口径）。
 
