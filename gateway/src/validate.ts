@@ -6,10 +6,10 @@
 export const MAX_REQUEST_BYTES = 512_000;
 export const MAX_TEXT_LENGTH = 4_000;
 
-export const AGENT_INTENTS = ['filter', 'query', 'forecast_explain', 'alert', 'clarify'] as const;
+export const AGENT_INTENTS = ['filter', 'query', 'forecast_explain', 'alert', 'price_advantage', 'price_alert', 'clarify'] as const;
 export type AgentIntentValue = (typeof AGENT_INTENTS)[number];
 
-export const CARD_KINDS = ['filter', 'table', 'chart', 'alert', 'forecast_explanation'] as const;
+export const CARD_KINDS = ['filter', 'table', 'chart', 'alert', 'forecast_explanation', 'price_advantage', 'tool_call'] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
 export interface BaselineResponse {
@@ -18,7 +18,7 @@ export interface BaselineResponse {
   steps: unknown[];
   cards: unknown[];
   citations: unknown[];
-  suggestions: string[];
+  suggestions: Array<string | { label: string; prompt: string }>;
   contextFingerprint: string;
   provider?: { name: string; model: string };
   provenance?: Record<string, unknown>;
@@ -37,7 +37,8 @@ export function isResponseShape(value: unknown): value is BaselineResponse {
   if (!Array.isArray(item.steps) || !Array.isArray(item.cards) || !Array.isArray(item.citations) || !Array.isArray(item.suggestions)) return false;
   const provider = item.provider as { name?: unknown; model?: unknown } | undefined;
   if (provider !== undefined && (!provider || typeof provider !== 'object' || typeof provider.name !== 'string' || typeof provider.model !== 'string')) return false;
-  return (item.suggestions as unknown[]).every((entry) => typeof entry === 'string')
+  return (item.suggestions as unknown[]).every((entry) => typeof entry === 'string'
+    || (entry && typeof entry === 'object' && typeof (entry as Record<string, unknown>).label === 'string' && typeof (entry as Record<string, unknown>).prompt === 'string'))
     && (item.cards as unknown[]).every((card) => {
       if (!card || typeof card !== 'object') return false;
       return (CARD_KINDS as readonly string[]).includes(String((card as Record<string, unknown>).kind));

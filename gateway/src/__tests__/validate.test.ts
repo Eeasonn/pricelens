@@ -7,6 +7,19 @@ describe('isResponseShape', () => {
     expect(isResponseShape(VALID_BASELINE)).toBe(true);
   });
 
+  it('accepts PriceLens stable result cards and object suggestions', () => {
+    expect(isResponseShape({
+      ...VALID_BASELINE,
+      cards: [{ kind: 'price_advantage' }, { kind: 'tool_call' }],
+      suggestions: [{ label: '价格优势', prompt: '比较我司与核心竞品' }],
+    })).toBe(true);
+  });
+
+  it('accepts price_advantage and price_alert intents used by current Agent channels', () => {
+    expect(isResponseShape({ ...VALID_BASELINE, intent: 'price_advantage' })).toBe(true);
+    expect(isResponseShape({ ...VALID_BASELINE, intent: 'price_alert' })).toBe(true);
+  });
+
   it('rejects invalid intents, non-object values and bad card kinds', () => {
     expect(isResponseShape(null)).toBe(false);
     expect(isResponseShape('x')).toBe(false);
