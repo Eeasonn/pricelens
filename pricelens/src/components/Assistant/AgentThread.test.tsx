@@ -2,18 +2,18 @@
 import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AgentThread, type ThreadMessage } from './AgentThread';
+import { AgentContextDisclosure, AgentThread, type ThreadMessage } from './AgentThread';
 
 const ask = vi.fn();
 const stop = vi.fn();
 let finish: () => void;
 
-function Harness({ initialMessages = [], initialDraft = '', mode = 'dock' }: {
-  initialMessages?: ThreadMessage[]; initialDraft?: string; mode?: 'dock' | 'drawer';
+function Harness({ initialMessages = [], initialDraft = '', mode = 'dock', initialRunning = false }: {
+  initialMessages?: ThreadMessage[]; initialDraft?: string; mode?: 'dock' | 'drawer'; initialRunning?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState(initialDraft);
-  const [running, setRunning] = useState(false);
+  const [running, setRunning] = useState(initialRunning);
   const [messages, setMessages] = useState(initialMessages);
   finish = () => setRunning(false);
   return <AgentThread
@@ -90,6 +90,34 @@ describe('shared assistant-ui conversation', () => {
     expect(ask).not.toHaveBeenCalled();
   });
 
+  it('anchors the latest turn at the question instead of the bottom of a long answer', async () => {
+    const scrollTo = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+    render(<Harness initialRunning initialMessages={[
+      { id: 'question', role: 'user', text: '比较当前价格', createdAt: new Date().toISOString() },
+      { id: 'answer', role: 'assistant', text: '结论与完整结果', createdAt: new Date().toISOString(), streaming: true },
+    ]} />);
+    await waitFor(() => expect(document.querySelector('[data-aui-top-anchor-target]')).not.toBeNull());
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'instant' });
+  });
+
+  it('does not pull the first turn to the bottom when the run completes', async () => {
+    const scrollTo = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+    render(<Harness initialRunning initialMessages={[
+      { id: 'question', role: 'user', text: '比较当前价格', createdAt: new Date().toISOString() },
+      { id: 'answer', role: 'assistant', text: '结论与完整结果', createdAt: new Date().toISOString(), streaming: true },
+    ]} />);
+    await waitFor(() => expect(document.querySelector('[data-aui-top-anchor-target]')).not.toBeNull());
+    scrollTo.mockClear();
+    act(() => finish());
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('keeps the latest-message control out of message content', () => {
+    render(<Harness initialMessages={[{ id: 'answer', role: 'assistant', text: '长结果', createdAt: new Date().toISOString() }]} />);
+    expect(document.querySelector('.aui-composer-toolbar [aria-label="回到最新消息"]')).not.toBeNull();
+    expect(document.querySelector('.aui-scroll-anchor')).toBeNull();
+  });
+
   it('renders safe Markdown and reports clipboard rejection without claiming success', async () => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
     render(<Harness initialMessages={[{ id: 'answer', role: 'assistant', text: '**结论** [证据](https://example.com) <script>bad()</script>', createdAt: new Date().toISOString() }]} />);
@@ -110,5 +138,35 @@ describe('shared assistant-ui conversation', () => {
     expect(opener.inert).not.toBe(true);
     expect(screen.queryByRole('dialog')).toBeNull();
     opener.remove();
+  });
+
+  it('keeps the full scope in a native disclosure behind a compact summary', () => {
+    render(<AgentContextDisclosure
+      page="价格走势" summary="RU · 手机 · 3 个产品" range="2026W38–W45 · USD"
+      details={[{ id: 'page', label: '当前页 · 价格走势', active: true }, { id: 'sku', label: '口径 · Pura 90s Pro Max', title: 'own-pura-90s' }]}
+      stale
+    />);
+    const disclosure = document.querySelector<HTMLDetailsElement>('details.lpl-agent-context');
+    expect(disclosure?.open).toBe(false);
+    fireEvent.click(screen.getByText('详细口径'));
+    expect(disclosure?.open).toBe(true);
+    expect(screen.getByTitle('own-pura-90s')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toContain('上下文已更新');
+  });
+
+  it('replaces desktop keyboard instructions with a concise compact hint', () => {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })) });
+    render(<Harness />);
+    expect(screen.getByText('询问当前看板数据')).toBeTruthy();
+    expect(screen.queryByText(/Enter 发送/)).toBeNull();
+  });
+
+  it('converts smooth anchor scrolling to instant when reduced motion is requested', () => {
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn((query: string) => ({ matches: query.includes('prefers-reduced-motion'), addEventListener: vi.fn(), removeEventListener: vi.fn() })) });
+    const scrollTo = vi.spyOn(HTMLElement.prototype, 'scrollTo');
+    render(<Harness initialMessages={[{ id: 'answer', role: 'assistant', text: '历史结果', createdAt: new Date().toISOString() }]} />);
+    const viewport = document.querySelector('.aui-viewport') as HTMLElement;
+    viewport.scrollTo({ top: 12, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenCalledWith({ top: 12, behavior: 'instant' });
   });
 });

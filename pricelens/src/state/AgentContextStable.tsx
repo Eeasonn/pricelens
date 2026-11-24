@@ -63,6 +63,8 @@ interface AgentContextValue {
   draft: string;
   context: AgentContextSnapshot;
   appliedFilterIds: ReadonlySet<string>;
+  filterTransactions: ReadonlyMap<string, string>;
+  redoFilterIds: ReadonlySet<string>;
   canUndo: boolean;
   canRedo: boolean;
   contextStale: boolean;
@@ -74,9 +76,9 @@ interface AgentContextValue {
   send: (text?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, intent?: AgentIntent, scope?: FilterPatch) => Promise<void>;
   stop: () => void;
   newConversation: () => void;
-  applyFilter: (card: FilterResultCard) => { ok: boolean; error?: string };
-  undoFilter: () => void;
-  redoFilter: () => void;
+  applyFilter: (card: FilterResultCard) => { ok: true; transactionId: string } | { ok: false; error: string };
+  undoFilter: (expectedId?: string) => boolean;
+  redoFilter: (expectedId?: string) => boolean;
   markRead: () => void;
 }
 
@@ -84,6 +86,7 @@ const Ctx = createContext<AgentContextValue | null>(null);
 
 const messageId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 type AgentEventLike = AgentEvent & { delta?: string; card?: Partial<AgentResultCard> };
+type FilterTransaction = { id: string; state: FiltersState };
 
 /**
  * R3：终态收敛工具活动卡。流事件创建的工具卡（id = tool-<toolName>）与
@@ -182,8 +185,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [appliedFilterIds, setAppliedFilterIds] = useState<ReadonlySet<string>>(new Set());
-  const [undoSnapshots, setUndoSnapshots] = useState<FiltersState[]>([]);
-  const [redoSnapshots, setRedoSnapshots] = useState<FiltersState[]>([]);
+  const [filterTransactions, setFilterTransactions] = useState<ReadonlyMap<string, string>>(new Map());
+  const [undoSnapshots, setUndoSnapshots] = useState<FilterTransaction[]>([]);
+  const [redoSnapshots, setRedoSnapshots] = useState<FilterTransaction[]>([]);
   const controller = useRef<AbortController | null>(null);
   const contextRef = useRef<AgentContextSnapshot | null>(null);
   // 远端服务即使收到 abort 也可能晚到；序号让旧响应无法覆盖新会话。
@@ -391,32 +395,38 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       }],
     } : prev);
   }, []);
-  const newConversation = useCallback(() => { if (!controller.current) { setMessages([]); setDraft(''); setUndoSnapshots([]); setRedoSnapshots([]); setAppliedFilterIds(new Set()); setActiveRun(null); setRunStatus('idle'); } }, []);
+  const newConversation = useCallback(() => { if (!controller.current) { setMessages([]); setDraft(''); setUndoSnapshots([]); setRedoSnapshots([]); setAppliedFilterIds(new Set()); setFilterTransactions(new Map()); setActiveRun(null); setRunStatus('idle'); } }, []);
 
-  const applyFilter = useCallback((card: FilterResultCard) => {
+  const applyFilter = useCallback((card: FilterResultCard): { ok: true; transactionId: string } | { ok: false; error: string } => {
     const validation = validateFilterPatch(card.patch);
     if (!validation.valid) return { ok: false, error: validation.errors.join('；') };
-    setUndoSnapshots((prev) => [...prev, state].slice(-5));
+    const transactionId = messageId('filter');
+    setUndoSnapshots((prev) => [...prev, { id: transactionId, state }].slice(-5));
     setRedoSnapshots([]);
+    setFilterTransactions((prev) => new Map(prev).set(card.id, transactionId));
     actions.set(card.patch);
-    setAppliedFilterIds((prev) => new Set([...prev, card.id]));
-    return { ok: true };
+    setAppliedFilterIds((prev) => new Set([...prev, transactionId]));
+    return { ok: true, transactionId };
   }, [actions, state]);
 
-  const undoFilter = useCallback(() => {
+  const undoFilter = useCallback((expectedId?: string): boolean => {
     const snapshot = undoSnapshots[undoSnapshots.length - 1];
-    if (!snapshot) return;
-    actions.set(snapshot);
-    setUndoSnapshots(undoSnapshots.slice(0, -1));
-    setRedoSnapshots((prev) => [...prev, state].slice(-5));
+    if (!snapshot || (expectedId && snapshot.id !== expectedId)) return false;
+    actions.set(snapshot.state);
+    setUndoSnapshots((prev) => prev.slice(0, -1));
+    setRedoSnapshots((prev) => [...prev, { id: snapshot.id, state }].slice(-5));
+    setAppliedFilterIds((prev) => { const next = new Set(prev); next.delete(snapshot.id); return next; });
+    return true;
   }, [actions, state, undoSnapshots]);
 
-  const redoFilter = useCallback(() => {
+  const redoFilter = useCallback((expectedId?: string): boolean => {
     const snapshot = redoSnapshots[redoSnapshots.length - 1];
-    if (!snapshot) return;
-    setUndoSnapshots((prev) => [...prev, state].slice(-5));
-    actions.set(snapshot);
-    setRedoSnapshots(redoSnapshots.slice(0, -1));
+    if (!snapshot || (expectedId && snapshot.id !== expectedId)) return false;
+    actions.set(snapshot.state);
+    setRedoSnapshots((prev) => prev.slice(0, -1));
+    setUndoSnapshots((prev) => [...prev, { id: snapshot.id, state }].slice(-5));
+    setAppliedFilterIds((prev) => new Set([...prev, snapshot.id]));
+    return true;
   }, [actions, redoSnapshots, state]);
 
   const markRead = useCallback(() => {
@@ -432,8 +442,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, running, openAgent]);
 
+  const redoFilterIds = useMemo(() => new Set(redoSnapshots.map((snapshot) => snapshot.id)), [redoSnapshots]);
   const value: AgentContextValue = {
-    open, mode, running, runStatus, activeRun, messages, draft, context, appliedFilterIds, canUndo: undoSnapshots.length > 0, canRedo: redoSnapshots.length > 0,
+    open, mode, running, runStatus, activeRun, messages, draft, context, appliedFilterIds, filterTransactions, redoFilterIds, canUndo: undoSnapshots.length > 0, canRedo: redoSnapshots.length > 0,
     contextStale: messages.some((message) => Boolean(message.contextFingerprint && message.contextFingerprint !== context.fingerprint)),
     unreadCount: messages.filter((message) => message.unread).length,
     setDraft, openAgent, closeAgent, setMode, send, stop, newConversation, applyFilter, undoFilter, redoFilter, markRead,

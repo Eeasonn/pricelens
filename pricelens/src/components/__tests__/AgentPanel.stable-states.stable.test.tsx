@@ -96,6 +96,12 @@ describe('t428u AgentPanel · 结果卡固定结构与证据', () => {
     const panel = await openPanelAndRunPriceAdvantage();
     const sections = Array.from(panel.querySelectorAll('[data-agent-card-section]')).map((node) => node.getAttribute('data-agent-card-section'));
     expect(sections).toEqual(['事实', '计算与规则', '判断边界']);
+    const mobileRows = panel.querySelectorAll('[data-agent-advantage-mobile-row]');
+    expect(mobileRows.length).toBeGreaterThan(0);
+    expect(mobileRows[0].textContent).toContain('我司');
+    expect(mobileRows[0].textContent).toContain('竞品');
+    expect(mobileRows[0].textContent).toContain('价差');
+    expect(within(mobileRows[0] as HTMLElement).getByRole('button', { name: /定位 .*2026/ })).toBeTruthy();
     expect(within(panel).getByText(/按 .* × 渠道 × 周对齐折后价/)).toBeTruthy();
   });
 
@@ -134,14 +140,31 @@ describe('t428u AgentPanel · 药丸动作真实跳转（保留当前上下文�
     const panel = await openPanelAndRunPriceAdvantage();
     expect(document.title).toContain('量价走势');
     fireEvent.click(within(panel).getByRole('button', { name: '回看价格走势' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '确认并继续' }));
     await waitFor(() => expect(document.title).toContain('价格走势'));
     expect(document.title).not.toContain('量价走势');
   });
 
-  it('打开价格预警：跳到预警页', async () => {
+  it('打开价格预警：确认口径变化后跳到预警页', async () => {
     const panel = await openPanelAndRunPriceAdvantage();
     fireEvent.click(within(panel).getByRole('button', { name: '打开价格预警' }));
+    expect(within(panel).getByRole('group', { name: '确认调整看板筛选' })).toBeTruthy();
+    expect(document.title).toContain('量价走势');
+    fireEvent.click(within(panel).getByRole('button', { name: '确认并继续' }));
     await waitFor(() => expect(document.title).toContain('预警'));
+  });
+
+  it('取消定位预览：不写筛选也不跳页', async () => {
+    const panel = await openPanelAndRunPriceAdvantage();
+    const before = window.location.href;
+    fireEvent.click(within(panel).getByRole('button', { name: '打开价格预警' }));
+    const confirmation = within(panel).getByRole('group', { name: '确认调整看板筛选' });
+    expect(confirmation.textContent).toContain('时间起点');
+    expect(window.location.href).toBe(before);
+    fireEvent.click(within(panel).getByRole('button', { name: '取消' }));
+    expect(within(panel).queryByRole('group', { name: '确认调整看板筛选' })).toBeNull();
+    expect(window.location.href).toBe(before);
+    expect(document.title).toContain('量价走势');
   });
 });
 
@@ -165,6 +188,7 @@ describe('t428u 返修 R1 · 旧结果卡「查看证据」不被 stale gate 禁
   it('页面跳转（上下文过期）后查看证据仍可点击展开且键盘可达；导航动作仍受保护', async () => {
     const panel = await openPanelAndRunPriceAdvantage();
     fireEvent.click(within(panel).getByRole('button', { name: '打开价格预警' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '确认并继续' }));
     await waitFor(() => expect(document.title).toContain('预警'));
     const evidence = within(panel).getByRole('button', { name: '查看证据' });
     expect(evidence.textContent).toBe('查看证据');
@@ -244,6 +268,25 @@ describe('t428u 返修 R3 · 终态后不残留「运行中」工具卡', () => 
   });
 });
 
+describe('assistant-ui · 同名动作跨消息的交易归属', () => {
+  beforeEach(() => resetTo('/?p=dashboard'));
+
+  it('第二次同名 open 不继承第一次的已应用/撤销状态', async () => {
+    const panel = await openPanelAndRunPriceAdvantage();
+    fireEvent.click(within(panel).getByRole('button', { name: '打开价格预警' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '确认并继续' }));
+    await waitFor(() => expect(document.title).toContain('预警'));
+    const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+    fireEvent.change(input, { target: { value: '价格优势' } });
+    fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(within(panel).getAllByText('价格优势对比')).toHaveLength(2), { timeout: 4000 });
+    const messages = panel.querySelectorAll('[data-agent-message]');
+    const latest = messages[messages.length - 1] as HTMLElement;
+    const action = within(latest).getByRole('button', { name: /打开价格预警/ });
+    expect(action.textContent).toBe('打开价格预警');
+  });
+});
+
 describe('t428u 返修 R5 · 跨国回看导航带请求国家', () => {
   beforeEach(() => resetTo('/?p=dashboard&c=AE'));
 
@@ -257,6 +300,7 @@ describe('t428u 返修 R5 · 跨国回看导航带请求国家', () => {
     fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
     await waitFor(() => expect(within(panel).getByText('价格优势对比')).toBeTruthy(), { timeout: 4000 });
     fireEvent.click(within(panel).getByRole('button', { name: '回看价格走势' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '确认并继续' }));
     await waitFor(() => expect(within(panel).getAllByText(/^RU · /).length).toBeGreaterThan(0), { timeout: 4000 });
     expect(document.title).toContain('价格走势');
     expect(document.title).not.toContain('预警');
@@ -283,6 +327,7 @@ describe('t428u 返修 R5（二轮）· 跨国回看保留结果卡的主品口�
     fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
     await waitFor(() => expect(within(panel).getByText('价格优势对比')).toBeTruthy(), { timeout: 4000 });
     fireEvent.click(within(panel).getByRole('button', { name: '回看价格走势' }));
+    fireEvent.click(within(panel).getByRole('button', { name: '确认并继续' }));
     // 最终 Filters 状态（chips 直读 context.state）：国家 RU 且主品仍是该卡计算的
     // nova 14 Pro SKU；不能被 switchScope 重置成 RU 第一默认主品 Pura 90s Pro Max。
     await waitFor(() => {

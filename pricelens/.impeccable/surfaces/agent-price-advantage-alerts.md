@@ -19,9 +19,9 @@ mode: operate
 
 ## 交互契约
 
-- 价格优势卡支持“全部 / 只看占优 / 只看落后”、多规格 SKU chip、点击行定位国家×渠道×周，并保留自动竞品匹配。
+- 价格优势卡支持“全部 / 只看占优 / 只看落后”、多规格 SKU chip，以及行内“看板”按钮定位国家×渠道×周；整行不再是隐式按钮。显式指定的竞品优先于默认竞品矩阵，未指定时才自动匹配。
 - 价格预警卡支持每条展开证据、一键跳转看板或预警中心、应用筛选/标记状态，并能撤销或回退。
-- 所有写入筛选的动作沿用现有 FilterResultCard 的验证、撤销和 stale guard。
+- 所有写入筛选的动作沿用 FilterResultCard 的验证、结构化差异预览和 stale guard；撤销/重做按每次应用生成的唯一交易 ID 定位，较新的其他写入或跨消息同名动作不能被旧动作误撤销。
 - 运行中展示阶段与增量文本；Stop 后旧事件不能写入。失败状态在块内提供重试。
 
 ## Batch 4 增补（2026-11-07）
@@ -40,7 +40,7 @@ mode: operate
 - **R2 空卡五段结构**：EmptyResultCard 与空/未监控 AlertListCard 都显式渲染「事实 → 计算 / 规则 → 判断边界」分段（CardSection 组件），动作药丸永远排在边界之后；预警卡的规则段带出四类阈值与订阅状态（未监控明说）。
 - **R3 终态收敛**：AgentContext 在 run 进入终态时用 `finalizeStepsForTerminalRun` 收敛响应步骤（running/queued/waiting_for_approval → success 或 failed）；ToolCallCard 渲染层再兜底一次，并把原先落入「运行中」的 warning 步骤显示为「已完成 · 注意」。
 - **R4 空优势卡重跑**：`rerunWithPatch(text, intent, patch)`（AgentContext）走 applyFilter 同一写入通道落地 patch（可撤销），再用合并 patch 后的 context 重跑指定意图；空优势卡「调整范围 · 最近 12 周」绑定 `recentRangePatch(state, 12)` + price_advantage，不退化为纯 filter 预览。
-- **R5 跨国查询**：`stateForPriceAdvantageCountry` 让「AE 页问 RU 价格优势」按请求国重建我司主品与竞品矩阵（全不在架时落该国默认主品）；结果卡「回看价格走势」在卡国 ≠ 当前国时先落地该国 filterPatch 再跳看板。
+- **R5 跨国查询**：`stateForPriceAdvantageCountry` 让「AE 页问 RU 价格优势」按请求国重建我司主品与竞品矩阵（全不在架时落该国默认主品）；结果卡「回看价格走势」在目标口径不同时先展示 filterPatch 差异，经确认后再落地并跳看板。
 - **R6 范围合并计算**：带「最近 N 周」的查询（含 clarify 建议按钮）用 `stateWithRecentRange` 合并新 recentRange 后的 state 计算，不读看板旧范围。
 - **R7 行级动作后置**：预警展开行顺序为 触发事实 → 规则 → 证据 → 判断边界（证据状态/阈值/不推断因果）→ 行级动作（应用预警筛选 / 查看完整证据）。
 - **R8 tokens 化**：CardSection/卡片样式只用 `space.*`（8/12/16）与 `fontSize.*`（caption=12）；AgentPanel 内 `marginTop: 9`、`fontSize: 10.5` 及 9px padding 全部清除（rg 自检）。

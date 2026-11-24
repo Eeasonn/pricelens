@@ -10,7 +10,7 @@ import {
   CopyOutlined, EditOutlined, ExpandOutlined, FullscreenExitOutlined, PlusOutlined,
   ReloadOutlined, StopOutlined,
 } from '@ant-design/icons';
-import { color, font, fontSize, motion, radius, selectAccent, shadow, space } from '../../theme/tokens';
+import { color, font, fontSize, motion, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import './agent-thread.css';
 
 export interface ThreadMessage {
@@ -42,6 +42,30 @@ interface ThreadController {
 
 interface ThreadSuggestion { label: string; prompt?: string; draftOnly?: boolean }
 interface MessageHelpers { focusComposer: () => void }
+
+interface AgentContextDetail { id: string; label: string; title?: string; active?: boolean }
+
+export function AgentContextDisclosure({ page, summary, range, details, stale = false }: {
+  page: string;
+  summary: string;
+  range: string;
+  details: readonly AgentContextDetail[];
+  stale?: boolean;
+}) {
+  return <div className="lpl-agent-context-shell">
+    <details className="lpl-agent-context">
+      <summary>
+        <span className="lpl-agent-context-main"><strong>{page}</strong><span>{summary}</span></span>
+        <span className="lpl-agent-context-range">{range}</span>
+        <span className="lpl-agent-context-more">详细口径<ArrowDownOutlined aria-hidden /></span>
+      </summary>
+      <div className="lpl-agent-context-details">{details.map((detail) => <span
+        key={detail.id} title={detail.title} data-active={detail.active || undefined}
+      >{detail.label}</span>)}</div>
+    </details>
+    {stale && <div className="lpl-agent-context-stale" role="status">上下文已更新 · 旧结果需重新确认</div>}
+  </div>;
+}
 
 export interface AgentThreadProps<M extends ThreadMessage, S extends ThreadSuggestion> {
   controller: ThreadController;
@@ -75,13 +99,14 @@ const tokenStyle = {
   '--aui-line': color.hairline, '--aui-line-strong': color.hairlineStrong,
   '--aui-ink': color.ink, '--aui-body': color.body, '--aui-mute': color.mute,
   '--aui-link': color.link, '--aui-focus': selectAccent, '--aui-on-primary': color.onPrimary,
+  '--aui-select-soft': selectSoft, '--aui-select-ink': selectSoftInk,
   '--aui-warning': color.warningInk, '--aui-warning-soft': color.warningSoft, '--aui-error': color.error,
   '--aui-font': font.family, '--aui-mono': font.mono,
-  '--aui-caption': `${fontSize.caption}px`, '--aui-body-size': `${fontSize.bodySm}px`,
+  '--aui-caption': `${fontSize.caption}px`, '--aui-body-size': `${fontSize.bodySm}px`, '--aui-body-md': `${fontSize.bodyMd}px`,
   '--aui-heading': `${fontSize.displaySm}px`, '--aui-xs': `${space.xs}px`, '--aui-sm': `${space.sm}px`,
   '--aui-md': `${space.md}px`, '--aui-base': `${space.base}px`, '--aui-lg': `${space.lg}px`,
   '--aui-xl': `${space.xl}px`, '--aui-xxl': `${space.xxl}px`, '--aui-header': `${space.xxxl}px`,
-  '--aui-control-radius': `${radius.control}px`, '--aui-card-radius': `${radius.card}px`,
+  '--aui-control-radius': `${radius.control}px`, '--aui-card-radius': `${radius.card}px`, '--aui-pill-radius': `${radius.pill}px`,
   '--aui-shadow': shadow.l2, '--aui-motion': `${motion.fast}ms`,
 } as CSSProperties;
 
@@ -130,7 +155,9 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
 }: AgentThreadProps<M, S>) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 1023.98px)').matches);
+  const [reducedMotion, setReducedMotion] = useState(() => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const modal = compact || controller.mode !== 'dock';
   const full = compact || controller.mode === 'full';
   const focusComposer = () => inputRef.current?.focus();
@@ -144,11 +171,45 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
     },
     onCancel: async () => controller.stop(),
   });
+  const firstTurnRunning = controller.running && messages.length === 2 && messages[0]?.role === 'user' && messages[1]?.role === 'assistant';
+  const [initializeAtLatest, setInitializeAtLatest] = useState(messages.length > 0 && !controller.running);
+  const wasOpenRef = useRef(controller.open);
+
+  useEffect(() => {
+    if (controller.open && !wasOpenRef.current) setInitializeAtLatest(messages.length > 0 && !controller.running);
+    wasOpenRef.current = controller.open;
+  }, [controller.open, controller.running, messages.length]);
+
+  useEffect(() => {
+    if (!firstTurnRunning) return;
+    // assistant-ui does not register a user anchor at index 0; hold the first turn at its question.
+    viewportRef.current?.scrollTo({ top: 0, behavior: 'instant' });
+  }, [firstTurnRunning]);
+
+  useEffect(() => {
+    if (!reducedMotion || !controller.open) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const original = viewport.scrollTo;
+    viewport.scrollTo = ((options?: ScrollToOptions) => Reflect.apply(original, viewport, [{
+      ...options,
+      behavior: options?.behavior === 'smooth' ? 'instant' : options?.behavior,
+    }])) as typeof viewport.scrollTo;
+    return () => { viewport.scrollTo = original; };
+  }, [controller.open, reducedMotion]);
 
   useEffect(() => {
     const composer = runtime.thread.composer;
     if (composer.getState().text !== controller.draft) composer.setText(controller.draft);
   }, [controller.draft, runtime]);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const change = () => setReducedMotion(query.matches);
+    change();
+    query.addEventListener('change', change);
+    return () => query.removeEventListener('change', change);
+  }, []);
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;
     const query = window.matchMedia('(max-width: 1023.98px)');
@@ -197,7 +258,7 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
   const nextMode = controller.mode === 'full' ? 'dock' : controller.mode === 'drawer' ? 'full' : 'drawer';
   const modeLabel = controller.mode === 'full' ? '退出全屏' : controller.mode === 'drawer' ? '全屏' : '展开抽屉';
   return createPortal(<aside ref={panelRef} id="pricelens-agent-panel" className="lpl-agent-panel aui-panel" style={tokenStyle}
-    data-agent-mode={full ? 'full' : controller.mode} data-assistant-ui="true" role="dialog" aria-modal={modal || undefined}
+    data-agent-mode={full ? 'full' : controller.mode} data-agent-compact={compact || undefined} data-assistant-ui="true" role="dialog" aria-modal={modal || undefined}
     aria-labelledby="pricelens-agent-title" tabIndex={-1}>
     <header className="aui-header">
       <div><h2 id="pricelens-agent-title">PriceLens Agent</h2><div className="aui-status" data-agent-live-status role="status" aria-live="polite" aria-atomic="true">{statusLabel}</div></div>
@@ -212,8 +273,8 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
     <div className="aui-context">{context}</div>
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="aui-thread">
-        <ThreadPrimitive.Viewport className="aui-viewport" role="log" aria-label="Agent 对话" aria-live="off" aria-busy={controller.running}>
-          <div className="aui-conversation">
+        <ThreadPrimitive.Viewport ref={viewportRef} className="aui-viewport" role="log" aria-label="Agent 对话" aria-live="off" aria-busy={controller.running} turnAnchor="top" scrollToBottomOnInitialize={initializeAtLatest}>
+          <div className={`aui-conversation${!messages.length ? ' aui-conversation-empty' : ''}`}>
             {!messages.length && <section className="aui-welcome">
               <h3>从当前数据开始</h3><p>查询价格、比较平台，或核对预警。每次回答都会保留分析范围与证据。</p>
               <div className="aui-suggestions">{suggestions.map((suggestion) => <button type="button" key={suggestion.label} disabled={controller.running}
@@ -225,7 +286,7 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
               const original = messages.find((entry) => entry.id === message.id);
               if (!original) return null;
               return <MessagePrimitive.Root className={`aui-message aui-message-${original.role}`} data-agent-message data-message-locked={original.actionsLocked || undefined}>
-                {original.role === 'assistant' && <div className="aui-message-heading"><strong>PriceLens</strong>{renderHeader?.(original)}</div>}
+                {original.role === 'assistant' && <div className="aui-message-heading"><strong>PriceLens</strong><div className="aui-message-meta">{renderHeader?.(original)}</div></div>}
                 <div className="aui-message-text" data-streaming-text={original.streaming || undefined}>
                   <MessagePrimitive.Parts components={{ Text: original.role === 'assistant' ? MarkdownText : undefined }} />
                 </div>
@@ -241,16 +302,16 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
               </button>)}
             </div>}
           </div>
-          <div className="aui-scroll-anchor"><ThreadPrimitive.ScrollToBottom className="aui-jump" aria-label="回到最新消息"><ArrowDownOutlined aria-hidden /> 回到最新消息</ThreadPrimitive.ScrollToBottom></div>
         </ThreadPrimitive.Viewport>
         <div className="aui-composer-region">
           <ComposerPrimitive.Root className="aui-composer">
             <ComposerPrimitive.Input ref={inputRef} className="aui-input" aria-label="向 PriceLens Agent 提问" placeholder="问价格、平台或预警…"
-              minRows={2} maxRows={6} submitMode={controller.running ? 'none' : 'enter'} cancelOnEscape={false}
+              minRows={1} maxRows={6} submitMode={controller.running ? 'none' : 'enter'} cancelOnEscape={false}
               addAttachmentOnPaste={false} onChange={(event) => controller.setDraft(event.target.value)} />
             <div className="aui-composer-toolbar">
-              <span className="aui-composer-hint">{controller.running ? '正在查询 · 可先写下一个问题' : 'Enter 发送 · Shift+Enter 换行'}</span>
+              <span className="aui-composer-hint">{controller.running ? '正在查询 · 可先写下一个问题' : compact ? '询问当前看板数据' : 'Enter 发送 · Shift+Enter 换行'}</span>
               <div className="aui-header-actions">
+                <ThreadPrimitive.ScrollToBottom className="aui-jump" aria-label="回到最新消息" title="回到最新消息"><ArrowDownOutlined aria-hidden /><span className="aui-jump-label">最新</span></ThreadPrimitive.ScrollToBottom>
                 {controller.running ? <ComposerPrimitive.Cancel className="aui-send" aria-label="停止运行"><StopOutlined /></ComposerPrimitive.Cancel>
                   : <ComposerPrimitive.Send className="aui-send" aria-label="发送"><ArrowUpOutlined /></ComposerPrimitive.Send>}
               </div>

@@ -17,7 +17,7 @@ Keep the stable PriceLens Agent shell evidence first while making long or remote
 
 ## Motion and scroll
 
-Use existing neutral tokens, 160/240/320ms timing, and no gradients, glow, AI purple, or pulse. Respect `prefers-reduced-motion` by keeping state text and removing travel/stagger. Auto-scroll only while the user is within the existing near-bottom threshold; preserve the reading position otherwise.
+Use existing neutral tokens, 160/240/320ms timing, and no gradients, glow, AI purple, or pulse. Respect `prefers-reduced-motion` by keeping state text and removing travel/stagger. New turns anchor at the question and answer start, with a one-time top scroll for the first turn because assistant-ui does not register a user anchor at index zero. Preserve the reader's position afterward; do not force completed long answers to the bottom.
 
 ## Evidence and actions
 

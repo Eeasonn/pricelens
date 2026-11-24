@@ -73,7 +73,7 @@ import type { FiltersState } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';
 import { calculatePriceAdvantage } from '../../agent-stable/priceAdvantage';
 import type { FilterResultCard, PriceAdvantageResultCard, ToolCallCard } from '../../agent-stable/contracts';
-import AgentPanel, { CardActionsLockedContext, PriceAdvantageCard } from '../CopilotStable/AgentPanel';
+import AgentPanel, { CardActionsLockedContext, FilterCard, PriceAdvantageCard, ToolCallCardView } from '../CopilotStable/AgentPanel';
 
 beforeEach(() => {
   const w = window as unknown as { localStorage?: Storage };
@@ -144,42 +144,28 @@ function lastMessage(panel: HTMLElement): HTMLElement {
 }
 
 describe('t428u R3 m3 · 锁定消息上的改筛选控件双保险（disabled + 回调守卫）', () => {
-  it('applied FilterCard 的 撤销/重做 在错指纹消息上禁用且程序化点击不改筛选；evidence 仍可展开', async () => {
-    const panel = openPanel();
-    // 第一轮：正常响应（指纹一致）注入固定 id 筛选卡，未锁消息上先应用
-    await sendFromPanel(panel, '只看本币');
-    await waitFor(() => expect(bridge.pending.length).toBe(1));
-    bridge.pending[0].release({ cards: [craftedFilterCard('r3-fixed-filter')] });
-    await waitFor(() => expect(within(panel).getAllByText('筛选预览（尚未应用）').length).toBeGreaterThan(0));
-    const applyButton = within(panel).getAllByRole('button', { name: '应用到看板' })[0] as HTMLButtonElement;
-    fireEvent.click(applyButton);
-    await waitFor(() => expect(within(panel).getAllByText('已应用').length).toBeGreaterThan(0));
-    // 应用成功：币种已切本币（撤销栈就绪）
-    await waitFor(() => expect(within(panel).getAllByText('本币').length).toBeGreaterThan(0));
+  it('applied FilterCard 的 撤销/重做 在锁定消息上禁用且程序化点击不改筛选；evidence 仍可展开', async () => {
+    function lockedFilterHarness(locked: boolean): ReactNode {
+      const card = craftedFilterCard('r3-fixed-filter');
+      return <FiltersProvider><PageProvider><AgentProvider><CardActionsLockedContext.Provider value={locked}><FilterCard card={card} /></CardActionsLockedContext.Provider></AgentProvider></PageProvider></FiltersProvider>;
+    }
+    const view = render(lockedFilterHarness(false));
+    fireEvent.click(screen.getByRole('button', { name: '应用到看板' }));
+    await waitFor(() => expect(screen.getByText('已应用')).toBeTruthy());
 
-    // 第二轮：同 id 卡 + 错指纹 → 锁定消息上 rendered 为 applied（撤销/重做可见）
-    await sendFromPanel(panel, '只看本币');
-    await waitFor(() => expect(bridge.pending.length).toBe(2));
-    bridge.pending[1].release({ contextFingerprint: 'ctx-forged-r3', cards: [craftedFilterCard('r3-fixed-filter')] });
-    await waitFor(() => expect(within(panel).getAllByText(/响应口径与当前上下文不一致 · 结果可查看，动作已锁定/).length).toBeGreaterThan(0), { timeout: 4000 });
-    const locked = within(lastMessage(panel));
-    const undo = locked.getAllByRole('button', { name: /撤销/ }).find((node) => (node.textContent ?? '').includes('撤销')) as HTMLButtonElement;
-    expect(undo).toBeTruthy();
+    view.rerender(lockedFilterHarness(true));
+    const undo = screen.getByRole('button', { name: /撤销/ }) as HTMLButtonElement;
     expect(undo.disabled).toBe(true);
     expect(undo.getAttribute('aria-disabled')).toBe('true');
-    // 程序化点击（fireEvent 对 disabled 元素仍派发）：回调守卫兜底，本币口径不被撤销
     fireEvent.click(undo);
     await new Promise((resolve) => { setTimeout(resolve, 120); });
-    expect(within(panel).getAllByText('本币').length).toBeGreaterThan(0);
+    expect(screen.getByText('已应用')).toBeTruthy();
 
-    // 对照：evidence 类只读动作不受锁影响（展开明细 details 可开）
-    const detailSummary = locked.getAllByText('展开明细')[0];
+    const detailSummary = screen.getByText(/证据与来源/);
     expect((detailSummary.closest('details') as HTMLDetailsElement).open).toBe(false);
     fireEvent.click(detailSummary);
     expect((detailSummary.closest('details') as HTMLDetailsElement).open).toBe(true);
-    // Two full App queries each calculate a real baseline and a released reply.
-    // Budget the integration work independently from the individual waitFor checks.
-  }, 60000);
+  });
 
   it('ToolCallCard.filterCard 的 应用筛选/撤销恢复 在锁定消息上双双禁用，点击无副作用', async () => {
     const panel = openPanel();
@@ -199,6 +185,44 @@ describe('t428u R3 m3 · 锁定消息上的改筛选控件双保险（disabled +
     await new Promise((resolve) => { setTimeout(resolve, 120); });
     expect(within(panel).queryByText('已应用')).toBeNull();
     expect(within(panel).getAllByText('USD').length).toBeGreaterThan(0);
+  });
+});
+
+describe('stable Agent · 面板重开后的交易状态与空撤销', () => {
+  it('FilterCard 重挂载后保留已应用、撤销和重做状态', () => {
+    const card = craftedFilterCard('persist-filter-card');
+    function Harness({ show }: { show: boolean }) {
+      return <FiltersProvider><PageProvider><AgentProvider><CardActionsLockedContext.Provider value={false}>{show && <FilterCard card={card} />}</CardActionsLockedContext.Provider></AgentProvider></PageProvider></FiltersProvider>;
+    }
+    const view = render(<Harness show />);
+    fireEvent.click(screen.getByRole('button', { name: '应用到看板' }));
+    expect(screen.getByText('已应用')).toBeTruthy();
+    view.rerender(<Harness show={false} />);
+    view.rerender(<Harness show />);
+    expect(screen.getByText('已应用')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /撤销/ }));
+    expect(screen.getByText('已撤销')).toBeTruthy();
+    view.rerender(<Harness show={false} />);
+    view.rerender(<Harness show />);
+    expect(screen.getByText('已撤销')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /重做/ }));
+    expect(screen.getByText('已应用')).toBeTruthy();
+  });
+
+  it('ToolCallCard 只在拥有已应用交易时允许撤销，重挂载后仍保留', () => {
+    const card = craftedToolCard(craftedFilterCard('persist-tool-filter'));
+    function Harness({ show }: { show: boolean }) {
+      return <FiltersProvider><PageProvider><AgentProvider><CardActionsLockedContext.Provider value={false}>{show && <ToolCallCardView card={card} />}</CardActionsLockedContext.Provider></AgentProvider></PageProvider></FiltersProvider>;
+    }
+    const view = render(<Harness show />);
+    expect((screen.getByRole('button', { name: '撤销恢复' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '应用筛选' }));
+    expect((screen.getByRole('button', { name: '撤销恢复' }) as HTMLButtonElement).disabled).toBe(false);
+    view.rerender(<Harness show={false} />);
+    view.rerender(<Harness show />);
+    expect((screen.getByRole('button', { name: '撤销恢复' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '撤销恢复' }));
+    expect((screen.getByRole('button', { name: '撤销恢复' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
@@ -229,9 +253,15 @@ describe('t428u R3 m3 · 已定位价格优势卡的 撤销定位 随锁禁用',
     expect(card!.rows.length).toBeGreaterThan(0);
 
     const view = render(lockedHarness(false, card!));
-    const locateButtons = screen.getAllByRole('button', { name: '看板' });
+    const row = document.querySelector('[data-price-advantage-row]') as HTMLElement;
+    fireEvent.click(row);
+    expect(screen.queryByText(/已定位到看板/)).toBeNull();
+    expect(screen.queryByRole('group', { name: '确认调整看板筛选' })).toBeNull();
+    const locateButtons = screen.getAllByRole('button', { name: /定位 .*2026/ });
     expect(locateButtons.length).toBeGreaterThan(0);
     fireEvent.click(locateButtons[0]);
+    expect(screen.getByRole('group', { name: '确认调整看板筛选' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '确认并继续' }));
     await waitFor(() => expect(screen.getByText(/已定位到看板/)).toBeTruthy());
     const undoBefore = screen.getByRole('button', { name: '撤销定位' }) as HTMLButtonElement;
     expect(undoBefore.disabled).toBe(false);

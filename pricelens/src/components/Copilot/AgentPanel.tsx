@@ -2,7 +2,7 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { CheckOutlined, RedoOutlined, UndoOutlined } from '@ant-design/icons';
 import { Button } from 'antd';
-import { AgentThread } from '../Assistant/AgentThread';
+import { AgentContextDisclosure, AgentThread } from '../Assistant/AgentThread';
 import { useAgent, type AgentMessage } from '../../state/AgentContext';
 import { buildCards } from '../../state/mainSelection';
 import { dimProduct } from '../../data';
@@ -37,7 +37,13 @@ function ContextChips() {
   // Default scope is readable; the technical SKU identifier stays in the tooltip.
   const skuLabel = skuChip ? `口径 · ${modelNameOf(skuChip.modelId)} · ${skuChip.romram}` : '未选产品';
   const chips = [`当前页 · ${context.pageLabel ?? context.page}`, `${state.countryCode} · ${INDUSTRY_LABELS[state.industry] ?? state.industry}`, productCount ? `${productCount} 个产品` : '未选产品', ...(skuChip ? [skuLabel] : []), `${formatBucket(state.rangeStart)}–${formatBucket(state.rangeEnd)}`, state.currency === 'usd' ? 'USD' : '本币', state.priceTypes.rrp ? '含 RRP' : '仅折后价'];
-  return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: `${space.sm}px ${space.base}px`, borderBottom: `1px solid ${color.hairline}`, background: color.canvasSoft }}>{chips.map((chip, index) => <span key={chip} title={chip === skuLabel ? skuChip?.skuIds[0] : undefined} style={{ fontSize: 12, color: index === 0 ? selectSoftInk : color.body, border: `1px solid ${index === 0 ? selectSoftInk : color.hairline}`, borderRadius: radius.pill, padding: '3px 8px', background: index === 0 ? selectSoft : color.canvas }}>{chip}</span>)}{contextStale && <span role="status" style={{ fontSize: 12, color: color.warningInk, border: `1px solid ${color.warning}`, borderRadius: radius.pill, padding: '3px 8px', background: color.warningSoft }}>上下文已更新 · 旧结果需重新确认</span>}</div>;
+  return <AgentContextDisclosure
+    page={context.pageLabel ?? context.page}
+    summary={`${state.countryCode} · ${INDUSTRY_LABELS[state.industry] ?? state.industry} · ${productCount ? `${productCount} 个产品` : '未选产品'}`}
+    range={`${formatBucket(state.rangeStart)}–${formatBucket(state.rangeEnd)} · ${state.currency === 'usd' ? 'USD' : '本币'}`}
+    details={chips.map((chip, index) => ({ id: chip, label: chip, active: index === 0, title: chip === skuLabel ? skuChip?.skuIds[0] : undefined }))}
+    stale={contextStale}
+  />;
 }
 
 export function AgentProviderBadge({ response }: { response?: AgentResponse }) {
@@ -45,7 +51,7 @@ export function AgentProviderBadge({ response }: { response?: AgentResponse }) {
   const fallback = /回退|fallback/i.test(name);
   const remote = /远端|remote|glm|ai/i.test(name) && !fallback;
   const label = fallback ? '本地数据结果 · 在线分析暂不可用' : remote ? '在线分析' : '本地数据结果';
-  return <span data-provider-badge style={{ ...mutedBadge, color: fallback ? color.warningInk : remote ? color.link : color.body, background: fallback ? color.warningSoft : color.canvas }}>{label}</span>;
+  return <span data-provider-badge style={{ ...mutedBadge, color: fallback ? color.warningInk : remote ? color.link : color.body, background: color.canvas, border: fallback ? `1px solid ${color.warning}` : mutedBadge.border }}>{label}</span>;
 }
 
 /** R1：「查看证据」是原地只读展开本卡自带证据，与当前上下文无关——
@@ -60,7 +66,7 @@ function EvidenceList({ evidence, emptyHint = '暂无快照 · 该结果暂无�
 }
 
 /** R8：结果卡统一分段（事实 / 计算·规则 / 判断边界）。间距与字号只取
- *  tokens（space.* / fontSize.*），不允许 marginTop:9 / fontSize:12 之类非标值。 */
+ *  tokens（space.* / fontSize.*），保持正式 4px 节奏与字体层级。 */
 function CardSection({ label, children }: { label: string; children: ReactNode }) {
   return <div className="lpl-agent-card-section" data-agent-card-section={label} style={{ marginTop: space.sm, fontSize: fontSize.caption, color: color.body, lineHeight: 1.45 }}><strong style={{ color: color.ink }}>{label}：</strong>{children}</div>;
 }
@@ -114,7 +120,7 @@ function CardActions({ actions, locked }: { actions?: AgentCardAction[]; locked?
   {actionError && <div role="alert" style={warningStyle}>{actionError}</div>}</div>;
 }
 
-const quickPillStyle: CSSProperties = { fontSize: 12, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' };
+const quickPillStyle: CSSProperties = { fontSize: fontSize.caption, color: color.link, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, background: color.canvas, padding: '4px 8px', cursor: 'pointer' };
 
 /** 药丸快捷动作：DESIGN.md 规定胶囊圆角仅用于标签/快捷动作；每个药丸必须绑定
  *  真实 handler（跳页面 / 定位行 / 触发意图），禁止摆设按钮。R8：locked 消息上
@@ -180,14 +186,14 @@ function FilterCard({ card, locked, hardLocked = locked }: { card: FilterResultC
   return <div className="lpl-agent-result-card" data-agent-result-card style={cardStyle}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.title}</span><span style={mutedBadge}>只读预览</span></div>
     <div style={{ display: 'grid', gap: 5, marginTop: 8 }}>
-      {card.changes.map((change) => <div className="lpl-agent-filter-change" key={change.label} style={{ display: 'grid', gridTemplateColumns: '72px 1fr auto 1fr', gap: 6, alignItems: 'center', fontSize: 12 }}><span style={{ color: color.mute }}>{change.label}</span><span>{change.before}</span><span style={{ color: color.mute }}>→</span><strong>{change.after}</strong></div>)}
+      {card.changes.map((change) => <div className="lpl-agent-filter-change" key={change.label} style={{ display: 'grid', gridTemplateColumns: '72px 1fr auto 1fr', gap: 6, alignItems: 'center', fontSize: fontSize.caption }}><span style={{ color: color.mute }}>{change.label}</span><span>{change.before}</span><span style={{ color: color.mute }}>→</span><strong>{change.after}</strong></div>)}
     </div>
     {card.warning && <div style={warningStyle}>{card.warning}</div>}
     <div style={actionRowStyle}>
       {/* Applying this validated preview changes its own scope fingerprint.
           Keep its reversible controls available; malformed/streaming responses
           remain hard-locked even when another message applied the same card id. */}
-      {applied ? <><span style={{ color: color.link, fontSize: 12 }}><CheckOutlined /> 已应用</span>{canUndo && <button type="button" disabled={hardLocked} aria-disabled={hardLocked} title={hardLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { if (hardLocked) return; undoFilter(); }} style={{ ...textButtonStyle, opacity: hardLocked ? 0.5 : 1, cursor: hardLocked ? 'not-allowed' : 'pointer' }}><UndoOutlined /> 撤销</button>}{canRedo && <button type="button" disabled={hardLocked} aria-disabled={hardLocked} title={hardLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { if (hardLocked) return; redoFilter(); }} style={{ ...textButtonStyle, opacity: hardLocked ? 0.5 : 1, cursor: hardLocked ? 'not-allowed' : 'pointer' }}><RedoOutlined /> 重做</button>}</> : <><Button size="small" type="primary" disabled={locked} title={locked ? '响应口径与请求不一致，该动作已锁定' : undefined} onClick={apply}>应用到看板</Button><Button size="small" onClick={() => setDraft(card.prompt ?? '')}>继续修改</Button></>}
+      {applied ? <><span style={{ color: color.link, fontSize: fontSize.caption }}><CheckOutlined /> 已应用</span>{canUndo && <button type="button" disabled={hardLocked} aria-disabled={hardLocked} title={hardLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { if (hardLocked) return; undoFilter(); }} style={{ ...textButtonStyle, opacity: hardLocked ? 0.5 : 1, cursor: hardLocked ? 'not-allowed' : 'pointer' }}><UndoOutlined /> 撤销</button>}{canRedo && <button type="button" disabled={hardLocked} aria-disabled={hardLocked} title={hardLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} onClick={() => { if (hardLocked) return; redoFilter(); }} style={{ ...textButtonStyle, opacity: hardLocked ? 0.5 : 1, cursor: hardLocked ? 'not-allowed' : 'pointer' }}><RedoOutlined /> 重做</button>}</> : <><Button size="small" type="primary" disabled={locked} title={locked ? '响应口径与请求不一致，该动作已锁定' : undefined} onClick={apply}>应用到看板</Button><Button size="small" onClick={() => setDraft(card.prompt ?? '')}>继续修改</Button></>}
     </div>
     {applyError && <div role="alert" style={warningStyle}>应用失败：{applyError}</div>}
     <EvidenceList evidence={card.evidence} />
@@ -198,7 +204,7 @@ function FilterCard({ card, locked, hardLocked = locked }: { card: FilterResultC
 function TableCard({ card, locked }: { card: TableResultCard; locked?: boolean }) {
   return <div className="lpl-agent-result-card" data-agent-result-card style={cardStyle}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.title}</span><span style={mutedBadge}>确定性结果</span></div>
-    <div style={{ overflowX: 'auto', marginTop: 8 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}><thead><tr>{card.columns.map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{card.rows.map((row, index) => <tr key={`${row[0]}-${index}`}>{row.map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`} style={tableCellStyle}>{cell}</td>)}</tr>)}</tbody></table></div>
+    <div className="lpl-card-scroll aui-table-scroll" tabIndex={0} role="region" aria-label={`${card.title}，可横向滚动`} style={{ overflowX: 'auto', marginTop: 8 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: fontSize.caption }}><thead><tr>{card.columns.map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{card.rows.map((row, index) => <tr key={`${row[0]}-${index}`}>{row.map((cell, cellIndex) => <td key={`${cell}-${cellIndex}`} style={tableCellStyle}>{cell}</td>)}</tr>)}</tbody></table></div>
     {card.note && <div style={noteStyle}>{card.note}</div>}
     <EvidenceList evidence={card.evidence} />
     <CardActions actions={card.actions} locked={locked} />
@@ -210,7 +216,7 @@ function ChartCard({ card, locked }: { card: ChartResultCard; locked?: boolean }
   return <div className="lpl-agent-result-card" data-agent-result-card style={cardStyle}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.title}</span><span style={mutedBadge}>图表</span></div>
     <div style={{ display: 'grid', gap: 7, marginTop: 10 }}>
-      {card.series.slice(0, 5).map((series) => <div key={series.label} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 116px', gap: 8, alignItems: 'center' }}><span title={series.label} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: color.body }}>{series.label}</span><div style={{ display: 'flex', alignItems: 'end', gap: 2, height: 28 }}>{series.values.slice(-10).map((point, index) => <span key={`${point.bucket}-${index}`} title={`${point.bucket} · ${point.value ?? '—'}`} style={{ flex: 1, minWidth: 3, height: `${Math.max(3, ((point.value ?? 0) / max) * 24)}px`, background: series.color, opacity: point.value == null ? 0.18 : 0.72, borderRadius: '2px 2px 0 0' }} />)}</div></div>)}
+      {card.series.slice(0, 5).map((series) => <div key={series.label} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 116px', gap: 8, alignItems: 'center' }}><span title={series.label} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: fontSize.caption, color: color.body }}>{series.label}</span><div style={{ display: 'flex', alignItems: 'end', gap: 2, height: 28 }}>{series.values.slice(-10).map((point, index) => <span key={`${point.bucket}-${index}`} title={`${point.bucket} · ${point.value ?? '—'}`} style={{ flex: 1, minWidth: 3, height: `${Math.max(3, ((point.value ?? 0) / max) * 24)}px`, background: series.color, opacity: point.value == null ? 0.18 : 0.72, borderRadius: '2px 2px 0 0' }} />)}</div></div>)}
     </div>
     <div style={noteStyle}>{card.note}</div>
     <EvidenceList evidence={card.evidence} />
@@ -277,7 +283,16 @@ function AdvantageCard({ card, locked }: { card: PriceAdvantageResultCard; locke
       {card.skuOptions.length > 1 && <button type="button" aria-pressed={skuId === 'all'} onClick={() => setSkuId('all')} style={{ ...textButtonStyle, border: `1px solid ${skuId === 'all' ? selectAccent : color.hairline}`, borderRadius: radius.pill, padding: '4px 8px', background: skuId === 'all' ? selectSoft : color.canvas }}>全部</button>}
       {card.skuOptions.map((option) => <button key={option.skuId} type="button" aria-pressed={skuId === option.skuId} onClick={() => setSkuId(option.skuId)} style={{ ...textButtonStyle, border: `1px solid ${skuId === option.skuId ? selectAccent : color.hairline}`, borderRadius: radius.pill, padding: '4px 8px', background: skuId === option.skuId ? selectSoft : color.canvas }}>{option.label}</button>)}
     </div>
-    <div style={{ overflowX: 'auto', marginTop: 8 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: fontSize.caption }}><thead><tr>{['周', '我司', '竞品', '价差', '渠道', '状态'].map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-advantage-row={row.id} onClick={() => jump(row)} style={{ cursor: locked ? 'not-allowed' : 'pointer' }}><td style={tableCellStyle}><button type="button" disabled={locked} onClick={(event) => { event.stopPropagation(); jump(row); }} style={{ ...textButtonStyle, padding: 0 }} aria-label={`定位 ${row.own.modelName} 与 ${row.competitor.modelName} ${row.weekId}`}>{row.weekLabel} · {row.weekId}</button></td><td className="tnum" style={tableCellStyle}>{row.own.modelName} · {formatPrice(row.own.price, currency)}</td><td className="tnum" style={tableCellStyle}>{row.competitor.modelName} · {formatPrice(row.competitor.price, currency)}</td><td className="tnum" style={{ ...tableCellStyle, color: row.relation === 'advantage' ? color.link : row.relation === 'behind' ? color.error : color.body }}>{row.priceDiff >= 0 ? '+' : ''}{formatPrice(row.priceDiff, currency)} · {row.priceDiffPct >= 0 ? '+' : ''}{(row.priceDiffPct * 100).toFixed(1)}%</td><td style={tableCellStyle}>{row.channelLabel}</td><td style={tableCellStyle}>{relationLabel(row.relation)}</td></tr>)}</tbody></table></div>
+    <div className="aui-advantage-mobile">{rows.map((row) => <div key={row.id} className="aui-advantage-mobile-row" data-agent-advantage-mobile-row>
+      <div className="aui-advantage-mobile-head"><strong>{row.weekLabel} · {row.weekId}</strong><span data-direction={row.relation}>{relationLabel(row.relation)}</span></div>
+      <div className="aui-advantage-mobile-channel">{row.channelLabel}</div>
+      <dl className="aui-advantage-mobile-comparison">
+        <div><dt>我司</dt><dd><span>{row.own.modelName} · {row.own.romram}</span><strong>{formatPrice(row.own.price, currency)}</strong></dd></div>
+        <div><dt>竞品</dt><dd><span>{row.competitor.modelName} · {row.competitor.romram}</span><strong>{formatPrice(row.competitor.price, currency)}</strong></dd></div>
+      </dl>
+      <div className="aui-advantage-mobile-footer"><span>价差 <strong>{row.priceDiff >= 0 ? '+' : ''}{formatPrice(row.priceDiff, currency)} · {row.priceDiffPct >= 0 ? '+' : ''}{(row.priceDiffPct * 100).toFixed(1)}%</strong></span><button type="button" disabled={locked} onClick={() => jump(row)} style={textButtonStyle} aria-label={`定位 ${row.own.modelName} 与 ${row.competitor.modelName} ${row.weekId}`}>定位</button></div>
+    </div>)}</div>
+    <div className="lpl-card-scroll aui-table-scroll aui-advantage-table" tabIndex={0} role="region" aria-label="价格优势明细，可横向滚动" style={{ overflowX: 'auto', marginTop: 8 }}><table className="aui-advantage-data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: fontSize.caption }}><thead><tr>{['周', '我司', '竞品', '价差', '渠道', '状态'].map((column) => <th key={column} style={tableHeadStyle}>{column}</th>)}</tr></thead><tbody>{rows.map((row) => <tr key={row.id} data-advantage-row={row.id} onClick={() => jump(row)} style={{ cursor: locked ? 'not-allowed' : 'pointer' }}><td style={tableCellStyle}><button type="button" disabled={locked} onClick={(event) => { event.stopPropagation(); jump(row); }} style={{ ...textButtonStyle, padding: 0 }} aria-label={`定位 ${row.own.modelName} 与 ${row.competitor.modelName} ${row.weekId}`}>{row.weekLabel} · {row.weekId}</button></td><td className="tnum" style={tableCellStyle}><span className="aui-table-product">{row.own.modelName} · {row.own.romram}</span><strong className="aui-table-number">{formatPrice(row.own.price, currency)}</strong></td><td className="tnum" style={tableCellStyle}><span className="aui-table-product">{row.competitor.modelName} · {row.competitor.romram}</span><strong className="aui-table-number">{formatPrice(row.competitor.price, currency)}</strong></td><td className="tnum" style={{ ...tableCellStyle, color: row.relation === 'advantage' ? color.link : row.relation === 'behind' ? color.error : color.body }}><strong className="aui-table-number">{row.priceDiff >= 0 ? '+' : ''}{formatPrice(row.priceDiff, currency)}</strong><span className="aui-table-delta-pct">{row.priceDiffPct >= 0 ? '+' : ''}{(row.priceDiffPct * 100).toFixed(1)}%</span></td><td style={tableCellStyle}>{row.channelLabel}</td><td style={tableCellStyle}>{relationLabel(row.relation)}</td></tr>)}</tbody></table></div>
     {!rows.length && <div style={noteStyle}>当前筛选下没有可同时对齐的周度事实。</div>}
     <CardSection label="规则 · 计算边界">{card.note}</CardSection>
     <CardSection label="判断边界">比较限于当前国家的自动匹配竞品矩阵与可对齐周；缺采周不插值、不造点；价差方向只说明相对水位，不构成调价的因果结论。</CardSection>
@@ -363,7 +378,7 @@ function AlertListCard({ card, locked }: { card: AlertListResultCard; locked?: b
 function AlertCard({ card, locked }: { card: AlertResultCard; locked?: boolean }) {
   return <div className="lpl-agent-result-card" data-agent-result-card style={{ ...cardStyle, borderColor: color.warning }}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.title}</span><span style={{ ...mutedBadge, color: color.warningInk, background: color.warningSoft }}>预警解释</span></div>
-    <div style={{ display: 'grid', gap: 5, marginTop: 8, fontSize: 12 }}>{card.facts.map((fact) => <div key={fact}>• {fact}</div>)}</div>
+    <div style={{ display: 'grid', gap: 5, marginTop: 8, fontSize: fontSize.caption }}>{card.facts.map((fact) => <div key={fact}>• {fact}</div>)}</div>
     <CardSection label="计算 / 规则">规则 {card.alert.ruleVersion ?? 'price-rules-v1'} · 数据 {card.alert.dataVersion ?? 'unknown'}{card.alert.threshold != null ? ` · 阈值 ${(card.alert.threshold * 100).toFixed(1)}%` : ''} · 数据状态 real。</CardSection>
     <div style={{ marginTop: space.sm, paddingTop: 8, borderTop: `1px solid ${color.hairline}`, fontSize: fontSize.caption, color: color.body }}><strong style={{ color: color.ink }}>判断边界 · 建议核查</strong>{card.checks.map((check) => <div key={check} style={{ marginTop: space.xs }}>· {check}</div>)}</div>
     <EvidenceList evidence={card.evidence} />
@@ -374,13 +389,13 @@ function AlertCard({ card, locked }: { card: AlertResultCard; locked?: boolean }
 function ForecastExplanationCard({ card, locked }: { card: ForecastExplanationResultCard; locked?: boolean }) {
   return <div className="lpl-agent-result-card" data-agent-result-card style={cardStyle}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.title}</span><span style={mutedBadge}>确定性解释</span></div>
-    <div style={{ display: 'grid', gap: 4, marginTop: 8, fontSize: 12, color: color.body }}>
+    <div style={{ display: 'grid', gap: 4, marginTop: 8, fontSize: fontSize.caption, color: color.body }}>
       <div><span style={{ color: color.mute }}>范围：</span>{card.scope.country} · {card.scope.channel} · {card.scope.product}</div>
       <div><span style={{ color: color.mute }}>模型：</span>{card.scope.modelVersion} · {card.scope.currency} · 拟合窗口 {card.fitWindow} · 总体有效样本 {card.sampleCount} 周</div>
       {(card.dataStatus || card.provenanceSummary) && <div><span style={{ color: color.mute }}>数据：</span>{card.dataStatus === 'simulated' ? '模拟' : card.dataStatus === 'real' ? '真实' : card.dataStatus === 'mixed' ? '混合' : '—'}{card.provenanceSummary ? ` · ${card.provenanceSummary}` : ''}</div>}
       {(card.fitStatus || card.intervalCalibrated !== undefined) && <div><span style={{ color: color.mute }}>拟合：</span>{card.fitStatus === 'completed' ? '已完成' : card.fitStatus === 'fallback' ? '回退先验' : card.fitStatus === 'insufficient' ? '证据不足' : '—'} · {card.fitAppliedToForecast ? '已应用到预测' : '仅审计'} · 区间{card.intervalCalibrated ? '已校准' : '未校准'}</div>}
       {card.scenario?.active && <div><span style={{ color: color.mute }}>当前 What-if：</span>预测 SO {card.scenario.forecastSo.toLocaleString()} 台（相对基准 {card.scenario.soDelta >= 0 ? '+' : ''}{card.scenario.soDelta.toLocaleString()}），销毛变化 {card.scenario.marginDelta >= 0 ? '+' : ''}{card.scenario.marginDelta.toLocaleString()}</div>}
-      <div className="mono" style={{ fontSize: 12, color: color.mute }}><span>上下文 fingerprint：</span>{card.contextFingerprint}</div>
+      <div className="mono" style={{ fontSize: fontSize.caption, color: color.mute }}><span>上下文 fingerprint：</span>{card.contextFingerprint}</div>
     </div>
     <div className="lpl-agent-explanation-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, marginTop: 10 }}>
       {[
@@ -392,11 +407,11 @@ function ForecastExplanationCard({ card, locked }: { card: ForecastExplanationRe
         ['SO', `${card.current.so.toLocaleString()} 台`],
         ['期末库存', `${card.current.inventory.toLocaleString()} 台`],
         ['主要风险', card.current.risk],
-      ].map(([label, value]) => <div key={label} style={{ padding: '6px 7px', background: color.canvasSoft, border: `1px solid ${color.hairline}`, borderRadius: radius.control }}><div style={{ color: color.mute, fontSize: 12 }}>{label}</div><strong className="tnum" style={{ display: 'block', marginTop: 2, fontSize: 12, color: color.ink }}>{value}</strong></div>)}
+      ].map(([label, value]) => <div key={label} style={{ padding: '6px 7px', background: color.canvasSoft, border: `1px solid ${color.hairline}`, borderRadius: radius.control }}><div style={{ color: color.mute, fontSize: fontSize.caption }}>{label}</div><strong className="tnum" style={{ display: 'block', marginTop: 2, fontSize: fontSize.caption, color: color.ink }}>{value}</strong></div>)}
     </div>
-    <div style={{ marginTop: 11, fontSize: 12, color: color.body }}><strong style={{ color: color.ink }}>因子与当前周贡献</strong><div style={{ display: 'grid', gap: 5, marginTop: 6 }}>{card.factors.map((factor) => <div key={factor.key} style={{ padding: '6px 7px', borderLeft: `2px solid ${factor.status === '确定性计算' ? color.link : color.hairlineStrong}`, background: color.canvas }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><strong>{factor.label}</strong><span className="tnum" style={{ color: color.ink }}>{factor.effect}</span></div><div style={{ marginTop: 2, color: color.mute }}>{factor.status} · {factor.window} · {factor.shape}</div><div style={{ marginTop: 2, color: color.mute }}>证据：{factor.evidence} · 置信度 {factor.confidence}</div></div>)}</div></div>
-    <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${color.hairline}`, fontSize: 12, color: color.body }}><strong style={{ color: color.ink }}>关键假设</strong>{card.assumptions.map((item) => <div key={item} style={{ marginTop: 4 }}>· {item}</div>)}</div>
-    <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${color.hairline}`, fontSize: 12, color: color.body }}><strong style={{ color: color.ink }}>判断边界与风险</strong>{card.boundaries.map((item) => <div key={item} style={{ marginTop: 4 }}>· {item}</div>)}</div>
+    <div style={{ marginTop: 11, fontSize: fontSize.caption, color: color.body }}><strong style={{ color: color.ink }}>因子与当前周贡献</strong><div style={{ display: 'grid', gap: 5, marginTop: 6 }}>{card.factors.map((factor) => <div key={factor.key} style={{ padding: '6px 7px', borderLeft: `2px solid ${factor.status === '确定性计算' ? color.link : color.hairlineStrong}`, background: color.canvas }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><strong>{factor.label}</strong><span className="tnum" style={{ color: color.ink }}>{factor.effect}</span></div><div style={{ marginTop: 2, color: color.mute }}>{factor.status} · {factor.window} · {factor.shape}</div><div style={{ marginTop: 2, color: color.mute }}>证据：{factor.evidence} · 置信度 {factor.confidence}</div></div>)}</div></div>
+    <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${color.hairline}`, fontSize: fontSize.caption, color: color.body }}><strong style={{ color: color.ink }}>关键假设</strong>{card.assumptions.map((item) => <div key={item} style={{ marginTop: 4 }}>· {item}</div>)}</div>
+    <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${color.hairline}`, fontSize: fontSize.caption, color: color.body }}><strong style={{ color: color.ink }}>判断边界与风险</strong>{card.boundaries.map((item) => <div key={item} style={{ marginTop: 4 }}>· {item}</div>)}</div>
     <EvidenceList evidence={card.evidence} />
     <CardActions actions={card.actions} locked={locked} />
   </div>;
@@ -414,18 +429,18 @@ function ResultCard({ card, locked, hardLocked }: { card: AgentResultCard; locke
 
 function Citations({ response }: { response: AgentResponse }) {
   if (!response.citations.length && !response.provenance && !response.provider) return null;
-  return <details style={{ marginTop: space.sm, fontSize: 12, color: color.mute }}>
+  return <details style={{ marginTop: space.sm, fontSize: fontSize.caption, color: color.mute }}>
     <summary style={{ cursor: 'pointer', color: color.body }}>依据与口径 · {response.citations.length}</summary>
     <div style={{ display: 'grid', gap: 4, marginTop: 6 }}>{response.provider && <div>分析方式：{response.provider.name}{response.provider.reason ? ` · ${response.provider.reason}` : ''}</div>}{response.citations.map((citation) => <div key={citation.id} style={{ padding: '5px 7px', borderLeft: `2px solid ${color.hairlineStrong}`, background: color.canvas }}>{citation.label} · {citation.detail}</div>)}{response.provenance && <div style={{ padding: '5px 7px', borderLeft: `2px solid ${color.link}`, background: color.canvas }}>运行来源 · {response.provenance.source}{response.provenance.dataVersion ? ` · 数据 ${response.provenance.dataVersion}` : ''}{response.provenance.ruleVersion ? ` · 规则 ${response.provenance.ruleVersion}` : ''}</div>}</div>
   </details>;
 }
 
 const cardStyle: CSSProperties = { marginTop: space.sm, padding: 12, background: color.canvas, border: `1px solid ${color.hairline}`, borderRadius: radius.card, boxShadow: shadow.l1 };
-const cardTitleStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: color.ink };
-const mutedBadge: CSSProperties = { fontSize: 12, fontWeight: 400, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '2px 6px', whiteSpace: 'nowrap' };
+const cardTitleStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink };
+const mutedBadge: CSSProperties = { fontSize: fontSize.caption, fontWeight: 400, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '2px 6px', whiteSpace: 'nowrap' };
 const actionRowStyle: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 };
-const textButtonStyle: CSSProperties = { color: color.link, cursor: 'pointer', fontSize: 12 };
-const warningStyle: CSSProperties = { marginTop: 8, padding: '6px 8px', background: color.warningSoft, color: color.warningInk, fontSize: 12, borderRadius: radius.control };
+const textButtonStyle: CSSProperties = { color: color.link, cursor: 'pointer', fontSize: fontSize.caption };
+const warningStyle: CSSProperties = { marginTop: 8, padding: '6px 8px', background: color.warningSoft, color: color.warningInk, fontSize: fontSize.caption, borderRadius: radius.control };
 const noteStyle: CSSProperties = { marginTop: 8, color: color.mute, fontSize: fontSize.caption, lineHeight: 1.45 };
 const tableHeadStyle: CSSProperties = { textAlign: 'left', color: color.mute, fontWeight: 500, padding: '4px 5px', borderBottom: `1px solid ${color.hairline}` };
 const tableCellStyle: CSSProperties = { padding: '5px', borderBottom: `1px solid ${color.hairline}`, whiteSpace: 'nowrap', color: color.body };
@@ -531,10 +546,13 @@ export default function AgentPanel() {
         </div>}
         {message.isContextStale && <div role="note" style={warningStyle}>基于较早筛选快照 · 当前上下文已变化，请重新确认结果口径</div>}
         {response && <>
-          <div role="note" style={{ ...noteStyle, color: response.factGuard?.status === 'stale_context' ? color.warningInk : color.mute }}>
-            事实来源：本地确定性引擎{response.provider?.name.includes('远端') && !response.provider.name.includes('回退') ? ' · 远端叙述' : ''}{response.factGuard?.message ? ` · ${response.factGuard.message}` : ''}
-          </div>
-          {response.scopeLabel && <div data-agent-scope role="note" style={{ ...noteStyle, color: color.body }}>本次结果口径：{response.scopeLabel}</div>}
+          <details className="aui-result-context">
+            <summary><span>结果口径与来源</span><span className="aui-result-context-preview">{response.scopeLabel ?? '本地确定性引擎'}</span></summary>
+            <div role="note" style={{ ...noteStyle, marginTop: 0, color: response.factGuard?.status === 'stale_context' ? color.warningInk : color.mute }}>
+              事实来源：本地确定性引擎{response.provider?.name.includes('远端') && !response.provider.name.includes('回退') ? ' · 远端叙述' : ''}{response.factGuard?.message ? ` · ${response.factGuard.message}` : ''}
+            </div>
+            {response.scopeLabel && <div data-agent-scope role="note" style={{ ...noteStyle, marginTop: 0, color: color.body }}>本次结果口径：{response.scopeLabel}</div>}
+          </details>
           {response.cards.map((card) => <ResultCard key={card.id} card={card} locked={locked} hardLocked={message.hardLocked} />)}
           {response.cards.length === 0 && response.intent !== 'clarify' && <EmptyResultCard
             onNarrowRange={() => { if (!running) void send('只看最近 8 周', undefined, undefined, 'filter'); }}

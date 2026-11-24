@@ -157,8 +157,12 @@ function selectionsForEntity(entity: ProductEntity, countryCode: string): { sele
 export function resolveAgentEntities(text: string, state: FiltersState): AgentEntityResolution {
   const country = countryOfText(text, state.countryCode);
   const entities = productEntitiesOfText(text, state.industry);
-  const topScore = entities[0]?.score ?? 0;
-  const selectedEntities = entities.filter((entity) => entity.score === topScore);
+  const exact = entities.filter((entity) => entity.exact);
+  const candidates = exact.length
+    ? exact.filter((entity) => !exact.some((other) => other.modelId !== entity.modelId && compact(other.modelName).includes(compact(entity.modelName))))
+    : entities;
+  const topScore = candidates[0]?.score ?? 0;
+  const selectedEntities = exact.length ? candidates : candidates.filter((entity) => entity.score === topScore);
   const selections: ProductSelection[] = [];
   const unavailableProducts: string[] = [];
   for (const entity of selectedEntities) {
@@ -245,37 +249,105 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
   return patch;
 }
 
-function formatPatchValue(value: unknown): string {
-  if (value === undefined) return '—';
+function formatPatchValue(value: unknown, key?: keyof FilterPatch): string {
+  if (value === undefined || value === null) return key === 'platform' ? '自动取价' : '—';
+  if (key === 'currency') return value === 'usd' ? 'USD' : '本币';
+  if (key === 'countryCode') {
+    const country = dimRegion.find((item) => item.country_code === value)?.country_name;
+    return country ? `${country}（${String(value)}）` : String(value);
+  }
+  if (key === 'industry') return INDUSTRY_LABELS[value as FiltersState['industry']] ?? String(value);
+  if (key === 'agg') return value === 'avg' ? '平均价' : String(value);
+  if (key === 'platform' && typeof value === 'object') {
+    const selection = value as NonNullable<FiltersState['platform']>;
+    const shopLabel = (shopId: string): string => dimChannel.find((channel) => channel.channel_id === shopId)?.display_name ?? shopId;
+    const labels = [...selection.platforms, ...selection.shopIds.map(shopLabel)];
+    if (selection.seller) labels.push(`卖家 ${selection.seller}`);
+    if (selection.types?.length) labels.push(`类型 ${selection.types.join('/')}`);
+    return labels.length ? labels.join('、') : '自动取价';
+  }
   if (typeof value === 'boolean') return value ? '开' : '关';
-  if (typeof value === 'object' && value !== null && 'rrp' in value) return (value as { rrp: boolean }).rrp ? '折后价 + RRP' : '仅折后价';
-  // 粒度值中文映射（R6：最近 N 周会把粒度并入 patch，预览不能裸显 week/month）
+  if (typeof value === 'object' && 'rrp' in value) return (value as { rrp: boolean }).rrp ? '折后价 + RRP' : '仅折后价';
   if (value === 'week' || value === 'month' || value === 'quarter') return ({ week: '周', month: '月', quarter: '季' })[value];
-  // 产品选择数组：结构化格式（型号 · 规格，逗号连接），不落 [object Object]。
   if (Array.isArray(value) && value.every((item) => typeof item === 'object' && item !== null && 'main' in item)) {
-    const labels = (value as Array<{ main: { modelId: string; romram: string; skuIds?: string[] } }>).map((item) => {
-      const name = dimProduct.find((row) => row.model_id === item.main.modelId)?.model_name ?? item.main.modelId;
-      const sku = item.main.skuIds?.[0];
-      return `${name} · ${item.main.romram}${sku ? ` · ${sku}` : ''}`;
+    const selectionLabel = (selection: ProductSelection): string => {
+      const name = dimProduct.find((row) => row.model_id === selection.modelId)?.model_name ?? selection.modelId;
+      const skus = selection.skuIds.length ? ` · ${selection.skuIds.join('/')}` : '';
+      const platform = selection.platform ? ` · 取价 ${formatPatchValue(selection.platform, 'platform')}` : '';
+      return `${name} · ${selection.romram}${skus}${platform}`;
+    };
+    const labels = (value as MainProduct[]).map((item) => {
+      const parts = [item.main ? `主品 ${selectionLabel(item.main)}` : '未选主品'];
+      if (item.compares.length) parts.push(`对比 ${item.compares.map(selectionLabel).join('、')}`);
+      parts.push(`自动匹配 ${item.auto ? '开' : '关'}`);
+      return parts.join('；');
     });
-    return labels.length ? labels.join('、') : '未选择';
+    return labels.length ? labels.join(' | ') : '未选择';
   }
   return String(value);
 }
 
 function filterLabelOf(key: keyof FilterPatch): string {
-  return key === 'priceTypes' ? '价格类型' : key === 'rangeStart' ? '时间起点' : key === 'rangeEnd' ? '时间终点' : key === 'adaptive' ? '自动时间范围' : key === 'currency' ? '币种' : key === 'countryCode' ? '国家' : key === 'mains' ? '产品' : key === 'granularity' ? '时间粒度' : key;
+  return key === 'priceTypes' ? '价格类型'
+    : key === 'rangeStart' ? '时间起点'
+      : key === 'rangeEnd' ? '时间终点'
+        : key === 'adaptive' ? '自动时间范围'
+          : key === 'currency' ? '币种'
+            : key === 'countryCode' ? '国家'
+              : key === 'mains' ? '产品'
+                : key === 'granularity' ? '时间粒度'
+                  : key === 'platform' ? '平台 / 店铺'
+                    : key === 'industry' ? '产业'
+                      : key === 'agg' ? '汇总方式' : key;
+}
+
+function canonicalPlatform(value: ProductSelection['platform']): unknown {
+  if (value === undefined || value === null) return null;
+  return {
+    platforms: [...value.platforms].sort(),
+    shopIds: [...value.shopIds].sort(),
+    seller: value.seller ?? null,
+    types: value.types ? [...value.types].sort() : [],
+  };
+}
+
+function canonicalSelection(value: ProductSelection | null): unknown {
+  if (!value) return null;
+  return {
+    modelId: value.modelId,
+    romram: value.romram,
+    skuIds: [...value.skuIds].sort(),
+    platform: canonicalPlatform(value.platform),
+  };
+}
+
+function filterValueSignature(key: keyof FilterPatch, value: unknown): string {
+  if (key === 'mains') return JSON.stringify((value as MainProduct[]).map((card) => ({
+    main: canonicalSelection(card.main),
+    compares: card.compares.map(canonicalSelection),
+    auto: Boolean(card.auto),
+  })));
+  if (key === 'platform') return JSON.stringify(canonicalPlatform(value as ProductSelection['platform']));
+  if (key === 'priceTypes') {
+    const priceTypes = value as FiltersState['priceTypes'];
+    return JSON.stringify({ discounted: priceTypes.discounted, rrp: priceTypes.rrp });
+  }
+  return JSON.stringify(value);
+}
+
+export function buildFilterChanges(state: FiltersState, patch: FilterPatch): FilterResultCard['changes'] {
+  const changes: FilterResultCard['changes'] = [];
+  for (const key of Object.keys(patch) as Array<keyof FilterPatch>) {
+    if (filterValueSignature(key, state[key]) === filterValueSignature(key, patch[key])) continue;
+    changes.push({ label: filterLabelOf(key), before: formatPatchValue(state[key], key), after: formatPatchValue(patch[key], key) });
+  }
+  return changes;
 }
 
 export function buildFilterCard(text: string, state: FiltersState): FilterResultCard | null {
   const patch = buildFilterPatch(text, state);
   if (!Object.keys(patch).length) return null;
-  const changes: Array<{ label: string; before: string; after: string }> = [];
-  for (const key of Object.keys(patch) as Array<keyof FilterPatch>) {
-    const before = formatPatchValue(state[key]);
-    const after = formatPatchValue(patch[key]);
-    if (before !== after) changes.push({ label: filterLabelOf(key), before, after });
-  }
+  const changes = buildFilterChanges(state, patch);
   return {
     kind: 'filter',
     id: id('filter'),
@@ -403,14 +475,26 @@ function stateForPriceAdvantage(state: FiltersState, entities: AgentEntityResolu
   // an own product when the current scope has no Huawei main card. R4-M2：
   // 只有同型号映射后确实没有我司主卡时才回落该国首个我司产品，且必须把
   // 回落原因写进卡边界（Mate X6 缺席 DE → nova 14 Pro），不能静默替换。
+  const requestedCompares = entities.explicitProduct
+    ? next.mains.flatMap((card) => card.main && !ownSelectionForAgent(card.main) ? [card.main] : [])
+    : [];
+  const withRequestedCompares = (cards: MainProduct[]): MainProduct[] => {
+    if (!requestedCompares.length) return clampMains(cards);
+    const ownerId = cards.find((card) => card.main && ownSelectionForAgent(card.main))?.id;
+    if (!ownerId) return clampMains(cards);
+    return clampMains(cards.map((card) => card.id === ownerId ? { ...card, compares: requestedCompares, auto: false } : card));
+  };
   const ownCard = next.mains.find((card) => card.main && ownSelectionForAgent(card.main));
-  if (ownCard) return { state: { ...next, mains: clampMains(next.mains.map((card) => card.id === ownCard.id ? withAutoOn(card, next.countryCode) : card)) }, notes };
+  if (ownCard) {
+    const cards = next.mains.map((card) => card.id === ownCard.id ? withAutoOn(card, next.countryCode) : card);
+    return { state: { ...next, mains: withRequestedCompares(cards) }, notes };
+  }
   const countryCode = entities.countryCode || state.countryCode;
   const own = dimProduct.find((row) => row.is_own && row.industry === state.industry && row.countries.includes(countryCode));
   if (!own) return { state: next, notes };
   const skuId = lowestPriceColorSku(own.model_id, own.romram, countryCode) ?? own.sku_id;
   notes.push(`当前口径没有可沿用的我司主品，已回落${entities.countryName}有数据的我司产品 ${own.model_name}（${own.romram}）计算价格优势。`);
-  return { state: { ...next, countryCode, mains: clampMains(buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [skuId] }], { auto: true, countryCode })) }, notes };
+  return { state: { ...next, countryCode, mains: withRequestedCompares(buildCards([{ modelId: own.model_id, romram: own.romram, skuIds: [skuId] }], { auto: true, countryCode })) }, notes };
 }
 
 function ownSelectionForAgent(selection: ProductSelection): boolean {

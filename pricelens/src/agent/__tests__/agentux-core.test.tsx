@@ -162,6 +162,11 @@ describe('agentux-core price advantage and price alert loops', () => {
     const resultCards = view.baseElement.querySelectorAll('[data-agent-result-card]');
     const resultCard = resultCards[resultCards.length - 1] as HTMLElement;
     const card = within(resultCard);
+    const mobileRows = resultCard.querySelectorAll('[data-agent-advantage-mobile-row]');
+    expect(mobileRows.length).toBeGreaterThan(0);
+    expect(mobileRows[0].textContent).toContain('我司');
+    expect(mobileRows[0].textContent).toContain('竞品');
+    expect(mobileRows[0].textContent).toContain('价差');
     expect(screen.getAllByRole('button', { name: '价格优势' }).length).toBeGreaterThan(0);
     fireEvent.click(card.getByRole('button', { name: '只看占优' }));
     expect(card.getByRole('button', { name: '只看占优' }).getAttribute('aria-pressed')).toBe('true');

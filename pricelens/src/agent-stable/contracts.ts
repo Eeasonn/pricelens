@@ -107,8 +107,9 @@ export interface AgentCardAction {
   label: string;
   /**
    * 'evidence' 只在卡内原地展开证据区（只读、不跳转、不受上下文过期禁用）；
-   * 其余 kind 保持原有语义：apply=open+filterPatch、open=真实导航、
-   * followup=带回当前上下文的追问、copy=复制提示词。
+   * 其余 kind 保持原有语义：apply=显式筛选写入、open=真实导航（可携带筛选补丁）、
+   * followup=带回当前上下文的追问、copy=复制提示词。携带补丁的 open 在目标口径
+   * 与当前看板不同时必须先展示差异并确认，撤销按交易 ID 定位。
    */
   kind: 'apply' | 'open' | 'followup' | 'copy' | 'evidence';
   prompt?: string;
