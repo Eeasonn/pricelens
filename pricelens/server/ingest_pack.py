@@ -1886,9 +1886,9 @@ LEGACY_TABLES = (
     "dim_platform", "dim_store_type", "dim_shop",
     "dim_region", "dim_time", "dim_fx", "dim_promo", "dim_benchmark", "dim_tier",
 )
-# schema 版本（PRAGMA user_version）：v1/v2 落库从未设置（=0），v3 起写 3——
-# 版本不符时 _sqlite_clear_and_load 先整体 DROP 再建，防旧结构残留
-SCHEMA_VERSION = 3
+# schema 版本（PRAGMA user_version）：v1/v2 落库从未设置（=0），v3=3、v3.1（map_region
+# 瘦身三列）=4——版本不符时 _sqlite_clear_and_load 先整体 DROP 再建，防旧结构残留
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 -- ODS 原样层（数据建模方案 v2 §2：offer 底表 29 规范列 / PSI 表 7 规范列+旧形态 2 列）
@@ -1944,11 +1944,10 @@ CREATE TABLE IF NOT EXISTS map_promo (
 -- DIM 维表层已裁撤（v3，2026-11-26）：描述属性/周历/大区随行 stamp 进 fact_price
 -- 宽列，DB 直读免 join；ID 字典与 pack 契约形态（promo/benchmark/tier 同构直读）
 -- 只活在 pack JSON 的 dims——前端契约不受影响，DB 不再存第二形态。
--- region 匹配表（country → 大区/币种归属 + 前端运行时配置，人工维护）
+-- region 匹配表（只提供 国家 → 国家中文名 → 大区 的纯匹配关系；
+-- 运行时配置如默认电渠/核心平台只活在 pack JSON dims.region，不入原始表）
 CREATE TABLE IF NOT EXISTS map_region (
-    country_code TEXT PRIMARY KEY, region_code TEXT, region_name TEXT, country_name TEXT,
-    enabled INTEGER, sort INTEGER, currency TEXT, core_platforms TEXT,
-    default_platform TEXT, default_own_models TEXT
+    country_code TEXT PRIMARY KEY, country_name TEXT, region_name TEXT
 );
 -- FACT 事实层（§4：宽表——键+stamp 11 列+渠道+双价族[官方族=预留]）
 CREATE TABLE IF NOT EXISTS fact_price (
@@ -1995,6 +1994,17 @@ def load_to_sqlite(db_path, raw_pack, built, pack_id, config=None):
         _sqlite_clear_and_load(conn, raw_pack, built, pack_id, kind="v3-offers")
     finally:
         conn.close()
+
+
+def _band_range(code):
+    """档位码 → (min, max)：首段 <N → (0, N)；末段 N+ → (N, None)；N-M → (N, M)"""
+    s = str(code)
+    if s.startswith("<"):
+        return 0.0, float(s[1:])
+    if s.endswith("+"):
+        return float(s[:-1]), None
+    lo, hi = s.split("-", 1)
+    return float(lo), float(hi)
 
 
 def _sqlite_clear_and_load(conn, raw_pack, built, pack_id, kind="v3-offers"):
@@ -2096,18 +2106,51 @@ def _sqlite_clear_and_load(conn, raw_pack, built, pack_id, kind="v3-offers"):
                       jstr(r.get("com_category3")).strip(), jstr(r.get("com_category4")).strip(),
                       jnum(r.get("comp_rank")), jnum(r.get("is_active"))]
                      for r in comp_rows])
+    band_rows = cfg.get("priceBandRows") or []
+    if not band_rows:
+        # xlsx「价格档位」页签未建（过渡期）：从生效阶梯（config tierLadders → pack
+        # dims.tier，6 产业全局阶梯）× 25 启用国展开分国显式行；页签建立后 xlsx 行接管
+        tier = (built.get("dims") or {}).get("tier") or {}
+        for rg in (built.get("dims") or {}).get("region") or []:
+            if not rg.get("enabled"):
+                continue
+            cname = rg.get("country_name") or rg["country_code"]
+            for ind, codes in (tier.get("ladders") or {}).items():
+                labels = (tier.get("labels") or {}).get(ind) or {}
+                for ix, code in enumerate(codes):
+                    lo, hi = _band_range(code)
+                    band_rows.append({
+                        "country": cname, "category": CAT_CN.get(ind, ind),
+                        "price_band": labels.get(code) or code,
+                        "band_sort": ix + 1, "max_price": hi, "min_price": lo,
+                    })
     cur.executemany("INSERT INTO map_price_band VALUES (?,?,?,?,?,?)",
                     [[jstr(r.get("country")).strip(), jstr(r.get("category")).strip(),
                       jstr(r.get("price_band")).strip(), jnum(r.get("band_sort")),
                       jnum(r.get("max_price")), jnum(r.get("min_price"))]
-                     for r in cfg.get("priceBandRows") or []])
+                     for r in band_rows])
+    promo_rows = cfg.get("promoRows") or []
+    if not promo_rows:
+        # xlsx「大促档期」页签未建（过渡期）：从生效档期（config promoRows → pack
+        # dims.promo）反填业务原文；页签建立后 xlsx 行接管
+        rg_by_cc = {r["country_code"]: r for r in (built.get("dims") or {}).get("region") or []}
+        for p in (built.get("dims") or {}).get("promo") or []:
+            rg = rg_by_cc.get(p.get("country_code")) or {}
+            hint = p.get("depth_hint")
+            promo_rows.append({
+                "country": rg.get("country_name") or p.get("country_code"),
+                "category": "",
+                "platform": "、".join(p.get("platforms") or []) if p.get("platforms") else "",
+                "start_date": p.get("start_date"), "end_date": p.get("end_date"),
+                "promo_info": f"{p.get('promo_name') or ''}（深度:{hint}）" if hint else (p.get("promo_name") or ""),
+            })
     cur.executemany("INSERT INTO map_promo VALUES (?,?,?,?,?,?)",
                     [[jstr(r.get("country")).strip(), jstr(r.get("category")).strip(),
                       jstr(r.get("platform")).strip(),
                       excel_date_to_str(r.get("start_date")) or None,
                       excel_date_to_str(r.get("end_date")) or None,
                       jstr(r.get("promo_info")).strip()]
-                     for r in cfg.get("promoRows") or []])
+                     for r in promo_rows])
     _load_dims_and_facts(cur, built["dims"], built["factRows"], pack_id,
                          kind=kind, diag=built.get("diag"),
                          fact_sales_rows=built.get("factSales") or [])
@@ -2126,13 +2169,9 @@ def _load_dims_and_facts(cur, dims, fact_rows, pack_id, spec_split=None, kind="p
     sku_by_id = {p["sku_id"]: p for p in products}
     time_by_week = {t["week_id"]: t for t in dims.get("time") or []}
     region_by_cc = {r["country_code"]: r for r in dims.get("region") or []}
-    # map_region（人工维护的 country → 大区/币种归属 + 运行时配置）
-    cur.executemany("INSERT OR REPLACE INTO map_region VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    [[r["country_code"], r.get("region_code"), r.get("region_name"),
-                      r.get("country_name"), 1 if r.get("enabled") else 0, r.get("sort"),
-                      r.get("currency"), json.dumps(r.get("core_platforms") or [], ensure_ascii=False),
-                      r.get("default_platform"),
-                      json.dumps(r.get("default_own_models") or {}, ensure_ascii=False)]
+    # map_region（纯匹配关系：国家 → 中文名 → 大区；运行时配置留 pack JSON）
+    cur.executemany("INSERT OR REPLACE INTO map_region VALUES (?,?,?)",
+                    [[r["country_code"], r.get("country_name"), r.get("region_name")]
                      for r in dims.get("region") or []])
     # fact_price（v3 宽表 39 列：键 3 + stamp 14 + 渠道 3 + 双价族 16 + 其他 3；
     # stamp 11 列=industry/region_name/系列配置/tier/is_own + 周历 4 列）
