@@ -1491,6 +1491,15 @@ def build_map_product(xlsx_rows, offer_rows, psi_rows):
                  or auto_by_key.get((cc, _norm_text(jstr(r.get("orig_model")).strip()), cat_key))
                  or [])
         auto = autos[0] if autos else None
+        if not autos and cat_key is not None:
+            # 规格键失配兜底（穿戴塌缩行：引擎侧 cat1=None 而 xlsx 行带表盘）：
+            # 退 (国家, 型号, None) 键；info（颜色等非表盘信息）用于选同 model 最优行
+            autos = (auto_by_key.get((cc, _norm_text(jstr(r.get("model")).strip()), None))
+                     or auto_by_key.get((cc, _norm_text(jstr(r.get("orig_model")).strip()), None))
+                     or [])
+            info_n = _norm_text(jstr(r.get("info")).strip())
+            auto = (next((a for a in autos if info_n and info_n in _norm_text(a["color_size"])), None)
+                    or (autos[0] if autos else None))
         for a in autos:
             a["_covered"] = True
         rows.append(base_row(
