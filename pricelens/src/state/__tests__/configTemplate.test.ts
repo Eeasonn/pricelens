@@ -162,7 +162,9 @@ describe('C3 字典四页签 + openpyxl 预填表 round-trip（2026-11-18 显性
     const parsed = parseConfigWorkbook(bytes);
     expect(parsed.keys.seriesRules?.length).toBe(133);
     expect(parsed.keys.modelAliases?.length).toBe(1);
-    expect(parsed.keys.benchmarkMatrix?.length).toBe(950);
+    // 对标矩阵行数 = src/data/dim_benchmark.json 行数（2026-11-25 配对规则重述后 950 → 919：
+    // 手机/平板每竞品只配 1 个版本，去掉一对多的富余/错位行）
+    expect(parsed.keys.benchmarkMatrix?.length).toBe(919);
     expect(parsed.keys.tierLadders && Object.keys(parsed.keys.tierLadders).length).toBe(6);
     expect(parsed.keys.promoRows?.length).toBe(66);
     expect(parsed.keys.countryAliases && Object.keys(parsed.keys.countryAliases).length).toBe(57);

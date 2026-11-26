@@ -73,13 +73,13 @@ describe('buildOverviewMatrix 金测', () => {
     expect(row.price).toBe(minUsdPriceAt(row.skuId, row.asOfWeek!, 'DNS'));
   });
 
-  it('竞品映射：Pura 90s Pro Max 并集 6 行（2026-11-11 同 RAM 认领后 12+512 组扩到 1TB 档）、主竞品（iPhone 17 Pro，sort=1）在前；映射与 dim_benchmark 一致', () => {
+  it('竞品映射：Pura 90s Pro Max 并集 4 行（2026-11-25 规则①②：两我司配置 × 两竞品，每竞品每配置只配 1 个全中版本）、主竞品（iPhone 17 Pro 12+512，sort=1）在前；映射与 dim_benchmark 一致', () => {
     const pura = findModel('own-huawei-pura-90s-pro-max');
+    // 旧维表 6 行里的 iPhone 17 Pro 12+1TB / S26 Ultra 16+1TB 是「富余归档」挂给 12+512 的
+    // 同 RAM 高配（规则①之前的一对多）；现 12+512 只配两竞品各自的 12+512
     expect(pura.comps.map((c) => c.skuId)).toEqual([
       'cmp-apple-iphone-17-pro__12-512gb__blue',
       'cmp-apple-iphone-17-pro__12-256gb__blue',
-      'cmp-apple-iphone-17-pro__12-1tb__silver',
-      'cmp-samsung-s26-ultra__16-1tb__black',
       'cmp-samsung-s26-ultra__12-512gb__black',
       'cmp-samsung-s26-ultra__12-256gb__black',
     ]);

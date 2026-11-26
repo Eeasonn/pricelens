@@ -175,14 +175,80 @@ console.log('\n[1] 维表完整性');
   });
   check('dim_benchmark 竞品 SKU 与我司型号均在该国有数据、sort ≥ 1', badBench.length === 0, `${dimBenchmark.length} 条 / ${new Set(dimBenchmark.map((b) => b.country_code)).size} 国`);
   check('dim_benchmark source ∈ {matrix,substitute,manual,auto}', dimBenchmark.every((b) => ['matrix', 'substitute', 'manual', 'auto'].includes(b.source)));
-  const ruBench = dimBenchmark.filter((b) => b.country_code === 'RU' && b.own_model_id === 'own-huawei-pura-90s-pro-max');
-  // 2026-11-11 pair_configs 修订（Eason）：便宜对便宜 + 同 RAM 认领——12+256 对
-  // 两竞品的同档 12+256；12+512 对两竞品的同 RAM 族（12+512 / 12+1TB / 16+1TB）
-  const ruPairs = (cfg) => ruBench.filter((b) => b.own_romram === cfg)
-    .map((b) => productById.get(b.competitor_sku_id).romram).sort().join('|');
-  check('R国 Pura 90s Pro Max 对标 = iPhone 17 Pro + S26 Ultra 便宜对便宜（12+256×2 + 12+512 同 RAM 族×4）',
-    ruPairs('12+256 GB') === '12+256 GB|12+256 GB' && ruPairs('12+512 GB') === '12+1 TB|12+512 GB|12+512 GB|16+1 TB',
-    ruBench.map((b) => `${b.own_romram}←${productById.get(b.competitor_sku_id).model_name} ${productById.get(b.competitor_sku_id).romram}`).join('；'));
+  // ---- 对标配对规则（2026-11-25 Eason 重述五条；ingest_real.pick_version 的 JS 镜像）----
+  // ① 手机/平板：每个（国家×我司配置×竞品型号）只配 1 个版本
+  // ② ROM+RAM 都一致 → 只借该版本  ③ 否则同 ROM → RAM 就近（± 等距取低）
+  // ④ ROM 无一致 → 同 RAM → ROM 就近（± 等距取低）  ⑤ 都不一致 → ROM 就近 → RAM 就近（等距取低）
+  const cfgFeats = (romram) => {
+    const s = String(romram).replaceAll('"', 'in').replaceAll('″', 'in').toLowerCase();
+    let m = s.match(/(\d+)\+(\d+)\s*(tb|gb)/);
+    if (m) return { rom: Number(m[2]) * (m[3] === 'tb' ? 1024 : 1), ram: Number(m[1]) };
+    m = s.match(/(\d+)\s*(tb|gb)/);
+    return { rom: m ? Number(m[1]) * (m[2] === 'tb' ? 1024 : 1) : null, ram: null };
+  };
+  const nearKey = (c, o) => (c == null || o == null ? [Infinity, c == null ? Infinity : c] : [Math.abs(c - o), c]);
+  const cmpKey = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1; } return 0; };
+  const pickVersion = (ownRomram, pool) => {
+    const o = cfgFeats(ownRomram);
+    const F = new Map(pool.map((c) => [c, cfgFeats(c)]));
+    const order = (c) => [F.get(c).rom || 0, F.get(c).ram || 0, pool.indexOf(c)];
+    const least = (cands, key) => cands.reduce((best, c) => (cmpKey(key(c), key(best)) < 0 ? c : best));
+    const exact = pool.filter((c) => o.rom != null && o.ram != null && F.get(c).rom === o.rom && F.get(c).ram === o.ram);
+    if (exact.length) return least(exact, order);
+    if (o.rom != null) {
+      const sameRom = pool.filter((c) => F.get(c).rom === o.rom);
+      if (sameRom.length) return least(sameRom, (c) => [...nearKey(F.get(c).ram, o.ram), ...order(c)]);
+    }
+    if (o.ram != null) {
+      const sameRam = pool.filter((c) => F.get(c).ram === o.ram);
+      if (sameRam.length) return least(sameRam, (c) => [...nearKey(F.get(c).rom, o.rom), ...order(c)]);
+    }
+    return least(pool, (c) => [...nearKey(F.get(c).rom, o.rom), ...nearKey(F.get(c).ram, o.ram), ...order(c)]);
+  };
+  const poolCache = new Map();
+  const poolOf = (modelId, cc) => {
+    const k = `${modelId}|${cc}`;
+    if (!poolCache.has(k)) poolCache.set(k, [...new Set(dimProduct.filter((p) => p.model_id === modelId && p.countries.includes(cc)).map((p) => p.romram))].sort());
+    return poolCache.get(k);
+  };
+  const versionsPerPair = new Map();
+  const ruleViolations = [];
+  let phoneRows = 0;
+  for (const b of dimBenchmark) {
+    const comp = productById.get(b.competitor_sku_id);
+    if (!['phone', 'tablet'].includes(comp.industry)) continue;
+    const k = `${b.country_code}|${b.own_model_id}|${b.own_romram}|${comp.model_id}`;
+    if (!versionsPerPair.has(k)) versionsPerPair.set(k, new Set());
+    versionsPerPair.get(k).add(b.competitor_sku_id);
+    // 手机无尺寸分桶：竞品在当地的全部配置即候选池 → 逐行独立复算（平板有分桶，只验规则①与钉例）
+    if (comp.industry !== 'phone') continue;
+    phoneRows++;
+    const expect = pickVersion(b.own_romram, poolOf(comp.model_id, b.country_code));
+    if (expect !== comp.romram) ruleViolations.push(`${b.country_code} ${b.own_model_id} ${b.own_romram}×${comp.model_name}: 配了 ${comp.romram}，应为 ${expect}`);
+  }
+  const multiVersion = [...versionsPerPair].filter(([, s]) => s.size > 1).map(([k]) => k);
+  check('对标规则①：手机/平板每个（国家×我司配置×竞品型号）只配 1 个版本', multiVersion.length === 0, `${versionsPerPair.size} 组` + (multiVersion.length ? `；多版本：${multiVersion.slice(0, 3).join('，')}` : ''));
+  check('对标规则②~⑤：手机对标逐行符合就近规则（全中 → 同ROM/同RAM就近 → ROM→RAM就近，± 等距取低）', ruleViolations.length === 0, ruleViolations.length ? ruleViolations.slice(0, 3).join('；') : `${phoneRows} 行`);
+
+  const pairsOf = (cc, ownModelId, ownRomram, compModelId) => dimBenchmark
+    .filter((b) => b.country_code === cc && b.own_model_id === ownModelId && b.own_romram === ownRomram
+      && productById.get(b.competitor_sku_id).model_id === compModelId)
+    .map((b) => productById.get(b.competitor_sku_id).romram).sort();
+  const puraCms = ['cmp-apple-iphone-17-pro', 'cmp-samsung-s26-ultra'];
+  check('对标规则②：R国 Pura 90s Pro Max 两配置各配 iPhone 17 Pro + S26 Ultra 的同款版本（12+256×2 + 12+512×2，不再挂 12+1TB / 16+1TB）',
+    ['12+256 GB', '12+512 GB'].every((cfg) => puraCms.every((cm) => pairsOf('RU', 'own-huawei-pura-90s-pro-max', cfg, cm).join() === cfg)),
+    ['12+256 GB', '12+512 GB'].map((cfg) => puraCms.map((cm) => `${cfg}×${cm.replace('cmp-', '')}=${pairsOf('RU', 'own-huawei-pura-90s-pro-max', cfg, cm).join('/') || '∅'}`).join('，')).join('；'));
+  const x9d8256 = pairsOf('RU', 'own-huawei-nova-15-max', '8+256 GB', 'cmp-honor-x9d').join();
+  const x9d8512 = pairsOf('RU', 'own-huawei-nova-15-max', '8+512 GB', 'cmp-honor-x9d').join();
+  check('对标规则④ + 版本共用（不占用）：R国 nova 15 Max 的 8+256 与 8+512 对 X9D（当地仅 8+256 / 12+256）都配 8+256（同 RAM、ROM 就近）',
+    x9d8256 === '8+256 GB' && x9d8512 === '8+256 GB', `8+256→${x9d8256 || '∅'}；8+512→${x9d8512 || '∅'}`);
+  const x8b = pairsOf('PH', 'own-huawei-matepad-se', '11" 6+128 GB', 'cmp-honor-pad-x8b').join();
+  check('对标规则③ 等距取低：PH MatePad SE 11" 6+128 对 Honor Pad X8b（11" 有 4+128 / 8+128，与 6 各差 2）配 4+128',
+    x8b === '11" 4+128 GB', x8b || '∅');
+  const ultra512 = pairsOf('SA', 'own-huawei-pura-90s-pro-max', '12+512 GB', 'cmp-xiaomi-17-ultra').join();
+  const ultra256 = pairsOf('SA', 'own-huawei-pura-90s-pro-max', '12+256 GB', 'cmp-xiaomi-17-ultra').join();
+  check('对标规则③⑤：SA Pura 90s Pro Max × Xiaomi 17 Ultra（当地仅 16+512 / 16+1TB）——12+512 同 ROM 配 16+512；12+256 无同 ROM 无同 RAM，ROM 就近配 16+512',
+    ultra512 === '16+512 GB' && ultra256 === '16+512 GB', `12+512→${ultra512 || '∅'}；12+256→${ultra256 || '∅'}`);
 }
 
 // ---------------- 2. 事实包 ----------------

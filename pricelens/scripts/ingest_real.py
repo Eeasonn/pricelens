@@ -491,117 +491,64 @@ def cfg_features(industry, romram):
             "cellular": bool(re.search(r"cellular|lte", s))}
 
 
+def pick_version(o_cfg, pool, industry):
+    """为我司配置 o_cfg 在竞品配置池 pool 里选唯一版本 → (配置, 命中规则 2~5)。
+    2026-11-25 Eason 五条的后四条（规则①=调用方每个我司配置只取这一个结果）：
+      2  ROM+RAM 都一致 → 只借该版本；
+      3  否则取 ROM 一致的版本，RAM 就近（± 等距取低）；
+      4  ROM 无一致 → 取 RAM 一致的版本，ROM 就近（± 等距取低；原话「匹配 RAM 低的
+         那个」按文意读作 ROM 低——该条变的是 ROM）；
+      5  都不一致 → 先 ROM 就近（等距取低），该 ROM 下多 RAM 再 RAM 就近（等距取低）。
+    就近 = (距离, 值) 字典序：距离相同则值小者胜；缺值（规格未标）排最后。"""
+    def feats(cfg):
+        return cfg_features(industry, cfg)
+
+    def order_key(cfg):
+        f = feats(cfg)
+        return (f["rom"] or 0, f["ram"] or 0, cfg)
+
+    def near(c_val, o_val):
+        if c_val is None or o_val is None:
+            return (float("inf"), c_val if c_val is not None else float("inf"))
+        return (abs(c_val - o_val), c_val)
+
+    o = feats(o_cfg)
+    o_rom, o_ram = o["rom"], o["ram"]
+    cf = {c: feats(c) for c in pool}
+    exact = [c for c in pool if o_rom and o_ram and cf[c]["rom"] == o_rom and cf[c]["ram"] == o_ram]
+    if exact:
+        return min(exact, key=order_key), 2
+    if o_rom:
+        same_rom = [c for c in pool if cf[c]["rom"] == o_rom]
+        if same_rom:
+            return min(same_rom, key=lambda c: (near(cf[c]["ram"], o_ram), order_key(c))), 3
+    if o_ram:
+        same_ram = [c for c in pool if cf[c]["ram"] == o_ram]
+        if same_ram:
+            return min(same_ram, key=lambda c: (near(cf[c]["rom"], o_rom), order_key(c))), 4
+    return min(pool, key=lambda c: (near(cf[c]["rom"], o_rom), near(cf[c]["ram"], o_ram), order_key(c))), 5
+
+
 def pair_configs(own_cfgs, comp_cfgs, industry):
-    """SKU 级配置匹配（2026-11-13 Eason，取代 2026-11-11 升序 zip）：
-    平板先按屏幕尺寸分桶（规则不变）；桶内/手机按「锚点 + ROM→RAM 两级级联 +
-    配置占用」：
-      ① 锚点：ROM+RAM 完全一致的 1:1 先配（我司配置按存储升序）；
-      ② 级联：无锚点的我司配置先取 ROM 一致，没有往下一档存储（往上仅兜底）；
-         桶内再取 RAM 一致，没有取下一档 RAM；
-      ③ 占用：每个竞品配置只被一个我司配置行占用（nova 8+256 行配走 X9D 8+256
-         后，8+512 行在同桶取 12+256——2026-11-13 例）；全部被占用才复用
-         （平板单配置竞品如 iPad Pro M5 被两行 PaperMatte 共用，规则不变）；
-      ④ 富余：仍未配对的竞品配置按同距离键归档最近我司配置（≤4，保留同 RAM
-         全变体富余行，如 iPad Air M4 8+128/8+256 归我司 8+256）。
-    我司 1 配置 vs 友商多配置维持 2026-10-29 口径（同存储全变体 ≤4 → 就近一个）。
-    穿戴：2026-11-10 层级塌缩后双侧均只剩型号级单配置（'—'）→ 走通用 1:1 分支；
-    音频/IoT/PC：1:1。"""
+    """SKU 级配置匹配（2026-11-25 Eason 重述五条，取代 11-13「锚点 + ROM→RAM 两级级联 +
+    配置占用 + 富余归档」）：我司每个配置对每款竞品型号只配 1 个版本，逐行独立判定——
+      ① 1 我司配置 → 1 竞品版本，不出现多版本；
+      ②~⑤ 版本取舍见 pick_version。
+    竞品版本可被我司多个配置共用（不做占用：占用会让后处理的高配被迫错位，如 nova
+    8+256 配走 X9D 8+256 后 8+512 行被挤到别的版本）；未配对的竞品版本也不再归档回
+    我司配置（一对多会把全中版本挤出前端每配置前 3 款）。
+    平板先按屏幕尺寸分桶（规则不变），桶内/手机按上述五条。
+    穿戴/音频/IoT/PC：型号级 1:1（规则不变）。"""
     if not own_cfgs or not comp_cfgs:
         return []
 
     def feats(cfg):
         return cfg_features(industry, cfg)
 
-    def rank_key(cfg):
-        f = feats(cfg)
-        return (f["rom"] or 0, f["ram"] or 0)
-
     def pair_flat(o_cfgs, c_cfgs):
-        if len(o_cfgs) == 1 and len(c_cfgs) > 1:
-            # 2026-10-29 口径保持：优先同存储（全部同存储变体 ≤4）；友商无同存储 = 就近一个
-            o = feats(o_cfgs[0])
-            f_map = {c: feats(c) for c in c_cfgs}
-
-            def in_key(c):
-                f = f_map[c]
-                return (0 if (o["in"] and f["in"] and f["in"] == o["in"]) else 1,
-                        abs((f["in"] or 0) - (o["in"] or 0)) if o["in"] and f["in"] else 1)
-
-            same = [c for c in c_cfgs if o["rom"] and f_map[c]["rom"] == o["rom"]]
-            if same:
-                return [(o_cfgs[0], c) for c in sorted(same, key=in_key)[:4]]
-
-            def close(c):
-                f = f_map[c]
-                return (in_key(c), abs((f["rom"] or 0) - (o["rom"] or 0)), c)
-            return [(o_cfgs[0], sorted(c_cfgs, key=close)[0])]
-        # 2026-11-13 Eason：多对多改「锚点 + ROM→RAM 两级级联 + 配置占用」，取代
-        # 2026-11-11 的升序 zip（zip 按位置配对无视语义：nova 8+256 曾配 A37 8+128）。
-        # 规则：① ROM 一致的先配，没有则往下一档存储（只往下，往上仅兜底）；
-        # ② 桶内 RAM 一致的先配，没有则取下一档 RAM；
-        # ③ 每个竞品配置只被一个我司配置行占用（8+256 行配走 X9D 8+256 后，
-        #    8+512 行在同桶只能取 12+256）；全部被占用才复用（平板单配置竞品）；
-        # ④ 富余竞品配置按同距离键归档到最近我司配置（保留同 RAM 全变体的富余行）。
-        o = sorted(o_cfgs, key=rank_key)
-        c = sorted(c_cfgs, key=rank_key)
-        cf = {x: feats(x) for x in c}
-
-        def rom_rank(o_rom, c_rom):
-            """(级, 桶内距离)：一致 0 < 往下档 1 < 往上档 2（往上仅兜底）。"""
-            if o_rom and c_rom:
-                if c_rom == o_rom:
-                    return (0, 0)
-                if c_rom < o_rom:
-                    return (1, o_rom - c_rom)
-                return (2, c_rom - o_rom)
-            return (3, 0)
-
-        def ram_rank(o_ram, c_ram):
-            if o_ram and c_ram:
-                if c_ram == o_ram:
-                    return (0, 0)
-                if c_ram < o_ram:
-                    return (1, o_ram - c_ram)
-                return (2, c_ram - o_ram)
-            return (3, 0)
-
-        def cand_key(o_f, x):
-            f = cf[x]
-            return (rom_rank(o_f["rom"], f["rom"]), ram_rank(o_f["ram"], f["ram"]), x)
-
-        # Phase A：锚点 = ROM+RAM 完全一致，1:1 先占（own 升序）
-        pairs = []
-        claimed = set()
-        o_f = {x: feats(x) for x in o}
-        for x in o:
-            f = o_f[x]
-            hit = next((y for y in c if y not in claimed
-                        and cf[y]["rom"] == f["rom"] and cf[y]["ram"] == f["ram"]), None)
-            if hit is not None:
-                claimed.add(hit)
-                pairs.append((x, hit))
-        # Phase B：无锚点我司配置级联回退（未被占用优先，全部占用才复用）
-        for x in o:
-            if any(p[0] == x for p in pairs):
-                continue
-            f = o_f[x]
-            free = [y for y in c if y not in claimed]
-            pool = free or c
-            hit = min(pool, key=lambda y: cand_key(f, y))
-            if free:
-                claimed.add(hit)
-            pairs.append((x, hit))
-        # Phase C：富余竞品配置归档到最近我司配置（同 RAM 全变体的富余行，≤4/我司配置）
-        extras = {}
-        for y in c:
-            if y in claimed:
-                continue
-            best = min(o, key=lambda x: (cand_key(o_f[x], y), x))
-            extras.setdefault(best, []).append(y)
-        for x, ys in extras.items():
-            for y in sorted(ys, key=lambda y: rank_key(y))[:4]:
-                pairs.append((x, y))
-        return pairs
+        if not c_cfgs:
+            return []
+        return [(o, pick_version(o, c_cfgs, industry)[0]) for o in o_cfgs]
 
     if industry not in ("phone", "tablet"):
         if len(own_cfgs) == 1 and len(comp_cfgs) > 1:
@@ -642,6 +589,79 @@ def pair_configs(own_cfgs, comp_cfgs, industry):
                 pairs.extend(pair_flat(rest_o, rest_c or flat_c))
             return pairs
     return pair_flat(own_cfgs, comp_cfgs)
+
+
+# 对标上限（第 115 轮评审拍板）：每 国家×我司型号×配置 最多 4 款竞品
+BENCH_MAX = 4
+
+
+def emit_matrix_bench(own_mids, comp_entries, cc, ind, bench):
+    """我司×竞品按配置配对产出对标行，追加进 bench（国家 cc；source 恒 matrix）。
+
+    2026-11-10 Eason（matrix-only）：对标只来自矩阵直配——矩阵未覆盖的
+    国家×型号不再自动补齐（4b 自动匹配已退役），矩阵名点不中采数型号即置空
+    （resolve_name 严格匹配 + 替代别名停用）。
+    2026-11-25 提升为模块级：主管线与 reemit_benchmark.py 共用这一段（读模块级
+    DIM_PRODUCT / SKU_CC_WEEKS / pair_configs）。"""
+    for om in own_mids:
+        own_cfg = country_configs(om, cc)
+        if not own_cfg:
+            continue
+        sort_by_cfg = Counter()
+        seen_pair = set()
+        for centry in comp_entries:
+            for cm in [x["model_id"] for x in centry["models"]]:
+                comp_cfg = country_configs(cm, cc)
+                if not comp_cfg:
+                    continue
+                for own_r, comp_r in pair_configs(own_cfg, comp_cfg, ind):
+                    rep = rep_sku(cm, comp_r, cc)
+                    if not rep or (own_r, rep) in seen_pair:
+                        continue
+                    seen_pair.add((own_r, rep))
+                    sort_by_cfg[own_r] += 1
+                    bench.append({"country_code": cc, "own_model_id": om, "own_romram": own_r,
+                                  "competitor_sku_id": rep, "sort": sort_by_cfg[own_r],
+                                  "source": "matrix",
+                                  "note": centry["raw"]})
+
+
+def cap_bench(bench):
+    """对标上限：每 国家×我司型号×配置 最多 BENCH_MAX 款竞品，截断后组内 sort 重排 1..n。
+    先保「每竞品型号至多一款配置」的品牌覆盖面，槽位富余（< 上限）时才允许同型号
+    第二配置补位（手机/平板 2026-11-25 起每型号恒一款，补位只剩穿戴/音频的型号级
+    分支会用到）。→ (截断后列表（按组首见序）, 截断条数, 超限组数)"""
+    bench_priority = lambda b: ({"manual": 0, "matrix": 1, "substitute": 2, "auto": 3}.get(b["source"], 4), b.get("sort", 99))
+    bench_groups = defaultdict(list)
+    for b in bench:
+        bench_groups[(b["country_code"], b["own_model_id"], b["own_romram"])].append(b)
+    capped_bench = []
+    trimmed_pairs = 0
+    for rows in bench_groups.values():
+        rows.sort(key=bench_priority)  # 稳定排序：同优先级保持矩阵列序/生成序
+        picked, picked_models, picked_skus = [], set(), set()
+        for b in rows:  # 第一遍：每竞品型号取一款
+            if len(picked) >= BENCH_MAX:
+                break
+            mid = b["competitor_sku_id"].split("__")[0]
+            if mid in picked_models:
+                continue
+            picked_models.add(mid)
+            picked_skus.add(b["competitor_sku_id"])
+            picked.append(b)
+        for b in rows:  # 第二遍：槽位富余补同型号其他配置（sku 已入选的不重复补）
+            if len(picked) >= BENCH_MAX:
+                break
+            if b in picked or b["competitor_sku_id"] in picked_skus:
+                continue
+            picked_skus.add(b["competitor_sku_id"])
+            picked.append(b)
+        trimmed_pairs += len(rows) - len(picked)
+        for i, b in enumerate(picked):
+            b["sort"] = i + 1
+        capped_bench.extend(picked)
+    over_groups = sum(1 for rows in bench_groups.values() if len(rows) > BENCH_MAX)
+    return capped_bench, trimmed_pairs, over_groups
 
 
 def derive_series(p):
@@ -1216,34 +1236,6 @@ def main():
         entry["comps"] = comp_entries
         return entry, own_mids, ind
 
-    def emit_matrix_bench(own_mids, comp_entries, cc, ind):
-        """我司×竞品按配置配对产出对标行（国家 cc；source 恒 matrix）。
-
-        2026-11-10 Eason（matrix-only）：对标只来自矩阵直配——矩阵未覆盖的
-        国家×型号不再自动补齐（4b 自动匹配已退役），矩阵名点不中采数型号即置空
-        （resolve_name 严格匹配 + 替代别名停用）。"""
-        for om in own_mids:
-            own_cfg = country_configs(om, cc)
-            if not own_cfg:
-                continue
-            sort_by_cfg = Counter()
-            seen_pair = set()
-            for centry in comp_entries:
-                for cm in [x["model_id"] for x in centry["models"]]:
-                    comp_cfg = country_configs(cm, cc)
-                    if not comp_cfg:
-                        continue
-                    for own_r, comp_r in pair_configs(own_cfg, comp_cfg, ind):
-                        rep = rep_sku(cm, comp_r, cc)
-                        if not rep or (own_r, rep) in seen_pair:
-                            continue
-                        seen_pair.add((own_r, rep))
-                        sort_by_cfg[own_r] += 1
-                        bench.append({"country_code": cc, "own_model_id": om, "own_romram": own_r,
-                                      "competitor_sku_id": rep, "sort": sort_by_cfg[own_r],
-                                      "source": "matrix",
-                                      "note": centry["raw"]})
-
     # 第一遍：分国块（显式声明优先）
     for m in country_rows:
         cc = cc_of(m["country"])
@@ -1261,7 +1253,7 @@ def main():
             for om in own_mids:
                 matrix_tier_decl[(cc, om)] = declared
                 declared_own.add((cc, om))
-        emit_matrix_bench(own_mids, entry["comps"], cc, ind)
+        emit_matrix_bench(own_mids, entry["comps"], cc, ind, bench)
 
     # 第二遍：默认块 × 有数据国家（分国块已声明的 (cc, 我司型号) 让位）
     data_ccs = sorted({cc for p in DIM_PRODUCT for cc in p["countries"]})
@@ -1279,7 +1271,7 @@ def main():
                         matrix_tier_decl[(cc, om)] = declared
             for cc in data_ccs:
                 if (cc, om) not in declared_own:
-                    emit_matrix_bench([om], entry["comps"], cc, ind)
+                    emit_matrix_bench([om], entry["comps"], cc, ind, bench)
     matrix_resolution.extend(default_resolution)
     # 2026-11-10 Eason（matrix-only）：人工对标追加（overrides.benchmark_manual）停用——
     # 生效对标只有矩阵直配一种来源；历史勾兑条目保留在 overrides.json 里不丢失。
@@ -1322,40 +1314,8 @@ def main():
     # 生效对标 = 矩阵直配，矩阵没给的（国家×型号×配置）就留空。恢复三层逻辑
     # 请回退本提交（git log 查「matrix-only」），历史规则在 4b 旧实现里。
     # ---------- 4c. 对标上限（第115轮评审拍板）：每 国家×我司型号×配置 最多 4 款竞品 ----------
-    # 先保「每竞品型号至多一款配置」的品牌覆盖面，槽位富余（<4）时才允许同型号
-    # 第二配置补位；截断后组内 sort 重排 1..n。
-    BENCH_MAX = 4
-    bench_priority = lambda b: ({"manual": 0, "matrix": 1, "substitute": 2, "auto": 3}.get(b["source"], 4), b.get("sort", 99))
-    bench_groups = defaultdict(list)
-    for b in bench:
-        bench_groups[(b["country_code"], b["own_model_id"], b["own_romram"])].append(b)
-    capped_bench = []
-    trimmed_pairs = 0
-    for rows in bench_groups.values():
-        rows.sort(key=bench_priority)  # 稳定排序：同优先级保持矩阵列序/生成序
-        picked, picked_models, picked_skus = [], set(), set()
-        for b in rows:  # 第一遍：每竞品型号取一款
-            if len(picked) >= BENCH_MAX:
-                break
-            mid = b["competitor_sku_id"].split("__")[0]
-            if mid in picked_models:
-                continue
-            picked_models.add(mid)
-            picked_skus.add(b["competitor_sku_id"])
-            picked.append(b)
-        for b in rows:  # 第二遍：槽位富余补同型号其他配置（sku 已入选的不重复补）
-            if len(picked) >= BENCH_MAX:
-                break
-            if b in picked or b["competitor_sku_id"] in picked_skus:
-                continue
-            picked_skus.add(b["competitor_sku_id"])
-            picked.append(b)
-        trimmed_pairs += len(rows) - len(picked)
-        for i, b in enumerate(picked):
-            b["sort"] = i + 1
-        capped_bench.extend(picked)
-    over_groups = sum(1 for rows in bench_groups.values() if len(rows) > BENCH_MAX)
-    bench = capped_bench
+    # （规则本体在 cap_bench：先保每竞品型号一款，槽位富余才补同型号其他配置；组内 sort 重排）
+    bench, trimmed_pairs, over_groups = cap_bench(bench)
     log["notes"].append(f"对标上限{BENCH_MAX}：{over_groups} 组超限截断 {trimmed_pairs} 条，"
                         f"截断后共 {len(bench)} 条（每配置 ≤{BENCH_MAX} 款竞品）")
 

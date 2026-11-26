@@ -23,11 +23,12 @@ ARK_API_KEY="<your-ark-api-key>" npm run agent-server
 ```bash
 npm install        # 安装依赖（已执行过则跳过）
 npm run ingest     # 真实数据接入：scripts/ingest_real.py（数据再生须连跑 patch_comp_series.py + prefill_default_shops.py）
+python3 scripts/reemit_benchmark.py   # 只重生对标行：改竞品配对规则（ingest_real.pair_configs）后用，不重跑全链；读最终维表重发手机/平板对标，其余行原样保留（幂等；--dry-run 只看差异），随后重跑 build_handoff_config.py
 npm run dev        # 本地开发
 npm run build      # 产出单文件 dist/index.html 并同步覆盖仓库根 PriceLens.html（铁律：单文件版永远最新）
 npm run build:iterate # 演进版单文件 dist/index.html（三页齐全、标题带「演进版」；不同步 PriceLens.html）
 npm run typecheck  # tsc --noEmit
-npm run verify     # 聚合契约断言 + 单文件一致性（scripts/verify.mjs，47 项）
+npm run verify     # 聚合契约断言 + 单文件一致性（scripts/verify.mjs，58 项，含竞品配对五条规则守卫）
 npm run test       # vitest 金测（快照钉住图表行为）
 npm run design:check # 设计契约、产品上下文、token 和 Impeccable 配置
 npm run design:lint  # Google DESIGN.md linter

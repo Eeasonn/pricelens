@@ -8,9 +8,9 @@
 //    旧证人 nova 14 12+256 黑在 RU 无矩阵对比位（优势恒 0 行），改用矩阵覆盖的
 //    nova 15 12+256 黑 week202634 主品每线 OZON 3P（31650₽/85.1645=371.63→372），
 //    趋势 372 而优势只读全局会被混池成 352（DNS 29999₽/85.1645=352.25 最低）。
-//    优势 own 372 / 对手 A57（自动 = 默认锚 DNS 423，2026-11-17 起自动口径改默认
-//    锚严格取价；旧「每周全平台最低价」口径曾取 Mvideo 586）、HONOR 600 540
-//    （DNS 本就是最低价渠道，新旧口径同值）（价差 +51/+168）；
+//    优势 own 372 / 对手 HONOR 600 540（DNS 本就是最低价渠道，新旧口径同值）（价差
+//    +168）；A57 12+256 灰仅 Mvideo 有价、默认锚 DNS 无价 → 优势卡不出 A57 行（旧维表
+//    靠「富余归档」挂的 A57 8+128 曾出 423/+51，2026-11-25 配对规则重述后退役）；
 //    整卡回看、行级定位落地、再问全部仍 372；URL 全局 shop=3P 的趋势/优势也
 //    统一 372（不再趋势 352）。
 //  - 三审 M2：显式配置省单位/空格变体（12+256、12 + 256、12+256 GB、12＋256）
@@ -33,6 +33,7 @@ import { defaultFilters } from '../../state/FiltersContext';
 import type { FiltersState, PlatformSelection } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';
 import { effectiveChannelIds, effectiveLinePlatform, platformSelectionForCountry } from '../../dataModel/aggregate';
+import { benchmarkSkuIdsFor } from '../../state/configStore';
 import { runAgent, buildAgentContext } from '../core';
 import { advantageScopePatch } from '../priceAdvantage';
 import type { ChartResultCard, PriceAdvantageResultCard, TableResultCard } from '../contracts';
@@ -51,8 +52,9 @@ const NOVA14PRO = { modelId: 'own-huawei-nova-14-pro', romram: nova14ProRow.romr
 // nova 15 12+256（旧锚 nova 14 在 RU 无矩阵对比位，优势恒 0 行）；证人周同步移到
 // 202634——nova 15 与矩阵对手（A57 12+256 / HONOR 600 12+256）在该周同有真实价
 // （own：OZON 3P 31650 ₽ / 85.1645 = 371.63 → 372；自动混池 DNS 29999 ₽ / 85.1645
-// = 352.25 → 352；A57 灰自动 = 默认锚 DNS → 423（2026-11-17 默认锚口径，旧全平台
-// 最低价口径曾取 Mvideo 585.81 → 586）；HONOR 600 DNS 540.12 → 540，新旧口径同值）。
+// = 352.25 → 352；HONOR 600 DNS 540.12 → 540，新旧口径同值；A57 12+256 灰仅 Mvideo
+// 有价（202634 49890₽），默认锚 DNS 无价不出行——旧维表富余归档挂的 A57 8+128 灰
+// DNS 35999₽ → 423 已随 2026-11-25 规则重述退役）。
 const nova15Row = dimProduct.find((row) => row.sku_id === 'own-huawei-nova-15__12-256gb__black')!;
 const NOVA15_12256 = { modelId: 'own-huawei-nova-15', romram: nova15Row.romram, skuIds: [nova15Row.sku_id] };
 
@@ -140,15 +142,15 @@ describe('三审 M1 · 共享生效口径 effectiveLinePlatform（每线 > 全�
     expect(effectiveLinePlatform({}, null)).toBeNull();
   });
 
-  it('最强反例：趋势 372/OZON 3P，同会话价格优势 own 372、对 A57（2026-11-13 匹配修订后绑定 12+256）/ HONOR 600（同绑 12+256，540）落后值如实为占优（绝不 352 混池）', async () => {
+  it('最强反例：趋势 372/OZON 3P，同会话价格优势 own 372、对 HONOR 600 12+256（540）落后值如实为占优；A57 只配 12+256 且默认锚无价不出行（2026-11-25 规则①②，绝不用 8+128 的 423 冒充；绝不 352 混池）', async () => {
     const state = ruNova15PerLineShopState();
     // 趋势：372 / OZON 3P（与价格页每线药丸一致；自动混池是 352/DNS）
-    const { table } = await trendCardsOf(state, '价格趋势');
+    const { table } = await trendCardsOf(state, '价格走势');
     expect(table.rows[0][1]).toBe('372');
     expect(table.rows[0][3]).toBe('OZON 3P');
-    // 优势：own 全部 372、渠道点名 OZON 3P；2026-11-13 pair_configs 锚点修订后
-    // nova 15 12+256 对 A57 12+256、HONOR 600 12+256（存储内存全一致），真实事实价
-    // 以实际取数为准（本断言锁「每线 3P 价随优势，不读全局混池」）
+    // 优势：own 全部 372、渠道点名 OZON 3P；nova 15 12+256 对 A57 12+256、HONOR 600
+    // 12+256（存储内存全一致），真实事实价以实际取数为准（本断言锁「每线 3P 价随
+    // 优势，不读全局混池」）
     const { card } = await advantageCardOf(state);
     const rows34 = card.rows.filter((row) => row.weekId === '202634');
     expect(rows34.length).toBeGreaterThan(0);
@@ -158,14 +160,21 @@ describe('三审 M1 · 共享生效口径 effectiveLinePlatform（每线 > 全�
     const honorRow = rows34.find((row) => row.competitor.modelId === 'cmp-honor-600');
     expect(honorRow).toBeTruthy();
     expect(honorRow!.competitor.price).toBe(540);
+    expect(honorRow!.competitor.romram).toBe('12+256 GB');
     expect(honorRow!.priceDiff).toBe(540 - 372);
     expect(honorRow!.relation).toBe('advantage');
-    const a57Row = rows34.find((row) => row.competitor.modelId === 'cmp-samsung-a57');
-    expect(a57Row).toBeTruthy();
-    // 对手线无每线口径 = 自动（2026-11-17 默认锚 DNS 独立站）→ 423；旧全平台最低价口径曾取 Mvideo 586
-    expect(a57Row!.competitor.price).toBe(423);
-    expect(a57Row!.priceDiff).toBe(423 - 372);
-    expect(a57Row!.relation).toBe('advantage');
+    // 2026-11-25 配对规则重述（Eason 五条）：nova 15 12+256 对 A57 只配 12+256（规则②）。
+    // 旧维表靠「富余归档」多挂了 A57 8+128，本用例旧断言的「A57 423」实为 8+128 灰的
+    // DNS 价（35999₽ / 85.1645 = 422.7 → 423）——拿低配价冒充 A57 对标。A57 12+256 灰在
+    // R国仅 Mvideo 有价（202634 49890₽），对手线自动口径 = 默认锚 DNS 无价 → 该周不出
+    // A57 行；HONOR 600 12+256 的 540（DNS 45999₽）继续守住「对手自动 = 默认锚」口径。
+    expect(benchmarkSkuIdsFor('own-huawei-nova-15', nova15Row.romram, 'RU')).toEqual([
+      'cmp-samsung-a57__12-256gb__gray',
+      'cmp-honor-600__12-256gb__black',
+    ]);
+    expect(rows34.filter((row) => row.competitor.modelId === 'cmp-samsung-a57')).toEqual([]);
+    // 绝不再出「同款别的配置」冒充该竞品（旧维表的 A57 8+128 行）
+    expect(card.rows.some((row) => row.competitor.romram.replace(/\s+/g, '') !== nova15Row.romram.replace(/\s+/g, ''))).toBe(false);
     // 关系方向全部由真实价差导出（nova 15 低于两款矩阵对手 → 全部占优），
     // 没有一条被误报反向
     expect(rows34.every((row) => row.relation === 'advantage')).toBe(true);

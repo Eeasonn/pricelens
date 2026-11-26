@@ -1,8 +1,10 @@
 // 生效对标取数单测（第一百一十六轮）：分国过滤、每配置硬上限（BENCHMARK_CAP_PER_CONFIG，
 // 2026-11-02 起 = 3，与每组对比硬上限同值）、分组去重。
 // 真实数据锚（dim_benchmark RU）对应用户评审案例：R 国 Pura 90s Pro 12+256 = 2 款竞品；
-// matrix-only 口径（2026-11-10）：维表只发矩阵直配行（source='matrix'），「维表 4 行取
-// sort 前三」锚点换到 AE nova 15 Max 8+256（维表该组 4 行、竞品全 256 ROM，截到前三）。
+// matrix-only 口径（2026-11-10）：维表只发矩阵直配行（source='matrix'）。
+// 2026-11-25 配对规则重述（Eason 五条）：手机/平板每个（国家×我司配置×竞品型号）只配
+// 1 个版本 → 维表不再有 4 行组，「维表 4 行取 sort 前三」的真实数据锚退役；上限本身
+// 仍由下方「手动快照超上限按 sort 兜底截断」用例守住。
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   BENCHMARK_CAP_PER_CONFIG,
@@ -43,17 +45,24 @@ describe('benchmarkSkuIdsFor', () => {
     ]);
   });
 
-  it('AE nova 15 Max 8+256 = 3 款且全部同 ROM（维表 4 行全同 ROM 256：X9D 12+256 / A36 8+256 / Redmi Note15 Pro 12+256 / X9D 8+256；configStore 侧按 BENCHMARK_CAP_PER_CONFIG=3 取 sort 前三）', () => {
+  it('AE nova 15 Max 8+256 = 3 款、全部 ROM+RAM 全中（2026-11-25 规则①②：每竞品只配 1 个版本、全中只借该版本）', () => {
     const list = benchmarkSkuIdsFor('own-huawei-nova-15-max', '8+256 GB', 'AE');
     expect(list).toHaveLength(3);
     expect(new Set(list).size).toBe(3);
     expect(list).toEqual([
-      'cmp-honor-x9d__12-256gb__black',
+      'cmp-honor-x9d__8-256gb__black',
       'cmp-samsung-a36__8-256gb__black',
-      'cmp-xiaomi-redmi-note15-pro__12-256gb__blue',
+      'cmp-xiaomi-redmi-note15-pro__8-256gb__black',
     ]);
-    // sort 第 4 行（X9D 8+256，同款另一配置）被每配置上限截掉
-    expect(list).not.toContain('cmp-honor-x9d__8-256gb__black');
+    // 旧维表该组 4 行（X9D 12+256 / Redmi Note15 Pro 12+256 是「占用 + 富余」错位，
+    // 真全中的 X9D 8+256 被挤到第 4 位遭上限截掉）→ 现在三款竞品配置与我司完全一致，
+    // 维表该组只剩这 3 行（每竞品型号一款，无第二配置可截）
+    for (const sku of list) {
+      expect(dimProduct.find((p) => p.sku_id === sku)?.romram).toBe('8+256 GB');
+    }
+    expect(new Set(list.map((sku) => sku.split('__')[0])).size).toBe(3);
+    expect(dimBenchmark.filter((r) => r.country_code === 'AE'
+      && r.own_model_id === 'own-huawei-nova-15-max' && r.own_romram === '8+256 GB')).toHaveLength(3);
   });
 
   it('分国过滤：结果 = 该国维表行（115 轮前预览跨国聚合的回归锚）', () => {

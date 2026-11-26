@@ -7,7 +7,7 @@
 SHEET_DEFINITIONS 逐字一致，parseConfigWorkbook 按表头解析）：
   系列规则 133 = ingest_real.OWN_SERIES_RULES（21 前缀）+ series_rules._RULES（112 正则）
   型号别名   1 = data/real/overrides.json model_aliases
-  对标矩阵 950 = src/data/dim_benchmark.json
+  对标矩阵 919 = src/data/dim_benchmark.json（行数随维表；改对标行后须重跑本脚本）
   分档阶梯   6 = ingest_real.TIER_LADDERS
   大促档期  66 = src/data/dim_promo.json
   国家别名/平台别名/店铺类型别名/品类映射 = server/ingest_pack.py 出厂字典
