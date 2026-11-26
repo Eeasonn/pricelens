@@ -405,6 +405,16 @@ export function toggleAllAuto(mains: MainProduct[]): MainProduct[] {
   return mains.map((c) => (c.main != null && isHuaweiModel(c.main.modelId) ? (allOn ? withAutoOff(c) : withAutoOn(c)) : c));
 }
 
+/** 2026-11-26 Eason：自动匹配竞品 = 默认逻辑——刷新/重开一律默认开。
+ *  启动恢复路径（持久化 / URL）把华为主品卡强制回 auto=true；对比区不在此处
+ *  重算，由随后的 applyScopeDefaults 末尾 withAutoOn 按当前口径矩阵统一重算
+ *  （开关语义「开 = 矩阵驱动」不变）。「关」只在单次界面交互内有效：会话内
+ *  切国快照 / 撤销照常保留用户操作，不跨刷新存活。非华为主品卡不适用矩阵，
+ *  原样保留。 */
+export function restoreAutoOn(mains: MainProduct[]): MainProduct[] {
+  return mains.map((card) => (card.main != null && isHuaweiModel(card.main.modelId) ? { ...card, auto: true } : card));
+}
+
 /** 卡片落主品（空对补选 / 换主品共用）：主品占线后对比区按新配额截断，
  *  并剔除与新主品同型号同配置的对比项（主品与对比不重复占线）；
  *  自动匹配开 = 对比区按新主品重算（新主品非华为时矩阵不可依，退回手动）。

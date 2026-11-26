@@ -37,7 +37,7 @@ import { marketDataProfileOf, type FinancingPlan, type FinancingTerm, type Finan
 import { publishedMonthlyRangeOf } from '../dataModel/monthlyFacts';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache, productHasDataInCountry } from '../components/ProductCascader/tree';
-import { clampMains, autoComparesFor, expandV11Cards, filterMainsByFinancingTerm, migrateV10, mainsValidFor, newCardId, remapMainsForScope, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
+import { clampMains, autoComparesFor, expandV11Cards, filterMainsByFinancingTerm, migrateV10, mainsValidFor, newCardId, remapMainsForScope, restoreAutoOn, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
 import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -751,6 +751,9 @@ function applyMarketDataProfile(state: FiltersState): FiltersState {
  * 1) 无持久化 / 持久化版本旧于 v10 → 新默认视图（周 · USD · 默认主分析卡 + 其配置对比）；
  * 2) v11/v12 → mains 照原样恢复；v10 → own/competitors 迁移成卡（migrateV10，矩阵补对比区）。
  * 第一百二十六轮起无启动自愈重算——对比区以持久化为准，可用「全部自动匹配」一键取回。
+ * 2026-11-26 Eason（默认逻辑）：恢复时华为主品卡强制 auto=true（restoreAutoOn），
+ * 对比区由 applyScopeDefaults 末尾 withAutoOn 按当前口径矩阵重算——刷新/重开一律
+ * 默认开自动匹配；「关」只在单次界面交互内有效，不跨刷新存活。
  */
 function loadBaseState(): FiltersState {
   let restored: FiltersState | null = null;
@@ -794,6 +797,10 @@ function loadBaseState(): FiltersState {
     if (parsed.v === 12) {
       restored.mains = clampMains(restored.mains);
     }
+    // 2026-11-26 Eason：自动匹配竞品 = 默认逻辑——刷新/重开把持久化的华为主品卡
+    // 强制回 auto=true（对比区由随后 applyScopeDefaults 末尾的 withAutoOn 按当前
+    // 口径矩阵统一重算）；「关」只在单次界面交互内有效，不跨刷新存活。
+    restored.mains = restoreAutoOn(Array.isArray(restored.mains) ? restored.mains : []);
   }
   // 无持久化 = 首次打开：强制重算默认卡（默认视图 = 默认卡 + 匹配竞品）。
   // 只在「确有持久化载荷」时才尊重空 mains（用户显式清空态，刷新不回填）——
@@ -830,14 +837,15 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
   syncScopeRegistries(url.filters.countryCode ?? base.countryCode);
   if (url.filters.mains?.length) {
     // URL 只声明主品结构；对比区尽量沿用持久化里同「型号×配置」卡的手动搭配
-    //（否则刷新/分享链接会清掉用户手动配好的对比）
+    //（否则刷新/分享链接会清掉用户手动配好的对比）。restoreAutoOn 兜住「链接
+    // 直开、持久化里没有的华为主品卡」——自动匹配默认开（2026-11-26 Eason）。
     const persistedByKey = new Map(
       base.mains.flatMap((c) => (c.main ? [[selKey(c.main), c] as const] : [])),
     );
-    const merged = url.filters.mains.map((card) => {
+    const merged = restoreAutoOn(url.filters.mains.map((card) => {
       const prev = card.main ? persistedByKey.get(selKey(card.main)) : undefined;
       return prev ? { ...card, compares: prev.compares, auto: prev.auto } : card;
-    });
+    }));
     restored = {
       ...restored,
       ...url.filters,
