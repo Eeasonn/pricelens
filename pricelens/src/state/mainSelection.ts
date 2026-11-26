@@ -1,8 +1,8 @@
 // ============================================================
 // 主分析卡纯函数（第一百二十轮，第三次迭代）：
-// 卡 = 唯一主品（产品+型号+颜色）+ 对比区。配额在选择时收口（每卡 1 主品
-// + ≤3 对比；空对同样 ≤3 对比，见 COMPARES_PER_CARD_CAP），卡数上限 8。含自动
-// 匹配填充、v10/v11 持久化迁移、勾选组工具。UI 与 FiltersContext 共用；不持有状态。
+// 卡 = 唯一主品（产品+型号+颜色）+ 对比区。配额在选择时收口（单图含主品
+// 共 ≤8 条折线），卡数上限 8。含自动匹配填充、v10/v11 持久化迁移、勾选组工具。
+// UI 与 FiltersContext 共用；不持有状态。
 // ============================================================
 import { dimProduct, factPriceMonthly } from '../data';
 import type { DimProduct } from '../dataModel/types';
@@ -22,14 +22,8 @@ import { STABLE } from '../appChannel';
  *  上限前移到选择时（modal 配额），呈现层不再截断。 */
 export const MAX_LINES_PER_CHART = 8;
 
-/** 每组（卡）对比产品硬上限（2026-11-02，Eason：每组最多选 3 款对比产品）。
- *  cardQuota 取它与折线上限的较小值，选择浮窗 / 模板合并 / 自动匹配 / 读档
- *  收口（clampMains）全部经 cardQuota 同口径截断；价格走势药丸带的块内可见
- *  预算（COMPARES_VISIBLE）与之同值。 */
-export const COMPARES_PER_CARD_CAP = 3;
-
-/** 对比产品达上限的统一提示（选择浮窗 / 模板编辑的禁用气泡与拦截提示同句） */
-export const COMPARE_CAP_HINT = `每组最多 ${COMPARES_PER_CARD_CAP} 款对比产品`;
+/** 单图折线达上限的统一提示（选择浮窗 / 模板编辑的禁用气泡与拦截提示同句） */
+export const COMPARE_CAP_HINT = `单图最多 ${MAX_LINES_PER_CHART} 条折线（含主分析产品）`;
 
 /** 主分析卡数上限（= 分离面板数上限；批量动作按剩余名额截断） */
 export const MAINS_CAP = 8;
@@ -57,9 +51,9 @@ export function selKey(sel: ProductSelection): string {
   return `${sel.modelId}|${norm(sel.romram)}`;
 }
 
-/** 卡内对比区配额 = min(每组对比硬上限 3, 8 - 主品占线)（有主品 / 空对均为 3；下限 0） */
+/** 卡内对比区配额 = 单图折线上限减去主品占线（有主品 7 款、空组 8 款） */
 export function cardQuota(card: Pick<MainProduct, 'main'>): number {
-  return Math.max(0, Math.min(COMPARES_PER_CARD_CAP, MAX_LINES_PER_CHART - (card.main ? 1 : 0)));
+  return Math.max(0, MAX_LINES_PER_CHART - (card.main ? 1 : 0));
 }
 
 /** 型号是否华为产品（数据事实；自动匹配矩阵只覆盖华为侧） */
@@ -216,7 +210,7 @@ function remapSelectionForCountryIterate(sel: ProductSelection, countryCode: str
  *  R4-S1（同步稳定线 5f5898d）：手动对比区同样逐条合法化（逐 SKU 过滤 / 配置
  *  漂移同型号映射 / 型号缺席剔除），按 selKey 去重并排除与所在卡主品同组的条目
  *  （重映射后 compare 与 main 落到同型号同配置时不再重复占线），对比区封
- *  COMPARES_PER_CARD_CAP（clampMains 收口）；自动匹配卡对比区由调用方按目标国
+ *  MAX_LINES_PER_CHART（clampMains 收口）；自动匹配卡对比区由调用方按目标国
  *  矩阵重算。 */
 function remapMainsForScopeIterate(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): MainProduct[] | null {
   const out: MainProduct[] = [];
@@ -318,7 +312,7 @@ function remapSelectionForCountryStable(sel: ProductSelection, countryCode: stri
  *  映射（同型号保留/换合法配置/逐 SKU 过滤），型号整体缺席的卡剔除；手动对比区同样
  *  逐条合法化（合法 SKU 子集保留，配置漂移同型号映射，型号缺席剔除）；多张源卡
  *  映射后落到同一 selKey（RU 12+512 与 16+512 → ID 均 16+512）按 selKey 去重，
- *  对比区封 COMPARES_PER_CARD_CAP；空对卡原样保留（对比区只留合法条目）。
+ *  对比区封 MAX_LINES_PER_CHART；空对卡原样保留（对比区只留合法条目）。
  *  返回 null = 没有任何卡能落在目标国（型号全缺席），调用方回落默认/快照。 */
 function remapMainsForScopeStable(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): MainProduct[] | null {
   const out: MainProduct[] = [];

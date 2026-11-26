@@ -11,7 +11,6 @@ import {
   cardQuota,
   cardsFromSelections,
   clampMains,
-  COMPARES_PER_CARD_CAP,
   expandV11Cards,
   flatSelections,
   isHuaweiModel,
@@ -66,32 +65,30 @@ const distinctComps = (n: number): ProductSelection[] => {
   return out;
 };
 
-describe('cardQuota（每组对比 ≤3 款，选择时收口；2026-11-02 Eason 硬性限制）', () => {
-  it('有主品 / 空对均 = 3（对比硬上限比折线上限更紧，主品占线不再决定配额）', () => {
-    expect(COMPARES_PER_CARD_CAP).toBe(3);
-    expect(cardQuota({ main: ownSel })).toBe(COMPARES_PER_CARD_CAP);
-    expect(cardQuota({ main: null })).toBe(COMPARES_PER_CARD_CAP);
-    // 1 主品 + 3 对比 仍在单图折线上限内（MAX_LINES_PER_CHART 语义不变）
-    expect(1 + cardQuota({ main: ownSel })).toBeLessThanOrEqual(MAX_LINES_PER_CHART);
+describe('cardQuota（取消每组 3 款对比限制，只保留单图折线上限）', () => {
+  it('有主品可带 7 款对比，空组可带 8 款对比', () => {
+    expect(cardQuota({ main: ownSel })).toBe(7);
+    expect(cardQuota({ main: null })).toBe(8);
+    expect(1 + cardQuota({ main: ownSel })).toBe(MAX_LINES_PER_CHART);
+    expect(cardQuota({ main: null })).toBe(MAX_LINES_PER_CHART);
   });
 });
 
 describe('withMain（空对补选 / 换主品：对比区随新配额收口）', () => {
-  it('空对挂满 8 条对比后补主品 → 对比区截到 3 条，前 3 条原样保留', () => {
+  it('空对选满 8 条对比后补主品 → 保留前 7 条，不再截到 3 条', () => {
     const comps8 = distinctComps(8);
     expect(comps8).toHaveLength(8);
     const out = withMain(card(null, comps8), ownSel);
     expect(out.main).toEqual(ownSel);
-    expect(out.compares).toHaveLength(3);
-    expect(out.compares).toEqual(comps8.slice(0, 3));
+    expect(out.compares).toHaveLength(7);
+    expect(out.compares).toEqual(comps8.slice(0, 7));
   });
 
-  it('对比区含与新主品同型号同配置的项 → 剔除后再截配额', () => {
-    const comps = distinctComps(7);
+  it('对比区含与新主品同型号同配置的项 → 剔除后保留其余 7 条', () => {
+    const comps = distinctComps(8);
     const out = withMain(card(null, [ownSel, ...comps]), ownSel);
     expect(out.compares.some((c) => selKey(c) === selKey(ownSel))).toBe(false);
-    // 先剔除主品同组项（不占名额），再截到每组 3 款
-    expect(out.compares).toEqual(comps.slice(0, COMPARES_PER_CARD_CAP));
+    expect(out.compares).toEqual(comps.slice(0, 7));
   });
 
   it('换主品：与新主品同配置的旧对比项不再重复占线', () => {
@@ -318,12 +315,11 @@ describe('cardsFromSelections / flatSelections / clampMains', () => {
     expect(compareSels).toHaveLength(0); // 都已作为主品出现
   });
 
-  it('clampMains 截对比区到卡配额、卡数到 MAINS_CAP', () => {
-    const comps = autoComparesFor(card(ownSel));
-    const over = card(ownSel, [...comps, ...comps, ...comps]);
-    const clamped = clampMains([over]);
+  it('clampMains 保留第 4～7 条对比，只截断单图折线超配部分', () => {
+    const comps = distinctComps(8);
+    const clamped = clampMains([card(ownSel, comps)]);
     expect(clamped[0].main).toEqual(ownSel);
-    expect(clamped[0].compares.length).toBeLessThanOrEqual(cardQuota(clamped[0]));
+    expect(clamped[0].compares).toEqual(comps.slice(0, 7));
     const many = Array.from({ length: MAINS_CAP + 3 }, () => card(ownSel));
     expect(clampMains(many)).toHaveLength(MAINS_CAP);
   });

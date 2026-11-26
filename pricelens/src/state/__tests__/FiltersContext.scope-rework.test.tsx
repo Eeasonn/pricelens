@@ -10,7 +10,7 @@
 // 契约：
 //  - 显式 mains（Agent filterPatch / undo 快照）：精确合法配置保留，同型号映射
 //    目标国首个合法配置（ID 16+512GB），型号整体缺席回落默认；对比区按目标国
-//    重建且 ≤3；目标国快照同步更新。
+//    重建且不超过单图折线上限；目标国快照同步更新。
 //  - 普通 UI 换国（补丁不带 mains）：存离建国快照 → 目标国快照 100% 优先（含
 //    SKU 校验；恢复时清理无效手动 compares）→ 无快照先旧 mains 同型号重映射
 //    （R4-m1：RU Mate X6 12+512 → ID 16+512，结果写回目标国快照）→ 型号整体
@@ -244,7 +244,7 @@ describe('t428u R3 M1b · 普通 UI 换国（补丁不带 mains）', () => {
 });
 
 describe('t428u R3 M1a · 显式 mains 跨国（Agent filterPatch 口径）', () => {
-  it('RU Mate X6 12+512 显式切 ID：同型号映射 16+512GB，对比区按 ID 重建 ≤3，快照更新', () => {
+  it('RU Mate X6 12+512 显式切 ID：同型号映射 16+512GB，对比区按 ID 重建，快照更新', () => {
     const { state, actions } = renderFilters();
     act(() => actions().setMains([mateX6RuCard(true)]));
     // 与 priceAdvantage scopePatch 同形：国家 + 完整 mains + 时间/平台口径
@@ -256,8 +256,8 @@ describe('t428u R3 M1a · 显式 mains 跨国（Agent filterPatch 口径）', ()
     }));
     expect(state().countryCode).toBe('ID');
     expect(state().mains[0].main).toEqual(MATE_X6_ID);
-    // 对比区按目标国矩阵重建（auto 卡），全部在 ID 合法且 ≤3
-    expect(state().mains[0].compares.length).toBeLessThanOrEqual(3);
+    // 对比区按目标国矩阵重建（auto 卡），全部在 ID 合法且不超过单图折线上限
+    expect(state().mains[0].compares.length).toBeLessThanOrEqual(7);
     for (const compare of state().mains[0].compares) {
       expect(selectionValidFor(compare, 'ID', 'phone')).toBe(true);
     }
@@ -377,8 +377,8 @@ describe('t428u R4-S3/S4 · undefined 字段防护与同口径显式 mains 合�
   });
 });
 
-describe('t428u R4-S2 · 快照恢复对比区封顶 COMPARES_PER_CARD_CAP', () => {
-  it('污染快照（单卡 4 条合法 RU compares）恢复后封顶 3，且全部仍合法', () => {
+describe('快照恢复对比区只受单图折线上限约束', () => {
+  it('单卡 4 条合法 RU compares 恢复后全部保留，不再截到 3 条', () => {
     const fourCompares: ProductSelection[] = [
       { modelId: 'cmp-apple-iphone-16', romram: '128 GB', skuIds: ['cmp-apple-iphone-16__128gb__black'] },
       { modelId: 'cmp-apple-iphone-16-plus', romram: '128 GB', skuIds: ['cmp-apple-iphone-16-plus__128gb__black'] },
@@ -392,9 +392,9 @@ describe('t428u R4-S2 · 快照恢复对比区封顶 COMPARES_PER_CARD_CAP', () 
     }));
     act(() => actions().set({ countryCode: 'RU' }));
     expect(state().countryCode).toBe('RU');
-    // 快照优先恢复主品；对比区 >3 被封到 3（clampMains 卡配额），条目全部合法
+    // 快照优先恢复主品；4 条对比全部保留且合法
     expect(state().mains[0].main).toEqual(MATE_X6_RU);
-    expect(state().mains[0].compares.length).toBe(3);
+    expect(state().mains[0].compares).toEqual(fourCompares);
     for (const compare of state().mains[0].compares) {
       expect(selectionValidFor(compare, 'RU', 'phone')).toBe(true);
     }

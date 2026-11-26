@@ -41,8 +41,8 @@ function writeJson(key: string, value: unknown): void {
 // ---------------- 默认竞品矩阵（LPL3.config.benchmark） ----------------
 
 /** 每个我司「国家×型号×配置」的生效竞品硬上限（与维表截断、配置编辑侧同一条规则）。
- *  2026-11-02（Eason）：4 → 3，与每组对比产品硬上限（mainSelection.COMPARES_PER_CARD_CAP）
- *  同值——自动匹配带出的竞品不会超过一组能放下的对比数。 */
+ *  2026-11-02（Eason）：4 → 3，约束自动匹配矩阵带出的竞品数量；
+ *  不限制筛选器中继续手动添加对比产品。 */
 export const BENCHMARK_CAP_PER_CONFIG = 3;
 
 /**

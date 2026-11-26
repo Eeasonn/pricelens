@@ -28,9 +28,8 @@
 //   浮窗宽度 = 四列自适应宽之和（trailing 计入列宽，信息不许截断），
 //   上限 min(视口-48, 1100)，超限才横向滚动。
 // 主品空缺 = 空组（仅历史数据可能出现；空态不提供先加对比入口）。
-// 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；配额每卡
-// 1 主品 + ≤3 对比（2026-11-02 Eason 硬性限制，COMPARES_PER_CARD_CAP）在选择时
-// 收口，配满后「添加对比产品」置灰并提示「每组最多 3 款对比产品」，卡数 ≤ 8；即改即存。
+// 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；单图含主品
+// 最多 8 条折线，在选择时收口，配满后「添加对比产品」置灰并提示，卡数 ≤ 8；即改即存。
 // 添加主分析产品 = 最后一个组框向下延长的底边正中的显性大按钮。
 // 破坏性动作轻确认：删整组、清空全部。
 // 模板（第一百三十一轮增强、第一百三十三轮改纯插入）：顶栏与卡级「＋模板」
@@ -134,7 +133,6 @@ import { color, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } f
 import {
   cardQuota,
   COMPARE_CAP_HINT,
-  COMPARES_PER_CARD_CAP,
   isHuaweiModel,
   MAINS_CAP,
   newCardId,
@@ -453,7 +451,7 @@ function LevelSwitchPopover({
     // 与主品同型号同配置才拦（selKey 级，与编辑浮窗/自动匹配矩阵同口径）；
     // 同型号不同配置允许对比，不按整型号拦
     if (card.main && selKey(card.main) === nodeSelKey(r)) return;
-    // 每组对比硬上限（COMPARES_PER_CARD_CAP）：点行名称加第 4 款不再静默无效
+    // 单图折线上限：达到上限后明确提示，不再按 3 款对比拦截
     if (card.compares.length >= cardQuota(card)) {
       message.info(COMPARE_CAP_HINT);
       return;
@@ -1565,7 +1563,7 @@ function PickerPanel() {
     if (totalAdds) parts.push(`补充 ${totalAdds} 个对比`);
     let tip = `加入当前选择：${parts.join('、')}`;
     if (overflowCards) tip += `；受 ${MAINS_CAP} 组上限所限，${overflowCards} 组放不下`;
-    if (overflowCompares) tip += `；${overflowCompares} 个对比超出每组 ${COMPARES_PER_CARD_CAP} 款上限放不下`;
+    if (overflowCompares) tip += `；${overflowCompares} 个对比超出单图折线上限放不下`;
     return tip;
   };
 

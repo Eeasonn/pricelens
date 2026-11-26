@@ -52,7 +52,7 @@
 // 只保留隐藏滚动条的横向滚动作兜底，不出箭头；②主品药丸（含左侧「店铺同步」）
 // 固定占位，永不压缩、不滚出；③空间不足只压缩对比区，对比区最窄 = 一颗药丸预算
 // + 两侧 ‹›；块内 ‹› 改按实测溢出出现（ResizeObserver + 滚动监听），不再按个数；
-// ④每组对比产品硬上限 3 款（mainSelection.COMPARES_PER_CARD_CAP）。
+// ④对比区直显预算保持 3 颗药丸，更多已选竞品通过块内滚动查看。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Popover } from 'antd';
@@ -60,15 +60,14 @@ import ChannelSelectPopover from '../../components/ChannelSelectPopover';
 import { DownOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons';
 import BrandDot, { brandLabelOf, fullModelName } from '../../components/BrandMark';
 import { dimProduct, productRowBySku } from '../../data';
-import { COMPARES_PER_CARD_CAP } from '../../state/mainSelection';
 import { curveNameOf } from './chartModel';
 import type { LegendGroup } from './tableModel';
 import { color, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import { scrollBehaviorOf } from '../../theme/motion';
 
-/** 块内对比区最宽 = 3 颗药丸预算（与每组对比硬上限同值；主品药丸不占此预算、
- *  恒可见）。空间不足时对比区压缩，实测溢出才出块内 ‹›。 */
-const COMPARES_VISIBLE = COMPARES_PER_CARD_CAP;
+/** 块内对比区最宽 = 3 颗药丸预算（只是直显预算，不限制已选数量；主品药丸
+ *  不占此预算、恒可见）。空间不足时对比区压缩，实测溢出才出块内 ‹›。 */
+const COMPARES_VISIBLE = 3;
 /** 单个药丸的展示宽度预算（块内滚动容器 maxWidth = 3×预算 + 间距）
  *  第一百七十轮：178 → 220；第一百七十二轮：220 → 240（Eason：再宽一点） */
 const PILL_W_BUDGET = 240;

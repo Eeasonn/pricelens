@@ -16,7 +16,7 @@
 // 契约：
 //  - 显式 mains（Agent filterPatch / undo 快照，mains 键即显式，含空数组）：
 //    精确合法配置保留，同型号映射目标国首个合法配置（ID 16+512GB），型号整体
-//    缺席回落默认；对比区按目标国重建且 ≤3；目标国快照同步更新；显式 [] =
+//    缺席回落默认；对比区按目标国重建且不超过单图折线上限；目标国快照同步更新；显式 [] =
 //    清空态（不查快照不回填默认）。
 //  - 普通 UI 换国（补丁不带 mains）：存离建国快照 → 目标国快照优先（含 SKU
 //    校验、对比区剥离封顶）→ 无快照按同型号映射旧选择（R4-m1）→ 同型号也无
@@ -218,7 +218,7 @@ describe('t428u R3 M1b · 普通 UI 换国（补丁不带 mains）', () => {
 });
 
 describe('t428u R3 M1a · 显式 mains 跨国（Agent filterPatch 口径）', () => {
-  it('RU Mate X6 12+512 显式切 ID：同型号映射 16+512GB，对比区按 ID 重建 ≤3，快照更新', () => {
+  it('RU Mate X6 12+512 显式切 ID：同型号映射 16+512GB，对比区按 ID 重建，快照更新', () => {
     const { state, actions } = renderFilters();
     act(() => actions().setMains([mateX6RuCard(true)]));
     // 与 priceAdvantage scopePatch 同形：国家 + 完整 mains + 时间/平台口径
@@ -230,8 +230,8 @@ describe('t428u R3 M1a · 显式 mains 跨国（Agent filterPatch 口径）', ()
     }));
     expect(state().countryCode).toBe('ID');
     expect(state().mains[0].main).toEqual(MATE_X6_ID);
-    // 对比区按目标国矩阵重建（auto 卡），全部在 ID 合法且 ≤3
-    expect(state().mains[0].compares.length).toBeLessThanOrEqual(3);
+    // 对比区按目标国矩阵重建（auto 卡），全部在 ID 合法且不超过单图折线上限
+    expect(state().mains[0].compares.length).toBeLessThanOrEqual(7);
     for (const compare of state().mains[0].compares) {
       expect(selectionValidFor(compare, 'ID', 'phone')).toBe(true);
     }

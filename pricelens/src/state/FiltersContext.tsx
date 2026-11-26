@@ -469,7 +469,7 @@ function switchScopeIterate(prev: FiltersState, next: FiltersState, explicitMain
       if (mains && (!mains.length || mainsValidFor(mains, applied.countryCode, applied.industry, applied.financingType, applied.financingTerms))) {
         // R4-S2（同步稳定线 5f5898d）：快照还原同样过整组合法化——主品逐 SKU
         // 过滤/同型号映射，手动对比区按目标口径校验/映射、selKey 去重、排除与
-        // 主品同组的条目、封 COMPARES_PER_CARD_CAP（cap3）；auto 标记保留，auto
+        // 主品同组的条目、按单图折线上限收口；auto 标记保留，auto
         // 卡对比区由 withAutoOn 按目标国矩阵重算。空快照 = 显式清空态原样还原。
         if (!mains.length) return { ...applied, mains: [] };
         const restored = remapMainsForScope(mains, applied.countryCode, applied.industry);
@@ -560,7 +560,7 @@ function applyScopeDefaultsStable(s: FiltersState, force: boolean): FiltersState
 /** 口径切换（国家/产业变化）+ 按国快照。R4-m1 普通换国优先级：
  *  0) 切走前无条件存离建国快照（含显式清空的空数组）；
  *  1) 目标国存在仍合法的会话快照 → 优先还原（R4-S2：对比区同口径校验/剥离、
- *     封 COMPARES_PER_CARD_CAP，保留合法手动搭配与 auto 模式）；
+ *     封 MAX_LINES_PER_CHART，保留合法手动搭配与 auto 模式）；
  *  2) 无快照 → 旧选择同型号映射目标国首个合法配置（RU Mate X6 12+512 →
  *     ID 16+512），绝不把继承口径误当显式选择写回来源国快照；
  *  3) 同型号也无 → 目标国默认重算。
@@ -624,7 +624,7 @@ function scopeFallbackStable(
       if (mains && mainsValidFor(mains, applied.countryCode, applied.industry, applied.financingType, applied.financingTerms)) {
         // R4-S2：快照还原同样过整组合法化——主品逐 SKU 过滤，手动对比区按目标
         // 口径校验/剥离（型号缺席剔除、配置漂移同型号映射）、selKey 去重、对比区
-        // 封 COMPARES_PER_CARD_CAP；auto 标记与合法手动搭配保留
+        // 封 MAX_LINES_PER_CHART；auto 标记与合法手动搭配保留
         const restored = remapMainsForScope(mains, applied.countryCode, applied.industry);
         if (restored) {
           return { ...applied, mains: restored.map((c) => (c.auto && c.main ? withAutoOn(c, applied.countryCode) : c)) };
