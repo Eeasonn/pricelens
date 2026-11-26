@@ -376,9 +376,9 @@ describe('五审 M3 · 明确多产品分别比平台：逐产品投影（不再
 describe('五审 m1 · 真实最近有价周（不拿日历尾周伪装）', () => {
   const allWeeks = dimTime.map((t) => t.week_id);
 
-  it('latestPricedWeekOfSelection：Y63 与 nova 12+256 黑均回到新数据的最近有价周 202645', () => {
-    expect(latestPricedWeekOfSelection(Y63, allWeeks, 'RU', 'usd')).toBe('202645');
-    expect(latestPricedWeekOfSelection(NOVA_12256, allWeeks, 'RU', 'usd')).toBe('202645');
+  it('latestPricedWeekOfSelection：Y63 与 nova 12+256 黑均回到新数据的最近有价周 202648', () => {
+    expect(latestPricedWeekOfSelection(Y63, allWeeks, 'RU', 'usd')).toBe('202648');
+    expect(latestPricedWeekOfSelection(NOVA_12256, allWeeks, 'RU', 'usd')).toBe('202648');
   });
 
   it('scope 内全程无价 → null（不静默扩大 scope、不跑出范围）', () => {

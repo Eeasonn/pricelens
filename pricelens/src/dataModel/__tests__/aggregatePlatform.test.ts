@@ -118,10 +118,10 @@ describe('reference FX getter', () => {
 
   it('getFxRate() = 当前国家本币的最新 per-USD（dim_fx 最新月中位数）；不再是可保存的用户参考汇率', () => {
     setLocalCurrencyByCountry('RU');
-    // 84.04 = dim_fx RUB 202610 per_usd（ingest 从 fact 行内汇率取中位数）
+    // 81.93 = dim_fx RUB 202611 per_usd（最新月，ingest 从 fact 行内汇率取中位数；2026-11-26 W47/W48 批次刷新）
     expect(getLocalCurrency()).toBe('RUB');
     expect(getFxRate()).toBe(latestPerUsd('RUB'));
-    expect(getFxRate()).toBe(81.75);
+    expect(getFxRate()).toBe(81.93);
 
     // 图表 perUsd 锚定与 FX 注册同源：local → 当前本币 per-USD；usd → 1
     expect(perUsdOf('local')).toBe(getFxRate());

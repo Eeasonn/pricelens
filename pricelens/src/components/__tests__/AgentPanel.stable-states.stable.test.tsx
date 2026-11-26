@@ -159,7 +159,9 @@ describe('t428u AgentPanel · 药丸动作真实跳转（保留当前上下文�
     const before = window.location.href;
     fireEvent.click(within(panel).getByRole('button', { name: '打开价格预警' }));
     const confirmation = within(panel).getByRole('group', { name: '确认调整看板筛选' });
-    expect(confirmation.textContent).toContain('时间起点');
+    // 确认框只列出真正变化的筛选键（数据窗 dependent）：30 周全量窗下 delta = 自适应开→关
+    //（2026-11-26 W47/W48 批次前窗口≠全窗口，delta 还含时间起点/终点）
+    expect(confirmation.textContent).toContain('自动时间范围');
     expect(window.location.href).toBe(before);
     fireEvent.click(within(panel).getByRole('button', { name: '取消' }));
     expect(within(panel).queryByRole('group', { name: '确认调整看板筛选' })).toBeNull();

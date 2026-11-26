@@ -41,10 +41,10 @@ describe('sellersOfChannel（渠道内卖家清单）', () => {
     expect(dns[0].weeks).toBeGreaterThan(0);
   });
 
-  it('每家卖家 weeks ≥ 1 且 ≤ 全域周数（24）', () => {
+  it('每家卖家 weeks ≥ 1 且 ≤ 全域周数（30）', () => {
     for (const x of sellersOfChannel(CC, CH)) {
       expect(x.weeks).toBeGreaterThanOrEqual(1);
-      expect(x.weeks).toBeLessThanOrEqual(24);
+      expect(x.weeks).toBeLessThanOrEqual(30);
     }
   });
 });
