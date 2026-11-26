@@ -403,6 +403,10 @@ writeFileSync(
   'utf8',
 );
 
+// 包内重建与冒烟会让 Python 在包根生成 __pycache__（macOS 上的字节码缓存，对内部机器无用
+// 且不该出现在交付件里）——算校验和之前清掉
+rmSync(join(outDir, '__pycache__'), { recursive: true, force: true });
+
 // ---- 校验和 ----
 const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));

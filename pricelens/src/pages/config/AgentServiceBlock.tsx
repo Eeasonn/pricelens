@@ -348,6 +348,7 @@ export default function AgentServiceBlock({ canEdit = true }: { canEdit?: boolea
         return rest;
       });
       setTestFeedback(null);
+      setNotice(null); // 「已获取 N 个模型」之类的旧提示一并清掉，不与清空后的表单打架
       message.success(`${preset.name} 的配置与密钥已从本机删除`);
     } catch (error) {
       message.error(`删除失败：${errorText(error, '请稍后重试')}`);

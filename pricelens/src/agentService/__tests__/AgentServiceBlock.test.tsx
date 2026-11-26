@@ -427,6 +427,9 @@ describe('本机服务 / 自定义 / 权限', () => {
     fake.state.active = { provider: 'zhipu', model: 'glm-5.3-flash' };
     await renderLoaded();
     selectTab('智谱');
+    // 先拉一次模型列表，让「已获取 N 个模型」提示出现——删除后这句旧提示必须一并清掉
+    fireEvent.click(btn('获取模型列表'));
+    await waitFor(() => expect(screen.getByText(/已获取 \d+ 个模型/)).toBeTruthy());
     fireEvent.click(btn('改用本地引擎'));
     await waitFor(() => expect(server.callsTo('POST', '/api/agent/active')).toHaveLength(1));
     expect(server.callsTo('POST', '/api/agent/active')[0]!.body).toEqual({});
@@ -437,6 +440,7 @@ describe('本机服务 / 自定义 / 权限', () => {
     fireEvent.click(btnExact('删除'));
     await waitFor(() => expect(fake.state.providers.zhipu).toBeUndefined());
     expect(server.callsTo('POST', '/api/agent/providers')[0]!.body).toEqual({ provider: 'zhipu', remove: true });
+    await waitFor(() => expect(screen.queryByText(/已获取 \d+ 个模型/)).toBeNull());
     await waitFor(() => expect(tab('智谱').textContent).not.toContain('已配置'));
   });
 
