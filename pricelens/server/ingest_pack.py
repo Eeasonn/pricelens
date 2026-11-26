@@ -1458,7 +1458,8 @@ def build_map_product(xlsx_rows, offer_rows, psi_rows):
     seen_psi = set()
 
     def base_row(**kw):
-        row = {"country": "", "category": "", "brand": "", "model": "", "color_size": "",
+        row = {"country": "", "category": "", "brand": "", "model": "",
+               "orig_brand": "", "orig_model": "", "color_size": "",
                "series": "", "category1": "", "category2": "", "category3": "", "category4": "",
                "info": "", "psi_product": "", "product_sku": "", "is_active": 1,
                "match_status": "offer_only", "updated_at": _today_str(), "maintainer": "auto",
@@ -1466,10 +1467,11 @@ def build_map_product(xlsx_rows, offer_rows, psi_rows):
         row.update(kw)
         return row
 
-    # 自动 offer 行索引（xlsx 人工行的 model_id/sku_id 回填源；xlsx 结构无 ID 列）
+    # 自动 offer 行索引（xlsx 人工行的 model_id/sku_id 回填源；xlsx 结构无 ID 列）。
+    # 同键多行全存——挂接即整键压制（人工行接管整个 (国家, 型号, 规格键) 组合）
     auto_by_key = {}
     for o in offer_rows:
-        auto_by_key.setdefault((o["country"], _norm_text(o["model"]), _cat_key_of_text(o["cat1"])), o)
+        auto_by_key.setdefault((o["country"], _norm_text(o["model"]), _cat_key_of_text(o["cat1"])), []).append(o)
 
     for r in xlsx_rows or []:
         # 全空/无键行跳过（Excel 尾部残留空行、误插行不入表）
@@ -1482,12 +1484,20 @@ def build_map_product(xlsx_rows, offer_rows, psi_rows):
             status = "matched" if (pp and ps) else ("psi_only" if pp else "offer_only")
         act = jnum(r.get("is_active"))
         # 工程键回填：xlsx 行按 (国家, 型号弱归一, 规格键) 挂接引擎 SKU（音频等
-        # 无规格键行以 key=None 精确对位）；同键多 SKU 取首条（颜色级由人工定夺）
-        auto = auto_by_key.get((cc, _norm_text(jstr(r.get("model")).strip()),
-                                _cat_key_of_text(jstr(r.get("category1")).strip())))
+        # 无规格键行以 key=None 精确对位）；同键多 SKU 取首条（颜色级由人工定夺）。
+        # 人工改过 model 原文时用 orig_model（修订前引擎值）兜底；挂接即整键压制
+        cat_key = _cat_key_of_text(jstr(r.get("category1")).strip())
+        autos = (auto_by_key.get((cc, _norm_text(jstr(r.get("model")).strip()), cat_key))
+                 or auto_by_key.get((cc, _norm_text(jstr(r.get("orig_model")).strip()), cat_key))
+                 or [])
+        auto = autos[0] if autos else None
+        for a in autos:
+            a["_covered"] = True
         rows.append(base_row(
             country=cc, category=jstr(r.get("category")).strip(), brand=jstr(r.get("brand")).strip(),
-            model=jstr(r.get("model")).strip(), color_size=jstr(r.get("color_size")).strip(),
+            model=jstr(r.get("model")).strip(),
+            orig_brand=jstr(r.get("orig_brand")).strip(), orig_model=jstr(r.get("orig_model")).strip(),
+            color_size=jstr(r.get("color_size")).strip(),
             series=jstr(r.get("series")).strip() or (auto["series"] if auto else ""),
             category1=jstr(r.get("category1")).strip(), category2=jstr(r.get("category2")).strip(),
             category3=jstr(r.get("category3")).strip(), category4=jstr(r.get("category4")).strip(),
@@ -1502,7 +1512,7 @@ def build_map_product(xlsx_rows, offer_rows, psi_rows):
             seen_psi.add((pp, ps))
 
     for o in offer_rows:
-        if (o["country"], o["model"], o["color_size"]) in seen_offer:
+        if o.get("_covered") or (o["country"], o["model"], o["color_size"]) in seen_offer:
             continue
         cat3 = ""
         if o["industry"] == "tablet":
@@ -1888,7 +1898,7 @@ LEGACY_TABLES = (
 )
 # schema 版本（PRAGMA user_version）：v1/v2 落库从未设置（=0），v3=3、v3.1（map_region
 # 瘦身三列）=4——版本不符时 _sqlite_clear_and_load 先整体 DROP 再建，防旧结构残留
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 -- ODS 原样层（数据建模方案 v2 §2：offer 底表 29 规范列 / PSI 表 7 规范列+旧形态 2 列）
@@ -1913,9 +1923,11 @@ CREATE TABLE IF NOT EXISTS ods_psi (
     extra_json TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_ods_psi_pack ON ods_psi(pack_id);
--- MAP 匹配配置层（§3：统一匹配表 17 列 + 工程键；三张配置表 = xlsx 权威行）
+-- MAP 匹配配置层（§3：统一匹配表 + 工程键；xlsx「匹配表(补录)」页签=权威；
+-- orig_* = 人工修订前的引擎原值，供清洗对照）
 CREATE TABLE IF NOT EXISTS map_product (
-    country TEXT, category TEXT, brand TEXT, model TEXT, color_size TEXT,
+    country TEXT, category TEXT, brand TEXT, model TEXT,
+    orig_brand TEXT, orig_model TEXT, color_size TEXT,
     series TEXT, category1 TEXT, category2 TEXT, category3 TEXT, category4 TEXT,
     info TEXT, psi_product TEXT, product_sku TEXT,
     is_active INTEGER, match_status TEXT, updated_at TEXT, maintainer TEXT,
@@ -2054,9 +2066,11 @@ def _sqlite_clear_and_load(conn, raw_pack, built, pack_id, kind="v3-offers"):
           r.get("extra_json")] for ix, r in enumerate(psi_rows)])
     # MAP：统一匹配表（三源合并行）+ 配置三表（xlsx 权威行原样）
     cur.executemany(
-        f"INSERT INTO map_product VALUES ({','.join('?' * 20)})",
+        f"INSERT INTO map_product VALUES ({','.join('?' * 22)})",
         [[r.get("country") or None, r.get("category") or None, r.get("brand") or None,
-          r.get("model") or None, r.get("color_size") or None, r.get("series") or None,
+          r.get("model") or None,
+          r.get("orig_brand") or None, r.get("orig_model") or None,
+          r.get("color_size") or None, r.get("series") or None,
           r.get("category1") or None, r.get("category2") or None, r.get("category3") or None,
           r.get("category4") or None, r.get("info") or None,
           r.get("psi_product") or None, r.get("product_sku") or None,
