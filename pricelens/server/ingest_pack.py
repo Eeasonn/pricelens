@@ -2057,6 +2057,33 @@ def _sqlite_clear_and_load(conn, raw_pack, built, pack_id, kind="v3-offers"):
          for r in (built.get("mapProduct") or [])])
     cfg = (built.get("configTables") or {}) if isinstance(built, dict) else {}
     # 补录/配置层：xlsx 权威行规范化落库（v3：竞品配置 17+1 列，不再 row_json 照存）
+    comp_rows = cfg.get("competitorRows") or []
+    if not comp_rows:
+        # xlsx「竞品匹配」页签未建（过渡期）：从生效配对（config.json matrix，ID 直连）
+        # 回填 17+1 列业务原文——表不为空、行行可溯；页签建立后 xlsx 行自然接管
+        prod_by_id = {p["sku_id"]: p for p in ((built.get("dims") or {}).get("product") or [])}
+        model_by_id = {}
+        for p in (built.get("dims") or {}).get("product") or []:
+            if p.get("is_own") and p["model_id"] not in model_by_id:
+                model_by_id[p["model_id"]] = p
+        region_by_cc = {r["country_code"]: r for r in (built.get("dims") or {}).get("region") or []}
+        for b in (built.get("dims") or {}).get("benchmark") or []:
+            own = model_by_id.get(b.get("own_model_id")) or {}
+            com = prod_by_id.get(b.get("competitor_sku_id")) or {}
+            rg = region_by_cc.get(b.get("country_code")) or {}
+            comp_rows.append({
+                "country": rg.get("country_name") or b.get("country_code"),
+                "category": CAT_CN.get(own.get("industry"), own.get("industry")),
+                "main_brand": own.get("brand"), "main_model": own.get("model_name"),
+                "main_series": own.get("series"),
+                "main_category1": b.get("own_romram"), "main_category2": own.get("cat2"),
+                "main_category3": "", "main_category4": "",
+                "com_brand": com.get("brand"), "com_series": com.get("series"),
+                "com_product": com.get("model_name"),
+                "com_category1": com.get("cat1") or com.get("romram"),
+                "com_category2": com.get("cat2"), "com_category3": "", "com_category4": "",
+                "comp_rank": b.get("sort"), "is_active": 1,
+            })
     cur.executemany(f"INSERT INTO cfg_competitor VALUES ({','.join('?' * 18)})",
                     [[jstr(r.get("country")).strip(), jstr(r.get("category")).strip(),
                       jstr(r.get("main_brand")).strip(), jstr(r.get("main_model")).strip(),
@@ -2068,7 +2095,7 @@ def _sqlite_clear_and_load(conn, raw_pack, built, pack_id, kind="v3-offers"):
                       jstr(r.get("com_category1")).strip(), jstr(r.get("com_category2")).strip(),
                       jstr(r.get("com_category3")).strip(), jstr(r.get("com_category4")).strip(),
                       jnum(r.get("comp_rank")), jnum(r.get("is_active"))]
-                     for r in cfg.get("competitorRows") or []])
+                     for r in comp_rows])
     cur.executemany("INSERT INTO map_price_band VALUES (?,?,?,?,?,?)",
                     [[jstr(r.get("country")).strip(), jstr(r.get("category")).strip(),
                       jstr(r.get("price_band")).strip(), jnum(r.get("band_sort")),
