@@ -372,7 +372,8 @@ const pyVer = spawnSync('python3', ['--version'], { encoding: 'utf8' }).stdout.t
 // 同源，仅构建标记不同）——只有这一项时如实说明，不写成「未提交文件」吓到内部同事
 const versionDirtyNote = (files) => {
   if (files.length === 0) return '构建时工作区干净';
-  if (files.length === 1 && files[0] === ' M PriceLens.html') {
+  // git status --porcelain 每行是「XY 路径」，首行开头的空格会被外层 trim() 吃掉——逐行 trim 后再比
+  if (files.length === 1 && files[0].trim() === 'M PriceLens.html') {
     return '构建时工作区干净（PriceLens.html 仅为提交钩子末尾重新同步单文件留下的构建标记差异，与 web/index.html 同源）';
   }
   return `构建时未提交的文件：\n${files.map((l) => `  ${l}`).join('\n')}`;
