@@ -6,10 +6,11 @@ export const DEFAULT_GLM_MODEL = 'glm-5.3-flash';
 /**
  * 模型白名单：env（GLM_MODEL）只能覆写成列表内的型号。
  * 放开新型号 = 一次显式的代码变更，而不是任何客户端/环境可注入的字符串。
- * 当前型号定为 glm-5.3-flash（2026-11-04 实测）。
+ * 默认仍为 glm-5.3-flash；glm-5.4 仅作为显式 env 覆写开放。
  */
 export const GLM_MODEL_WHITELIST: readonly string[] = [
   'glm-5.3-flash',
+  'glm-5.4',
 ];
 
 export const DEFAULT_RATE_LIMIT_MAX = 20;

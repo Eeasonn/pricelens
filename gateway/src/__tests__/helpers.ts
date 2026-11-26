@@ -111,10 +111,11 @@ export function isAgentResponseLike(value: unknown): boolean {
   if (!Array.isArray(response.steps) || !Array.isArray(response.cards) || !Array.isArray(response.citations) || !Array.isArray(response.suggestions)) return false;
   const provider = response.provider as { name?: unknown; model?: unknown } | undefined;
   if (provider !== undefined && (!provider || typeof provider !== 'object' || typeof provider.name !== 'string' || typeof provider.model !== 'string')) return false;
-  if ((response.suggestions as unknown[]).some((entry) => typeof entry !== 'string')) return false;
+  if ((response.suggestions as unknown[]).some((entry) => typeof entry !== 'string'
+    && (!entry || typeof entry !== 'object' || typeof (entry as Record<string, unknown>).label !== 'string' || typeof (entry as Record<string, unknown>).prompt !== 'string'))) return false;
   return (response.cards as unknown[]).every((card) => {
     if (!card || typeof card !== 'object') return false;
-    return ['filter', 'table', 'chart', 'alert', 'forecast_explanation'].includes(String((card as Record<string, unknown>).kind));
+    return ['filter', 'table', 'chart', 'alert', 'forecast_explanation', 'price_advantage', 'tool_call'].includes(String((card as Record<string, unknown>).kind));
   });
 }
 

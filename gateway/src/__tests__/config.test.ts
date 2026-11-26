@@ -25,7 +25,8 @@ describe('parseAllowedOrigins', () => {
 });
 
 describe('resolveModel', () => {
-  it('allows GLM_MODEL overrides only inside the whitelist (glm-5.3-flash)', () => {
+  it('allows GLM_MODEL overrides only inside the whitelist (glm-5.3-flash and glm-5.4)', () => {
+    expect(resolveModel('glm-5.4')).toBe('glm-5.4');
     expect(resolveModel('glm-5.3-flash')).toBe('glm-5.3-flash');
     expect(resolveModel('glm-4.5-flash')).toBe('glm-5.3-flash');
     expect(resolveModel('some-arbitrary-model')).toBe('glm-5.3-flash');

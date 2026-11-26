@@ -34,13 +34,13 @@ export function parseModelJson(text: string): ModelNarrative | null {
 }
 
 /** 建议 ≤3 条：只收非空字符串；模型没有可用建议时回落 baseline。 */
-export function clampSuggestions(raw: unknown, fallback: readonly string[]): string[] {
+export function clampSuggestions(raw: unknown, fallback: readonly BaselineResponse['suggestions'][number][]): BaselineResponse['suggestions'][number][] {
   const list = Array.isArray(raw)
     ? (raw as unknown[])
         .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
         .map((entry) => entry.trim())
     : [];
-  const source = list.length ? list : [...fallback];
+  const source: BaselineResponse['suggestions'][number][] = list.length ? list : [...fallback];
   return source.slice(0, 3);
 }
 

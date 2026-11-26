@@ -21,7 +21,7 @@ npm install
 npx tsc --noEmit      # 严格类型检查
 npx vitest run        # 80 个单测，零网络（上游 fetch 全 mock）
 cp .dev.vars.example .dev.vars   # 然后编辑 .dev.vars 填入本地 key（已被 .gitignore 忽略）
-npx wrangler dev      # 本地起网关，默认 http://127.0.0.1:8787
+npx wrangler dev --port 8789   # 本地起网关；避免与本机其他 8787/8788 服务冲突
 ```
 
 架构分层：`src/config.ts` / `origins.ts` / `rateLimit.ts` / `quota.ts` / `prompt.ts` / `validate.ts` / `merge.ts` / `sse.ts` / `glm.ts` 全部是纯函数；运行时入口只有 `index.ts`（持有 isolate 级状态）和 `handlers.ts`（编排）。

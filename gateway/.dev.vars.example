@@ -7,10 +7,10 @@ GLM_API_KEY=your-bigmodel-api-key-placeholder
 # 跨域白名单（逗号分隔）。生产环境用 wrangler.toml [vars] 或 dashboard 配置；
 # 未配置 = 拒绝所有跨域请求（fail-closed），仅 health 例外。
 # 条目自动归一到 scheme+host+port，写 Pages 子路径也可以。
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5177
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5177,http://127.0.0.1:4174,http://127.0.0.1:8789
 
 # 模型覆写：必须在 src/config.ts 的 GLM_MODEL_WHITELIST 内，否则回落 glm-5.3-flash。
-GLM_MODEL=glm-5.3-flash
+GLM_MODEL=glm-5.4
 
 # 思考模式覆写：glm-5.3-flash 是思考模型；disabled 保证 30s 客户端超时内出正文。
 GLM_THINKING=disabled

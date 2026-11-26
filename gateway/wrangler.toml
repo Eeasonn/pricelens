@@ -14,7 +14,7 @@ compatibility_date = "2025-05-05"
 [vars]
 # 生产值（2026-11-04 主线部署时写入）。白名单条目自动归一到 scheme+host+port，
 # 所以写 Pages 子路径 https://eeasonn.github.io/pricelens 也可以。
-ALLOWED_ORIGINS = "https://eeasonn.github.io/pricelens,http://localhost:5173,http://localhost:5177"
+ALLOWED_ORIGINS = "https://eeasonn.github.io/pricelens,http://localhost:5173,http://localhost:5177,http://127.0.0.1:4174,http://127.0.0.1:8789"
 # 未配置 ALLOWED_ORIGINS = 拒绝所有跨域请求（fail-closed），仅 health 例外。
 # 以下可选项按需开启（不配置时使用 src/config.ts 中的默认值）：
 GLM_MODEL = "glm-5.3-flash"      # 模型覆写，必须在 src/config.ts 白名单内
