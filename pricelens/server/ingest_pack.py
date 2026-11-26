@@ -1837,6 +1837,53 @@ def build_promo_from_rows(promo_rows):
 # ================================================================ v2 包组装（applyDataPack v3 分支对等）
 
 
+def apply_human_overrides(built, match_rows):
+    """人工匹配行（xlsx「匹配表(补录)」权威）→ sku 字典覆盖：series/brand/model 修订
+    生效，并为 sku 字典新增 spec_display（cat1/cat2/cat3 展示串）/spec_info（次级筛选
+    值，IoT 少一层=空）。sku 对应：挂接 sku_id 优先；行 info 与 sku.color 不符时在同
+    model 同规格内按 info 重选（防同键多颜色取首条时的颜色错位）。"""
+    dims_prod = built.get("dims", {}).get("product") or []
+    if not dims_prod or not match_rows:
+        return
+    by_sku = {p["sku_id"]: p for p in dims_prod}
+    diag = {"ovrRows": 0, "ovrApplied": 0, "ovrReselected": 0, "ovrUnhooked": 0}
+    for r in match_rows:
+        if r.get("source") != "xlsx" or not r.get("sku_id"):
+            continue
+        diag["ovrRows"] += 1
+        target = by_sku.get(r["sku_id"])
+        info_n = _norm_text(jstr(r.get("info")).strip())
+        cat1_n = _norm_text(jstr(r.get("category1")).strip())
+        if target is not None and info_n:
+            if _norm_text(jstr(target.get("color")).strip()) != info_n:
+                alt = next((p for p in dims_prod
+                            if p["model_id"] == target["model_id"]
+                            and _norm_text(jstr(p.get("color")).strip()) == info_n
+                            and (not cat1_n
+                                 or _norm_text(jstr(p.get("romram")).strip()) == cat1_n
+                                 or _norm_text(jstr(p.get("cat1") or "").strip()) == cat1_n)), None)
+                if alt is not None:
+                    target = alt
+                    diag["ovrReselected"] += 1
+        if target is None:
+            diag["ovrUnhooked"] += 1
+            continue
+        diag["ovrApplied"] += 1
+        for field, val in (("series", r.get("series")), ("brand", r.get("brand")),
+                           ("model_name", r.get("model"))):
+            v = jstr(val).strip()
+            if v:
+                target[field] = v
+        # 直写 romram/color（次级显示与筛选器的既有消费字段，前端零改动；
+        # sku_id 契约不受影响——ID 字符串保持不变）。IoT 行 color_size 空 → romram 空
+        # = 产品筛选器自然少一层。
+        target["romram"] = jstr(r.get("color_size")).strip() or "—"
+        target["color"] = jstr(r.get("info")).strip() or "—"
+        target["spec_display"] = jstr(r.get("color_size")).strip()
+        target["spec_info"] = jstr(r.get("info")).strip()
+    built["diag"]["humanOverrides"] = diag
+
+
 def build_v2_pack(raw_pack, ctx):
     offers = raw_pack.get("offers") if isinstance(raw_pack.get("offers"), list) else []
     if not offers:
@@ -1849,6 +1896,7 @@ def build_v2_pack(raw_pack, ctx):
     cfg = ctx.get("configTables") or {}
     psi_rows = normalize_psi_rows(raw_pack.get("sales"))
     match_rows = build_map_product(cfg.get("matchRows"), _offer_inventory(built), psi_rows)
+    apply_human_overrides(built, match_rows)
     fact_sales_rows, sales_diag = derive_fact_sales(psi_rows, match_rows)
     sales_pack_rows = [sales_pack_view(s) for s in psi_rows]
     aliases = build_sales_aliases(match_rows, raw_pack.get("salesProductAliases")
