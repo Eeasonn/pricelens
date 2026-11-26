@@ -214,8 +214,9 @@ describe('数据包 v2 · PSI 销量（2026-11-17 接口预留）', () => {
       { week_id: '202643', country_code: 'RU', model_id: 'own-huawei-watch-6', cat1: '42mm', cat2: '', qty: 123 },
     ]);
     expect(salesSourceOf()).toBe('psi-weekly');
-    // 真实优先：该型号该国存在销量行 → 整模型走 PSI（42mm 配置 = 表盘维度精确命中）
-    const weekly = volumeOfConfig('own-huawei-watch-6', '42mm', 'RU');
+    // 真实优先：该型号该国存在销量行 → 整模型走 PSI（穿戴塌缩后 romram=—，表盘在 color，
+    // effectiveCatsOf 回落 color 命中 42mm；2026-11-26 批次 RU watch-6 行按新规则重写）
+    const weekly = volumeOfConfig('own-huawei-watch-6', '—', 'RU');
     expect(weekly.get('202643')).toBe(123);
     expect(weekly.has('202619')).toBe(false); // 无销量周不产值（真实周独立于价格事实周）
     // restore 后回估算口径

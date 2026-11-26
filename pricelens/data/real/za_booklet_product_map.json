@@ -1,6 +1,6 @@
 {
   "schema_version": "za-booklet-product-map-v1",
-  "generated_at": "2026-11-11T10:48:19+00:00",
+  "generated_at": "2026-11-26T08:47:57+00:00",
   "source_workbook": "ZA_VODACOM_1109.xlsx",
   "rows": [
     {
@@ -77,16 +77,19 @@
     {
       "brand": "APPLE",
       "model": "Watch SE",
-      "model_id": "cmp-apple-watch-se",
-      "sku_id": "cmp-apple-watch-se__40mmcellular__silver",
-      "romram": "—",
+      "model_id": "za-booklet-apple-watchse",
+      "sku_id": "za-booklet-apple-watchse__46mmgpscellular",
+      "romram": "规格未标明",
       "match_status": "matched-model",
-      "mapping_kind": "unique-existing-sku",
+      "mapping_kind": "ambiguous-model-sku",
       "candidate_model_ids": [
-        "cmp-apple-watch-se"
+        "cmp-apple-watch-se",
+        "za-booklet-apple-watchse"
       ],
       "candidate_sku_ids": [
-        "cmp-apple-watch-se__40mmcellular__silver"
+        "cmp-apple-watch-se__40mmcellular__silver",
+        "cmp-apple-watch-se__40mmgps__silver",
+        "za-booklet-apple-watchse__46mmgpscellular"
       ]
     },
     {
@@ -2192,13 +2195,14 @@
       "model_id": "cmp-oppo-reno-15-pro",
       "sku_id": "cmp-oppo-reno-15-pro__12-512gb__black",
       "romram": "12+512 GB",
-      "match_status": "matched-model",
-      "mapping_kind": "unique-existing-sku",
+      "match_status": "matched-spec",
+      "mapping_kind": "spec-existing-sku",
       "candidate_model_ids": [
         "cmp-oppo-reno-15-pro"
       ],
       "candidate_sku_ids": [
-        "cmp-oppo-reno-15-pro__12-512gb__black"
+        "cmp-oppo-reno-15-pro__12-512gb__black",
+        "cmp-oppo-reno-15-pro__12-512gb__blue"
       ]
     },
     {

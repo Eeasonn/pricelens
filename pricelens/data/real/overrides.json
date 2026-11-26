@@ -97,6 +97,11 @@
    "model_prefix": "ipad 11",
    "from_brand": "XIAOMI",
    "to_brand": "APPLE"
+  },
+  {
+   "model_prefix": "yoga tab",
+   "from_brand": null,
+   "to_brand": "LENOVO"
   }
  ],
  "benchmark_manual": [],
