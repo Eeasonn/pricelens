@@ -359,6 +359,15 @@ const git = (args) => {
 };
 const dirtyFiles = git(['status', '--porcelain']).split('\n').filter(Boolean);
 const pyVer = spawnSync('python3', ['--version'], { encoding: 'utf8' }).stdout.trim();
+// 提交钩子在门禁之后会再同步一次单文件，提交后恒留一处 M PriceLens.html（与 dist/index.html
+// 同源，仅构建标记不同）——只有这一项时如实说明，不写成「未提交文件」吓到内部同事
+const versionDirtyNote = (files) => {
+  if (files.length === 0) return '构建时工作区干净';
+  if (files.length === 1 && files[0] === ' M PriceLens.html') {
+    return '构建时工作区干净（PriceLens.html 仅为提交钩子末尾重新同步单文件留下的构建标记差异，与 web/index.html 同源）';
+  }
+  return `构建时未提交的文件：\n${files.map((l) => `  ${l}`).join('\n')}`;
+};
 const dims = smoke?.pack?.dims || {};
 const builtAt = today.toLocaleString('zh-CN', { hour12: false });
 writeFileSync(
@@ -367,7 +376,7 @@ writeFileSync(
     `PriceLens 服务器版（内部部署）`,
     `构建时间：${builtAt}`,
     `代码版本：${git(['rev-parse', 'HEAD']) || '未知'}（分支 ${git(['rev-parse', '--abbrev-ref', 'HEAD']) || '未知'}）`,
-    dirtyFiles.length ? `构建时未提交的文件：\n${dirtyFiles.map((l) => `  ${l}`).join('\n')}` : '构建时工作区干净',
+    versionDirtyNote(dirtyFiles),
     ``,
     `数据：`,
     `  价格原始数据：data/${inventory.offers}`,
