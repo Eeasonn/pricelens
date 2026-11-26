@@ -75,7 +75,8 @@ export interface ChartToolbarProps {
   yCompress?: boolean;
   onYCompress?: (v: boolean) => void;
   lineShape?: LineShapeChoice;
-  /** 折线样式的页面默认值。价格走势页沿用 auto，量价页可将 smooth 作为默认而不显示脏点。 */
+  /** 折线样式的页面默认值（缺省 smooth，2026-11-26 Eason：价格走势页与量价页默认均为
+   *  平滑）。缺省值 = 平滑时齿轮不标「已修改」；仍以 auto 为默认的调用方显式传入即可。 */
   lineShapeDefault?: LineShapeChoice;
   onLineShape?: (v: LineShapeChoice) => void;
   /** 折后价/RRP 显隐（收进 ⋯ 菜单，控件外形与原先工具行胶囊一致；默认只显示折后价） */
@@ -253,17 +254,19 @@ export default function ChartToolbar(props: ChartToolbarProps) {
   const showShapeCtl = featureOn('lineShape');
   const showPromo = props.onPromoBandsOn != null && props.onOffersOn != null;
   const showMarks = props.onChangeThreshold != null;
+  // 图层开关对调（2026-11-26 Eason：销毛率收进去，大促权益放出来）——大促档期/促销权益
+  // 回到工具行组框（showPromo），销毛率收进 ⋯ 菜单（showMargin）
+  const showMargin = props.onMarginOn != null;
   const hasDisplay =
     props.onPriceTypeToggle != null ||
     props.onTipMode != null ||
     props.onLabelMode != null ||
     props.onPointPanelToggle != null;
-  // 大促档期/促销权益收进 ⋯（2026-11-17 Eason）：showPromo = ⋯ 菜单里出现这两枚开关
-  const showMore = hasDisplay || showMarks || props.presentationSlot != null || showPromo;
+  const showMore = hasDisplay || showMarks || props.presentationSlot != null || showMargin;
   // ⋯ 按钮title 随实际收进的项生成（预测页等复用方只收部分项时不再罗列无关词）
   const moreItems = [
     props.presentationSlot != null ? '呈现' : null,
-    showPromo ? '大促档期' : null,
+    showMargin ? '销毛率' : null,
     props.onPriceTypeToggle != null ? '折后价' : null,
     props.onTipMode != null ? '页签显示' : null,
     props.onLabelMode != null ? (props.labelModeLabel ?? '价格显示') : null,
@@ -277,7 +280,8 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     (props.onLabelMode != null && props.labelMode === 'detail') ||
     props.pointPanelOpen === true ||
     props.changeThreshold != null ||
-    showPromo && (props.promoBandsOn || props.offersOn);
+    // 销毛率默认开（价格页）——收进 ⋯ 后「关」才是离开默认值
+    (showMargin && props.marginOn === false);
   const gearDirty =
     (props.compactLeft === true && props.yLimit != null && (props.yLimit.min != null || props.yLimit.max != null)) ||
     (showScaleCtl && props.sliderScale != null && Math.abs(props.sliderScale - 1) > 0.001) ||
@@ -286,7 +290,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
     // 缺省 true = 量价页等旧调用方语义不变）
     (showTiersCtl && props.currency === 'usd' && (props.showTiers ?? true) !== (props.tiersDefault ?? true)) ||
     (showCompressCtl && props.yCompress === true) ||
-    (showShapeCtl && props.lineShape != null && props.lineShape !== (props.lineShapeDefault ?? 'auto'));
+    (showShapeCtl && props.lineShape != null && props.lineShape !== (props.lineShapeDefault ?? 'smooth'));
   // 变化提醒阈值滑杆：拖动中仅本地跟随显示（滑杆/数值），松手才提交持久配置
   // ——与每格高度滑杆「松手生效」同一语言，避免拖动全程逐帧触发提醒重算
   const [dragThreshold, setDragThreshold] = useState<number | null>(null);
@@ -375,7 +379,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                 <span style={{ fontSize: 12, color: color.mute }}>折线样式</span>
                 <Segmented
                   size="small"
-                  value={props.lineShape ?? 'auto'}
+                  value={props.lineShape ?? 'smooth'}
                   onChange={(v) => props.onLineShape?.(v as LineShapeChoice)}
                   options={[
                     { label: '自适应', value: 'auto' },
@@ -385,7 +389,7 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                 />
               </div>
               <div style={{ fontSize: 11, color: color.mute, marginTop: 4, lineHeight: '16px' }}>
-                自适应 = 周度阶梯、月/季平滑（默认）；阶梯 = 方形折角；平滑 = 圆滑曲线
+                平滑 = 圆滑曲线（默认）；自适应 = 周度阶梯、月/季平滑；阶梯 = 方形折角
               </div>
             </>
           )}
@@ -447,11 +451,11 @@ export default function ChartToolbar(props: ChartToolbarProps) {
           {props.legend}
         </div>
       )}
-      {/* 功能键同一排：量 + 销毛率（2026-11-17 Eason：大促档期/促销权益收进 ⋯ 菜单，
-          组框只剩这两个图层开关），然后 ⋯。折后价/页签/价格显示/时点摘要/大促档期/
-          促销权益都在 ⋯ 内，控件外形与原先露在外面时一致。同组框语言：默认关、
+      {/* 功能键同一排：量 + 大促档期 + 促销权益（2026-11-26 Eason：销毛率收进 ⋯ 菜单，
+          大促档期/促销权益回到组框——与 11-17 的收纳对调），然后 ⋯。销毛率/折后价/页签/
+          价格显示/时点摘要在 ⋯ 内，控件外形与原先露在外面时一致。同组框语言：默认关、
           开启浅蓝勾选。 */}
-      {showRight && (props.onVolumeOn != null || props.onMarginOn != null) && (
+      {showRight && (props.onVolumeOn != null || showPromo) && (
         <div
           style={{
             display: 'flex',
@@ -471,17 +475,22 @@ export default function ChartToolbar(props: ChartToolbarProps) {
               <span style={{ fontSize: 12 }}>量</span>
             </Checkbox>
           )}
-          {props.onMarginOn != null && (
-            <Checkbox checked={props.marginOn ?? false} onChange={(e) => props.onMarginOn!(e.target.checked)}>
-              <span style={{ fontSize: 12 }}>销毛率</span>
-            </Checkbox>
+          {showPromo && (
+            <>
+              <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
+                <span style={{ fontSize: 12 }}>大促档期</span>
+              </Checkbox>
+              <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
+                <span style={{ fontSize: 12 }}>促销权益</span>
+              </Checkbox>
+            </>
           )}
         </div>
       )}
       {showRight && showMore && (
         // 无中区圆框组的页面（量价/部分内嵌图）⋯ 靠右收尾，与看板第一行同构；
-        // 有量/销毛率组框时它已带 marginLeft auto，⋯ 自然跟在其后
-        <span style={{ marginLeft: props.onVolumeOn != null || props.onMarginOn != null ? undefined : 'auto', display: 'inline-flex', flexShrink: 0 }}>
+        // 有量/大促组框时它已带 marginLeft auto，⋯ 自然跟在其后
+        <span style={{ marginLeft: props.onVolumeOn != null || showPromo ? undefined : 'auto', display: 'inline-flex', flexShrink: 0 }}>
         <Popover
           trigger="click"
           open={moreOpen}
@@ -497,17 +506,12 @@ export default function ChartToolbar(props: ChartToolbarProps) {
                     {props.presentationSlot}
                   </span>
                 )}
-                {/* 大促档期 / 促销权益（2026-11-17 Eason：从工具行组框收进 ⋯）——
-                    控件外形与原先组框 Checkbox 一致 */}
-                {showPromo && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
-                    <Checkbox checked={props.promoBandsOn} onChange={(e) => props.onPromoBandsOn!(e.target.checked)}>
-                      <span style={{ fontSize: 12 }}>大促档期</span>
-                    </Checkbox>
-                    <Checkbox checked={props.offersOn} onChange={(e) => props.onOffersOn!(e.target.checked)}>
-                      <span style={{ fontSize: 12 }}>促销权益</span>
-                    </Checkbox>
-                  </span>
+                {/* 销毛率（2026-11-26 Eason：从工具行组框收进 ⋯，与大促档期/促销权益
+                    对调）——控件外形与原先组框 Checkbox 一致 */}
+                {showMargin && (
+                  <Checkbox checked={props.marginOn ?? false} onChange={(e) => props.onMarginOn!(e.target.checked)}>
+                    <span style={{ fontSize: 12 }}>销毛率</span>
+                  </Checkbox>
                 )}
                 {props.onPriceTypeToggle && props.priceTypes != null && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>

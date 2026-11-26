@@ -28,7 +28,7 @@
 //   浮窗宽度 = 四列自适应宽之和（trailing 计入列宽，信息不许截断），
 //   上限 min(视口-48, 1100)，超限才横向滚动。
 // 主品空缺 = 空组（仅历史数据可能出现；空态不提供先加对比入口）。
-// 「全部型号」= 每配置一张卡 / 每配置一条对比（不再并卡）；单图含主品
+// 型号行勾选（原「全部型号」）= 每配置一张卡 / 每配置一条对比（不再并卡）；单图含主品
 // 最多 8 条折线，在选择时收口，配满后「添加对比产品」置灰并提示，卡数 ≤ 8；即改即存。
 // 添加主分析产品 = 最后一个组框向下延长的底边正中的显性大按钮。
 // 破坏性动作轻确认：删整组、清空全部。
@@ -226,7 +226,7 @@ function MatchPill({
 
 // ---------------- 更换树浮窗（完整树：唯一更换入口） ----------------
 
-/** 档位批量动作 pill（浅蓝描边 ghost，与「＋ 全部型号」同语言） */
+/** 档位批量动作 pill（浅蓝描边 ghost，与对比 pill 同语言） */
 function TierBatchPill({ text, disabled, onClick }: { text: string; disabled?: boolean; onClick?: () => void }) {
   return (
     <button
@@ -459,12 +459,47 @@ function LevelSwitchPopover({
     actions.setCardCompares(card.id, [...card.compares, { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }]);
   };
 
-  /** 「全部型号」：主品上下文 = 每配置一张卡；对比上下文 = 每配置一条对比。
-   *  第一百二十三轮：入参改过滤后的型号节点——档位筛选下 = 该产品在该档位
-   *  内的全部配置（「＋ 全部型号」语义随筛选收窄）。 */
-  const pickAllConfigs = (m: ModelNode): void => {
-    const sels = usableRomrams(m.romrams).map(
-      (r): ProductSelection => ({ modelId: m.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }),
+  /** 勾选框通用范式：一组型号下的全部可用配置（型号 = 其配置；系列 / 品牌 = 各型号并集） */
+  const configsOfModels = (models: ModelNode[]): RomramNode[] => models.flatMap((m) => usableRomrams(m.romrams));
+
+  /** 节点组勾选态：组内配置全部已选 = checked，部分 = indeterminate。
+   *  对比上下文「已选」= 在本卡对比区；主品上下文「已选」= 是看板某组的主分析产品。 */
+  const groupCheckState = (nodes: RomramNode[]): CascadeRowItem['checkState'] => {
+    if (!nodes.length) return 'none';
+    const picked = new Set(
+      comparesCtx || replaceCompareCtx
+        ? (activeCard?.compares ?? []).map(selKey)
+        : mains.flatMap((c) => (c.main ? [selKey(c.main)] : [])),
+    );
+    const hit = nodes.filter((r) => picked.has(nodeSelKey(r))).length;
+    return hit === nodes.length ? 'checked' : hit > 0 ? 'indeterminate' : 'none';
+  };
+
+  /** 节点组勾选：对比上下文 = 整组加入 / 移出对比区；主品上下文 = 整组逐配置成卡。
+   *  主品上下文取消勾选不删组——删组回看板操作，筛选器不做无确认的破坏性写入。 */
+  const toggleGroup = (models: ModelNode[], next: boolean): void => {
+    const nodes = configsOfModels(models);
+    if (!nodes.length) return;
+    if (!next) {
+      const card = activeCard;
+      if (!(comparesCtx || replaceCompareCtx) || !card) return;
+      const remove = new Set(nodes.map(nodeSelKey));
+      // 更换对比上下文保留被替换的那一条（移掉后本次更换失去对象）
+      actions.setCardCompares(
+        card.id,
+        card.compares.filter((c) => !(remove.has(selKey(c)) && !(replaceCompareCtx && c === ctx.sel))),
+      );
+      return;
+    }
+    pickAllConfigs(nodes);
+  };
+
+  /** 勾选框通用范式（Eason 2026-11-26：品牌 / 系列 / 型号行首复选框取代「＋ 全部型号」
+   *  按钮）：主品上下文 = 每配置一张卡；对比上下文 = 每配置一条对比。入参 = 过滤后的
+   *  配置节点（档位筛选下语义随筛选收窄）。 */
+  const pickAllConfigs = (nodes: RomramNode[]): void => {
+    const sels = nodes.map(
+      (r): ProductSelection => ({ modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }),
     );
     if (!sels.length) return;
     if (comparesCtx || replaceCompareCtx) {
@@ -635,6 +670,8 @@ function LevelSwitchPopover({
       key: b.key,
       label: brandLabelOf(b.key),
       leading: <BrandDot brand={b.key} />,
+      checkState: groupCheckState(configsOfModels(b.series.flatMap((s) => s.models))),
+      onCheckChange: (next) => toggleGroup(b.series.flatMap((s) => s.models), next),
       active: brand.key === b.key,
       onActivate: () => {
         const s = b.series[0];
@@ -645,6 +682,8 @@ function LevelSwitchPopover({
     const seriesItems: CascadeRowItem[] = (brand?.series ?? []).map((s) => ({
       key: s.key,
       label: s.title,
+      checkState: groupCheckState(configsOfModels(s.models)),
+      onCheckChange: (next) => toggleGroup(s.models, next),
       active: series?.key === s.key,
       onActivate: () => setPath([brand.key, s.key, s.models[0]?.modelId ?? '']),
       trailing: s.eol ? (
@@ -728,11 +767,16 @@ function LevelSwitchPopover({
       // 撞主品的行点击仍进 pickConfig（提示后保持开窗），其余当前/已选行照旧拦点
       const hitsMain = replaceCompareCtx && mainKey === key;
       const blocked = (isCurrent || taken) && !hitsMain;
-      // 第一百二十五轮（K3）：主品选择为单选语义，不渲染复选框（此前是点了
-      // 没反应的摆设）；列宽的 24px 复选框预留随 checkState 缺省自动收窄。
+      // 第一百二十五轮（K3）：主品选择为单选语义，此前不渲染复选框（摆设）。勾选框
+      // 通用范式（2026-11-26）起补成真控件：勾 = 选该配置为主分析产品（同点文字）；
+      // 已选行勾选态如实呈现，再点不删组（blocked 同口径）。
       return {
         key: r.key,
         label: r.romram,
+        checkState: isCurrent || taken ? 'checked' : 'none',
+        onCheckChange: (next) => {
+          if (next && !blocked) pickConfig(r);
+        },
         onLabelClick: () => {
           if (!blocked) pickConfig(r);
         },
@@ -769,6 +813,9 @@ function LevelSwitchPopover({
         key: m.modelId,
         label: m.label,
         leading: <BrandDot brand={m.brand} />,
+        // 勾选框通用范式：勾型号 = 该产品全部配置（原「＋ 全部型号」按钮）
+        checkState: groupCheckState(usable),
+        onCheckChange: (next) => toggleGroup([m], next),
         active: model?.modelId === m.modelId,
         onActivate: () => setPath([brand.key, series.key, m.modelId]),
         trailing: (
@@ -776,30 +823,6 @@ function LevelSwitchPopover({
             {m.eol && (
               <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
             )}
-            <Tooltip title={comparesCtx || replaceCompareCtx ? '该产品全部配置加入对比区' : '该产品全部配置各成一张主分析卡'} zIndex={TIP_Z}>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  pickAllConfigs(m);
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  height: 20,
-                  padding: '0 8px',
-                  borderRadius: radius.pill,
-                  fontSize: 11,
-                  color: selectSoftInk,
-                  background: color.canvas,
-                  border: '1px solid rgba(0, 112, 243, 0.35)',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <PlusOutlined style={{ fontSize: 9 }} /> 全部型号
-              </span>
-            </Tooltip>
             {tag && <span className="tnum" style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{tag}</span>}
           </span>
         ),
@@ -815,10 +838,9 @@ function LevelSwitchPopover({
     const brandExtra = tree.reduce((w, b) => Math.max(w, textW(`${b.modelCount} 型号`, 10)), 0) + ROW_GAP;
     const eolPillW = textW('退市', 10) + 8; // 文本 + padding 0 6px + 边框 2px
     const seriesExtra = (brand?.series ?? []).some((s) => s.eol) ? eolPillW + ROW_GAP : 0;
-    const allCfgPillW = pillW('全部型号', 11) + 12; // ＋ 图标 9 + 内间隙 3
     const modelTagW = (series?.models ?? []).reduce((w, m) => Math.max(w, textW(modelTagText(m), 10)), 0);
     const modelExtra = ((series?.models ?? []).some((m) => m.eol) ? eolPillW + 6 : 0)
-      + allCfgPillW + 6 + modelTagW + ROW_GAP;
+      + modelTagW + ROW_GAP;
     // 对比 pill = 图标 + 文案（图标 11 + 间隙 3 计入预留）
     const romramExtra = (comparesCtx
       ? pillW('对比', 11) + 14

@@ -315,8 +315,10 @@ export default function PriceTrend(props: {
   // 价格档位带开关（第一百九十三轮，Eason）：与 Y 刻度线独立；第196轮整改2默认值
   // 翻转为关——Y 轴默认只显示刻度标签，档位带经齿轮「显示设置」打开（开关保留）
   const [showTiers, setShowTiers] = usePageViewState<boolean>('dashboard.showTiers', () => false);
-  // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑），缺省
-  const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('dashboard.lineShape', () => 'auto');
+  // 折线形态（第五十四轮追补③）：auto=按粒度自适应（周=阶梯 / 月季=平滑）。
+  // 2026-11-26 Eason：默认改 smooth = 圆滑曲线（与量价页同默认）；自适应/阶梯仍可在
+  // 齿轮里主动选回
+  const [lineShape, setLineShape] = usePageViewState<LineShapeChoice>('dashboard.lineShape', () => 'smooth');
   // 价格显示（第一百一十四轮，评审）：精简 = 每系列仅最高/最低/最新三价直标（默认）；
   // 详细 = 现行全量标签口径。价格看板合并/分离两模式同值；会话态跨页保留（192 轮）
   const [labelMode, setLabelMode] = usePageViewState<'detail' | 'compact'>('dashboard.labelMode', () => 'compact');

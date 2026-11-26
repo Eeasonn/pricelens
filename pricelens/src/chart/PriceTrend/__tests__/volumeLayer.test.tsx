@@ -183,20 +183,37 @@ describe('第196轮整改5：工具行「量」开关（大促档期左侧 + 柱
     onOffersOn: vi.fn(),
   };
 
-  it('组框 = 量 + 销毛率（2026-11-17 Eason：大促档期/促销权益收进 ⋯ 菜单）；量默认关，点击开启回调 true', () => {
+  it('组框 = 量 + 大促档期 + 促销权益（2026-11-26 Eason：销毛率收进 ⋯ 菜单，大促权益放出来）；量默认关，点击开启回调 true', () => {
     const onVolumeOn = vi.fn();
-    render(<ChartToolbar {...toolbarBase} volumeOn={false} onVolumeOn={onVolumeOn} marginOn={false} onMarginOn={vi.fn()} /> as ReactElement);
+    const onPromoBandsOn = vi.fn();
+    render(
+      <ChartToolbar
+        {...toolbarBase}
+        volumeOn={false}
+        onVolumeOn={onVolumeOn}
+        marginOn={false}
+        onMarginOn={vi.fn()}
+        onPromoBandsOn={onPromoBandsOn}
+      /> as ReactElement,
+    );
     const box = screen.getByText('量').closest('div')!.parentElement!.parentElement!;
     const labels = Array.from(box.querySelectorAll('label span')).map((s) => s.textContent);
     const volIdx = labels.indexOf('量');
-    const marginIdx = labels.indexOf('销毛率');
+    const promoIdx = labels.indexOf('大促档期');
+    const offersIdx = labels.indexOf('促销权益');
     expect(volIdx).toBeGreaterThanOrEqual(0);
-    expect(marginIdx).toBeGreaterThan(volIdx); // 销毛率在量右侧（同组框）
-    // 大促档期/促销权益不再在工具行（收进 ⋯ 菜单——⋯ 按钮 title 罗列）
-    expect(labels).not.toContain('大促档期');
-    expect(screen.getByRole('button', { name: '更多显示选项' }).getAttribute('title')).toContain('大促档期');
+    // 大促档期 / 促销权益在量右侧（同组框），且档期在权益左侧
+    expect(promoIdx).toBeGreaterThan(volIdx);
+    expect(offersIdx).toBeGreaterThan(promoIdx);
+    // 销毛率不再在工具行（收进 ⋯ 菜单——⋯ 按钮 title 罗列；大促权益已移出 ⋯）
+    expect(labels).not.toContain('销毛率');
+    const moreTitle = screen.getByRole('button', { name: '更多显示选项' }).getAttribute('title');
+    expect(moreTitle).toContain('销毛率');
+    expect(moreTitle).not.toContain('大促档期');
     fireEvent.click(screen.getByText('量'));
     expect(onVolumeOn).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByText('大促档期'));
+    expect(onPromoBandsOn).toHaveBeenCalledWith(true);
   });
 
   it('量层形态「柱|面积」切换已退役（2026-11-17 Eason：恒柱）；量开关保留', () => {
@@ -205,12 +222,14 @@ describe('第196轮整改5：工具行「量」开关（大促档期左侧 + 柱
     expect(screen.queryByText('面积')).toBeNull();
   });
 
-  it('未传量/销毛回调（量价/预测页等调用方）→ 不渲染组框；大促档期收 ⋯（未展开不出 DOM，⋯ 按钮 title 罗列）', () => {
+  it('只传大促档期/促销权益回调（未传量/销毛率）→ 组框 = 大促档期 + 促销权益，无 ⋯ 按钮（2026-11-26：两者回到组框）', () => {
     render(<ChartToolbar {...toolbarBase} /> as ReactElement);
     expect(screen.queryByText('量')).toBeNull();
     expect(screen.queryByText('销毛率')).toBeNull();
-    expect(screen.queryByText('大促档期')).toBeNull(); // 收进 ⋯，未展开不出 DOM
-    expect(screen.getByRole('button', { name: '更多显示选项' }).getAttribute('title')).toContain('大促档期');
+    expect(screen.getByText('大促档期')).toBeTruthy();
+    expect(screen.getByText('促销权益')).toBeTruthy();
+    // ⋯ 菜单只剩销毛率一项可收：未传其回调时整枚按钮不渲染
+    expect(screen.queryByRole('button', { name: '更多显示选项' })).toBeNull();
   });
 });
 
