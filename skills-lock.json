@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "huashu-motion": {
+      "source": "alchaincyf/huashu-motion",
+      "commit": "f09dd7a29e2c9c574939d54db6c0768aad51232a",
+      "sourceType": "github",
+      "skillPath": "skills/huashu-motion/SKILL.md",
+      "computedHash": "54c10b608d42ec39afc27fe3d6f2b7a9cd5d4ddd399c03fe5543eec092bd8762"
+    }
+  }
+}

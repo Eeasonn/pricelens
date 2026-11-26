@@ -70,3 +70,15 @@ portable/
 # ZA 册子源表（内部数据不入库，产物 JSON 承载）
 pricelens/data/real/booklet/*.xlsx
 pricelens/server/data/
+
+# oil-ui 设计审计工作区 + cook 截图活动产物（工具产物/素材不入库，2026-11-26 Eason 拍板清洗）
+/.oil-ui/
+/cook/
+# Office 锁文件
+docs/.~*
+# 内部交接包：数据包导出（105M CSV/JSON 大资产）与服务器 web 构建产物不入库
+/docs/内部交接包/02-数据包/
+/docs/内部交接包/00-服务器版/PriceLens-Server-20261123/web/
+
+# 视频封面等素材散落根目录（不入库）
+/title-v5.png

@@ -1,0 +1,188 @@
+<mxfile host="app.diagrams.net" agent="ZCode" version="24.7.7">
+  <diagram id="pricelens-dfd-20261119" name="数据流图 DFD">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1850" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="PriceLens 数据流图（DFD · Gane-Sarson 记法）—— 服务器模式（主力）+ 单文件兜底；配套《数据架构方案》《数据建模方案-数据字典与ER图》" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="12" width="1400" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="E1" value="&lt;b&gt;E1&lt;/b&gt;&lt;br&gt;内部街价采集系统&lt;br&gt;（offer 抓取底表）" style="shape=rectangle;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=12" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="E2" value="&lt;b&gt;E2&lt;/b&gt;&lt;br&gt;内部 PSI 销量系统&lt;br&gt;（周销量底表）" style="shape=rectangle;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=12" vertex="1" parent="1">
+          <mxGeometry x="40" y="300" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="E3" value="&lt;b&gt;E3&lt;/b&gt;&lt;br&gt;业务侧（Eason）&lt;br&gt;配置维护 / 裁定" style="shape=rectangle;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=12" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="D1" value="&lt;b&gt;D1&lt;/b&gt;  offers.csv&lt;br&gt;周度源表（utf-8-sig，39.8MB）" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="320" y="125" width="185" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="D2" value="&lt;b&gt;D2&lt;/b&gt;  sales.csv&lt;br&gt;PSI 周销量（当前空占位）" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="320" y="305" width="185" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="D3" value="&lt;b&gt;D3&lt;/b&gt;  config.json&lt;br&gt;配置唯一源（C1/C2/C3 全量）" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="320" y="485" width="185" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="P1" value="&lt;b&gt;P1&lt;/b&gt;  mtime 监听重派生&lt;br&gt;server.py maybe_rebuild&lt;br&gt;（全量约 13s，零改动零开销）" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="620" y="112" width="185" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="P2" value="&lt;b&gt;P2&lt;/b&gt;  归一引擎 ingest_pack.py（与前端 offerIngest 逐字对等金标）&lt;br&gt;列名归一 → 周期周三锚(YYYYWW) → 国家/平台/店铺类型归一(C3)&lt;br&gt;→ 规格拆列 → 型号正名 → ID 拼装(model/sku/channel)&lt;br&gt;→ 去重（同键同刻保最低价）→ 汇率自愈 → USD 折算(±单位修正)" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacing=8" vertex="1" parent="1">
+          <mxGeometry x="620" y="248" width="215" height="126" as="geometry" />
+        </mxCell>
+        <mxCell id="D4" value="&lt;b&gt;D4&lt;/b&gt;  ods_offer_raw / ods_psi_sales&lt;br&gt;ODS 源样层（零派生列，97,299 行）" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="940" y="60" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="D5" value="&lt;b&gt;D5&lt;/b&gt;  map_model / map_sku / map_spec_split&lt;br&gt;map_tier / map_alias（匹配小表层，我们加的）" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="940" y="140" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="D6" value="&lt;b&gt;D6&lt;/b&gt;  dim_channel / dim_time / dim_fx&lt;br&gt;dim_region / dim_promo / dim_benchmark / dim_tier" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="940" y="220" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="D7" value="&lt;b&gt;D7&lt;/b&gt;  fact_price_weekly&lt;br&gt;周×SKU×国家×渠道×店铺（95,922 行）" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="940" y="300" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="P3" value="&lt;b&gt;P3&lt;/b&gt;  v2 包组装&lt;br&gt;dims + 列式 factPack&lt;br&gt;gzip b64" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1200" y="245" width="170" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="D8" value="&lt;b&gt;D8&lt;/b&gt;  latest-pack.json&lt;br&gt;派生 v2 包（generatedAt）" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1200" y="120" width="170" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="P4" value="&lt;b&gt;P4&lt;/b&gt;  前端 bootstrap&lt;br&gt;探测 /api/ping → fetch /api/pack&lt;br&gt;applyDataPack（15s 轮询自刷新）" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1440" y="180" width="185" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="D9" value="&lt;b&gt;D9&lt;/b&gt;  IndexedDB（浏览器）&lt;br&gt;单文件兜底模式持久化" style="shape=partialRectangle;top=1;right=1;bottom=1;left=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1440" y="80" width="185" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="P5" value="&lt;b&gt;P5&lt;/b&gt;  PSI 归一&lt;br&gt;别名 → 归一键 → 我司优先&lt;br&gt;join（model, cat1, cat2, week）" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1440" y="290" width="185" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="P6" value="&lt;b&gt;P6&lt;/b&gt;  呈现层&lt;br&gt;价格走势 / 量价销毛 / 大盘&lt;br&gt;预测工作台 / 预警 / Agent" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="1">
+          <mxGeometry x="1440" y="410" width="185" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="E4" value="&lt;b&gt;E4&lt;/b&gt;&lt;br&gt;内部用户&lt;br&gt;（浏览器）" style="shape=rectangle;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=12" vertex="1" parent="1">
+          <mxGeometry x="1700" y="415" width="110" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="&lt;b&gt;图例&lt;/b&gt;：外部实体（蓝方框）｜处理 P（绿圆角）｜数据存储 D（黄开口框）&lt;br&gt;实线箭头 = 数据流；紫色虚线 = 读时配置流（改完即生效）；橙色虚线 = 上传通道（殊途同归）&lt;br&gt;C1 派生规则改后需「重新派生」（走 P2）；C2 用户配置读时生效（直连 P6）；C3 字典空表 = 出厂默认兜底" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;align=left;spacing=8" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="560" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="dbnote" value="数据承载：pricelens.db（SQLite，104MB）&lt;br&gt;整包置换语义：每次重派生清空业务表重灌，meta_import 留痕；备份/迁移 = 拷整个 server/data/" style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;align=left;spacing=8" vertex="1" parent="1">
+          <mxGeometry x="940" y="395" width="220" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="f1" value="周度导出（CSV）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="E1" target="D1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" value="周销量导出" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="E2" target="D2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" value="配置 xlsx 导入" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="E3" target="D3">
+          <mxGeometry x="-0.45" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" value="mtime 变更触发" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="D1" target="P1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" value="mtime 触发（sales）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;entryX=0.3;entryY=1;" edge="1" parent="1" source="D2" target="P1">
+          <mxGeometry x="-0.5" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="412" y="232" />
+              <mxPoint x="675" y="232" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f6" value="mtime 触发（config）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.33;entryX=0.05;entryY=1;" edge="1" parent="1" source="D3" target="P1">
+          <mxGeometry x="0.2" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="585" y="505" />
+              <mxPoint x="585" y="192" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f7" value="v3 原样行（offers / sales）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.4;entryY=0;" edge="1" parent="1" source="P1" target="P2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f8" value="C1 规则 / C3 字典（派生时参与）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0.3;entryY=1;" edge="1" parent="1" source="D3" target="P2">
+          <mxGeometry x="-0.35" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f9" value="原样落库（零派生）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.2;entryX=0;entryY=0.5;" edge="1" parent="1" source="P2" target="D4">
+          <mxGeometry x="0.7" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="845" y="273" />
+              <mxPoint x="845" y="87" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f10" value="拆列 / 正名 / ID 拼装" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.4;entryX=0;entryY=0.5;" edge="1" parent="1" source="P2" target="D5">
+          <mxGeometry x="0.6" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="860" y="299" />
+              <mxPoint x="860" y="167" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f11" value="五维表构建" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.6;entryX=0;entryY=0.5;" edge="1" parent="1" source="P2" target="D6">
+          <mxGeometry x="0.5" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="875" y="324" />
+              <mxPoint x="875" y="247" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f12" value="去重 + 折算后事实" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.8;entryX=0;entryY=0.5;" edge="1" parent="1" source="P2" target="D7">
+          <mxGeometry x="0.4" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="890" y="349" />
+              <mxPoint x="890" y="327" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f13" value="dims + factRows" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.7;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="P2" target="P3">
+          <mxGeometry x="-0.4" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="770" y="388" />
+              <mxPoint x="1285" y="388" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f14" value="写 v2 包" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="P3" target="D8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f15" value="GET /api/pack（no-store）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="D8" target="P4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f16" value="单文件模式读写（file:// 兜底）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;startArrow=block;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="P4" target="D9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f17" value="sales[] 原样透传" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="P4" target="P5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f18" value="数据包" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.6;entryX=1;entryY=0.4;" edge="1" parent="1" source="P4" target="P6">
+          <mxGeometry x="0.3" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f19" value="销量事实（型号×国家×周，不摊分）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="P5" target="P6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f20" value="C2 用户配置（读时生效）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;dashed=1;strokeColor=#9673a6;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="D3" target="P6">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="412" y="585" />
+              <mxPoint x="1532" y="585" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="f21" value="页面呈现" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="P6" target="E4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f22" value="v3 全量包上传（POST /api/datapack）→ 拆写回 CSV（殊途同归）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;labelBackgroundColor=#ffffff;dashed=1;strokeColor=#d79b00;exitX=1;exitY=0.25;entryX=0.75;entryY=0;" edge="1" parent="1" source="P4" target="D1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1668" y="198" />
+              <mxPoint x="1668" y="54" />
+              <mxPoint x="459" y="54" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
