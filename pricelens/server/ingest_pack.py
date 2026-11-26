@@ -1572,7 +1572,8 @@ def derive_fact_sales(psi_rows, match_rows):
         if jnum(m.get("is_active")) == 0:
             continue
         pp, ps = jstr(m.get("psi_product")).strip(), jstr(m.get("product_sku")).strip()
-        if pp and ps:
+        # 只收挂接成功的行（model_id 非空）——psi_only 预填行未挂接，纳入会自我命中空行
+        if pp and ps and m.get("model_id"):
             psi_idx.setdefault((pp, ps), m)
         cc, model = jstr(m.get("country")).strip(), jstr(m.get("model")).strip()
         if cc and model and m.get("model_id"):
