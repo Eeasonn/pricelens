@@ -4,6 +4,8 @@
 
 - 编码 utf-8-sig（中文 Windows Excel 双击直开不乱码）+ CRLF + RFC4180 引号转义
 - 全表全量、表头即列名；只读源库，不做任何派生
+- 表清单不硬编码：取库里实际存在的表，按 server/ingest_pack.py TABLES 的分层顺序排列
+  （2026-11-23 后端 v2 重构后为 24 表；旧库的 v1 表、自定义表排在后面照常导出）
 用法：python3 scripts/export_all_tables_csv.py <db路径> <输出目录>
 """
 import csv
@@ -11,28 +13,31 @@ import os
 import sqlite3
 import sys
 
-TABLES = [
-    "ods_offer_raw", "ods_psi_sales",
-    "map_model", "map_sku", "map_spec_split", "map_tier", "map_alias",
-    "dim_channel", "dim_time", "dim_fx", "dim_region", "dim_promo",
-    "dim_benchmark", "dim_tier",
-    "fact_price_weekly", "fact_sales_weekly",
-    "cfg_kv", "meta_import",
-]
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "server"))
 
 ROW_CAP = 500_000  # 单表护栏（当前最大 97,299，量级异常时人工复核）
 
 
+def tables_of(cur):
+    import ingest_pack
+    have = {r[0] for r in cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+    ordered = [t for t in ingest_pack.TABLES if t in have]
+    return ordered + sorted(have - set(ordered))
+
+
 def main():
     db = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "server", "data", "pricelens.db")
+        os.path.dirname(HERE), "server", "data", "pricelens.db")
     outdir = sys.argv[2] if len(sys.argv) > 2 else "tables-csv"
     os.makedirs(outdir, exist_ok=True)
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
         cur = conn.cursor()
         total = 0
-        for t in TABLES:
+        tables = tables_of(cur)
+        for t in tables:
             try:
                 cur.execute(f"SELECT * FROM {t}")
             except sqlite3.OperationalError as e:

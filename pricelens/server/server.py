@@ -70,8 +70,12 @@ LATEST_PACK_PATH = os.path.join(DATA_DIR, "latest-pack.json")
 # mtime——文件被编辑（Excel 保存即触发）→ 自动重派生 → 前端轮询 ping 自动刷新。
 OFFERS_PATH = os.path.join(DATA_DIR, "offers.csv")
 SALES_PATH = os.path.join(DATA_DIR, "sales.csv")
+SALES_XLSX_PATH = os.path.join(DATA_DIR, "sales.xlsx")  # PSI 新 7 列导出（xlsx 形态）
 OFFERS_JSON = os.path.join(DATA_DIR, "offers.json")  # 旧形态兼容读取
 SALES_JSON = os.path.join(DATA_DIR, "sales.json")
+# 配置表+补录表（数据建模方案 v2 §3：匹配表/竞品匹配/价格档位/大促档期四页签；
+# 《配置表补录表》工作簿回填后投递到此，存在即权威，缺页签回退 config.json）
+CONFIG_TABLES_PATH = os.path.join(DATA_DIR, "config_tables.xlsx")
 BUILD_STAMP = {"mtime": -1.0}  # 进程内上次构建时的源文件最大 mtime
 
 
@@ -80,7 +84,10 @@ def _offers_path():
 
 
 def _sales_path():
-    return SALES_PATH if os.path.exists(SALES_PATH) else (SALES_JSON if os.path.exists(SALES_JSON) else None)
+    for p in (SALES_PATH, SALES_XLSX_PATH, SALES_JSON):
+        if os.path.exists(p):
+            return p
+    return None
 
 
 def _read_rows(path):
@@ -99,6 +106,12 @@ def _read_rows(path):
             except UnicodeDecodeError:
                 continue
         raise UnicodeDecodeError("utf-8", b"", 0, 1, "CSV 既不是 UTF-8 也不是 GBK 编码（请用 Excel 另存为「CSV UTF-8」或记事本转存 UTF-8）")
+    if path.endswith(".xlsx"):
+        import xlsx_reader
+        sheets = xlsx_reader.sheet_names(path)
+        if not sheets:
+            return []
+        return xlsx_reader.read_sheet_dicts(path, sheets[0])
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -124,7 +137,8 @@ def _write_rows_csv(path, rows):
 
 
 def _folder_mtime():
-    parts = [CONFIG_PATH, OFFERS_PATH, OFFERS_JSON, SALES_PATH, SALES_JSON]
+    parts = [CONFIG_PATH, OFFERS_PATH, OFFERS_JSON, SALES_PATH, SALES_XLSX_PATH, SALES_JSON,
+             CONFIG_TABLES_PATH]
     mt = [os.path.getmtime(p) for p in parts if os.path.exists(p)]
     return max(mt) if mt else -1.0
 
@@ -151,10 +165,16 @@ def maybe_rebuild():
                 return
             offers = _read_rows(offers_path)
             sales = _read_rows(_sales_path())
+            # monthly/别名（ZA 小册子、PSI 别名）从 last-import 继承——CSV 重派生
+            # 不该抹掉历史上传包携带的段（2026-11-23 审计修复：原实现置空会丢数据）
+            prev = _read_json(LAST_IMPORT_PATH) or {}
+            prev_monthly = prev.get("monthly") if isinstance(prev.get("monthly"), list) else []
+            prev_aliases = prev.get("salesProductAliases") if isinstance(prev.get("salesProductAliases"), dict) else {}
             pack = {
                 "kind": "pricelens-data-pack", "v": 3,
                 "generatedAt": _now_tag(),
-                "offers": offers, "sales": sales, "salesProductAliases": {}, "monthly": [],
+                "offers": offers, "sales": sales,
+                "salesProductAliases": prev_aliases, "monthly": prev_monthly,
             }
             config = _read_json(CONFIG_PATH) or {}
             v2_pack, diag, pack_id = ingest_pack.ingest_v3_pack(pack, config, REGION_BASE, DB_PATH)
@@ -182,10 +202,15 @@ def _rebuild_worker(mt):
                 return
             offers = _read_rows(offers_path)
             sales = _read_rows(_sales_path())
+            # monthly/别名继承同 maybe_rebuild（2026-11-23 审计修复）
+            prev = _read_json(LAST_IMPORT_PATH) or {}
+            prev_monthly = prev.get("monthly") if isinstance(prev.get("monthly"), list) else []
+            prev_aliases = prev.get("salesProductAliases") if isinstance(prev.get("salesProductAliases"), dict) else {}
             pack = {
                 "kind": "pricelens-data-pack", "v": 3,
                 "generatedAt": _now_tag(),
-                "offers": offers, "sales": sales, "salesProductAliases": {}, "monthly": [],
+                "offers": offers, "sales": sales,
+                "salesProductAliases": prev_aliases, "monthly": prev_monthly,
             }
             config = _read_json(CONFIG_PATH) or {}
             v2_pack, diag, pack_id = ingest_pack.ingest_v3_pack(pack, config, REGION_BASE, DB_PATH)
@@ -370,10 +395,13 @@ class Handler(BaseHTTPRequestHandler):
                         if _offers_path() is not None:
                             offers = _read_rows(_offers_path())
                             sales = _read_rows(_sales_path())
+                            prev = pack if isinstance(pack, dict) else {}
                             pack = {"kind": "pricelens-data-pack", "v": 3,
                                     "generatedAt": _now_tag(),
                                     "offers": offers, "sales": sales,
-                                    "salesProductAliases": {}, "monthly": []}
+                                    "salesProductAliases": prev.get("salesProductAliases")
+                                    if isinstance(prev.get("salesProductAliases"), dict) else {},
+                                    "monthly": prev.get("monthly") if isinstance(prev.get("monthly"), list) else []}
                     else:
                         raw = self._read_body()
                         if not raw:
@@ -452,17 +480,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"error": f"配置 JSON 无效：{e}"}, 400)
         if method == "POST" and path == "/api/datapack/reset":
             with INGEST_LOCK, STATE_LOCK:
-                for p in (LAST_IMPORT_PATH, LATEST_PACK_PATH, OFFERS_PATH, OFFERS_JSON, SALES_PATH, SALES_JSON):
+                for p in (LAST_IMPORT_PATH, LATEST_PACK_PATH, OFFERS_PATH, OFFERS_JSON,
+                          SALES_PATH, SALES_XLSX_PATH, SALES_JSON, CONFIG_TABLES_PATH):
                     if os.path.exists(p):
                         os.remove(p)
                 BUILD_STAMP["mtime"] = _folder_mtime()
                 if os.path.exists(DB_PATH):
                     conn = sqlite3.connect(DB_PATH)
                     try:
-                        for table in ("ods_offer_raw", "ods_psi_sales", "map_model", "map_sku",
-                                      "map_spec_split", "map_tier", "map_alias", "dim_channel",
-                                      "dim_time", "dim_fx", "dim_region", "dim_promo",
-                                      "dim_benchmark", "dim_tier", "fact_price_weekly"):
+                        for table in ingest_pack.TABLES:
                             conn.execute(f"DELETE FROM {table}")
                         conn.commit()
                     finally:
@@ -525,7 +551,7 @@ def main():
     httpd = _make_server(addr)
     url = f"http://localhost:{PORT}"
     print(f"[pricelens-server] {url}  web={WEB_DIR}  data={DATA_DIR}")
-    src = "data/ 文件夹（offers.csv + sales.csv + config.json，可直接编辑）" if _offers_path() is not None \
+    src = "data/ 文件夹（offers.csv + sales.csv[sales.xlsx] + config.json + config_tables.xlsx，可直接编辑）" if _offers_path() is not None \
         else "无（前端用内置兜底数据；把 v3 数据包 JSON 的 offers/sales 段放进 data/ 即可）"
     print(f"[pricelens-server] 数据源：{src}")
     try:
