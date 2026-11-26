@@ -313,16 +313,25 @@ async function smokeTest() {
       }
       die(`包内服务器起不来：\n${log.slice(-1500)}`);
     }
-    const pack = await getJson(`http://127.0.0.1:${port}/api/pack`, 30000);
-    const front = await fetch(`http://127.0.0.1:${port}/`).then(async (r) => ({ status: r.status, text: await r.text() })).catch(() => ({ status: 0, text: '' }));
-    // Agent 模型服务：预置注册表随包、未配置时 /runs 回 fallback 信封（前端落本地引擎）
-    const agent = await getJson(`http://127.0.0.1:${port}/api/agent/providers`, 8000);
-    const runs = await fetch(`http://127.0.0.1:${port}/api/agent/runs`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '冒烟' }),
-    }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) })).catch(() => ({ status: 0, json: null }));
-    return { port, ping, pack: pack.json, front, agent, runs };
-    child.kill();
-    await exited;
+    // 无论成功、断言失败还是中途抛错，都必须关掉冒烟用的服务器（finally）
+    try {
+      const pack = await getJson(`http://127.0.0.1:${port}/api/pack`, 30000);
+      const front = await fetch(`http://127.0.0.1:${port}/`).then(async (r) => ({ status: r.status, text: await r.text() })).catch(() => ({ status: 0, text: '' }));
+      // Agent 模型服务：预置注册表随包、未配置时 /runs 回 fallback 信封（前端落本地引擎）
+      const agent = await getJson(`http://127.0.0.1:${port}/api/agent/providers`, 8000);
+      const runs = await fetch(`http://127.0.0.1:${port}/api/agent/runs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // 带合法 baseline：服务器先校验请求格式（无效请求 400），未配置模型才回 502 + fallback
+        body: JSON.stringify({
+          text: '冒烟', runId: 'bundle-smoke',
+          baseline: { intent: 'query', summary: '冒烟基线', steps: [], cards: [], citations: [], suggestions: [], contextFingerprint: 'smoke' },
+        }),
+      }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) })).catch(() => ({ status: 0, json: null }));
+      return { port, ping, pack: pack.json, front, agent, runs };
+    } finally {
+      child.kill();
+      await exited;
+    }
   }
   return null;
 }
