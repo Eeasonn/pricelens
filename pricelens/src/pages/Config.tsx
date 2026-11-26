@@ -58,6 +58,9 @@ import BenchmarkConfigBlock from './config/BenchmarkConfigBlock';
 import DataQualityBlock from './config/DataQualityBlock';
 import DataPackBlock from './config/DataPackBlock';
 import RulesDictBlock from './config/RulesDictBlock';
+import AgentServiceBlock from './config/AgentServiceBlock';
+import { isServiceMode } from '../data/serviceMode';
+import { AGENT_SERVICE_BLOCK_ID } from '../agentService/providers';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
@@ -121,6 +124,10 @@ const CONFIG_SECTIONS: ReadonlyArray<readonly [string, string]> = [
   ['data-pack', '数据包'],
 ];
 
+// Agent 模型服务（2026-11-27）：仅本机服务器模式出现，排在最后——配置与当前模型都存在
+// 服务器，离线 / 在线 Pages 模式不显示该分区（子导航与分块同步隐藏）
+const AGENT_SERVICE_SECTION: readonly [string, string] = [AGENT_SERVICE_BLOCK_ID, 'Agent 模型服务'];
+
 export default function Config() {
   const { state } = useFilters();
   // 2026-11-06 RBAC：角色切换（演示）即时刷新全页控件态；查阅者只读 + 可导出
@@ -131,6 +138,12 @@ export default function Config() {
   // 点击即时标记，滚动时按分区顶边位置跟随（jsdom 无滚动事件，测试走点击路径断言）。
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const [activeSection, setActiveSection] = useState<string>(CONFIG_SECTIONS[0]![0]);
+  // 服务模式在启动探测时一次定下（之后只会整页刷新），这里读一次即可
+  const agentService = useMemo(() => isServiceMode(), []);
+  const sections = useMemo(
+    () => (agentService ? [...CONFIG_SECTIONS, AGENT_SERVICE_SECTION] : CONFIG_SECTIONS),
+    [agentService],
+  );
   useEffect(() => {
     const root = scrollRootRef.current;
     if (!root) return undefined;
@@ -138,19 +151,19 @@ export default function Config() {
     // 取顶边已越过标记线的最后一个分区；滚到底兜底取最后一个分区（末段分区够不到标记线）
     const onScroll = (): void => {
       const marker = root.getBoundingClientRect().top + 96;
-      let current = CONFIG_SECTIONS[0]![0];
-      for (const [id] of CONFIG_SECTIONS) {
+      let current = sections[0]![0];
+      for (const [id] of sections) {
         const el = document.getElementById(id);
         if (el && el.getBoundingClientRect().top <= marker) current = id;
       }
       if (root.scrollHeight > 0 && root.scrollTop + root.clientHeight >= root.scrollHeight - 1) {
-        current = CONFIG_SECTIONS[CONFIG_SECTIONS.length - 1]![0];
+        current = sections[sections.length - 1]![0];
       }
       setActiveSection(current);
     };
     root.addEventListener('scroll', onScroll, { passive: true });
     return () => root.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [sections]);
   const prevRows = useMemo(() => ownModelRows(state.countryCode), [state.countryCode]);
   const [searchTerm, setSearchTerm] = useState('');
   const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
@@ -422,7 +435,7 @@ export default function Config() {
                   aria-current="page"；2026-11-10 UI 审计：六个分区同为蓝链接，
                   分不清当前所在分区）。非当前项保持蓝链接；
                   透明 2px 底边占位，选中切换不跳动 */}
-              {CONFIG_SECTIONS.map(([id, label]) => {
+              {sections.map(([id, label]) => {
                 const active = activeSection === id;
                 return (
                   <a
@@ -880,6 +893,22 @@ export default function Config() {
           >
             <DataPackBlock canEdit={canEdit} />
           </Block>
+
+          {/* Agent 模型服务（2026-11-27）：仅本机服务器模式——接入并切换 Agent 的叙述模型，
+              配置与密钥都存本机服务器；编辑权限沿用 canEdit */}
+          {agentService && (
+            <Block
+              id={AGENT_SERVICE_BLOCK_ID}
+              title="Agent 模型服务"
+              extra={
+                <span style={{ fontSize: fontSize.caption, color: color.mute }}>
+                  仅本机服务器模式 · 密钥只存本机服务器
+                </span>
+              }
+            >
+              <AgentServiceBlock canEdit={canEdit} />
+            </Block>
+          )}
 
           {/* 导入预览确认（仅 GTM 能走到）：applyImportPayload 落盘前已全量校验，
               确认后一次性写回并广播；null 键 = 恢复系统默认 */}

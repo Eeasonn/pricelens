@@ -219,7 +219,7 @@ export function normalizeSalesRows(
 ): NormalizedSales {
   const unmatched = ctx.products.length === 0 ? rows.length : 0;
   if (ctx.products.length === 0) return { facts: [], unmatched, skipped: 0 };
-  const summed = new Map<string, { week_id: string; country_code: string; model_id: string; cat1: string; cat2: string; qty: number }>();
+  const summed = new Map<string, { week_id: string; country_code: string; model_id: string; cat1: string; cat2: string; qty: number; psiType?: string }>();
   let skipped = 0;
   let bad = 0;
   for (const row of rows) {
@@ -240,9 +240,16 @@ export function normalizeSalesRows(
     const cat1 = industry === 'phone' || industry === 'tablet' ? normalizeStorage(row?.category1) : industry === 'wearable' ? normalizeCaseSize(row?.category1) ?? '' : '';
     const cat2 = industry === 'tablet' ? normalizeScreenColumn(row?.category2) ?? '' : '';
     const key = `${cc}|${modelId}|${cat1}|${cat2}|${week}`;
+    // 来源类型随行保留：同键并入来源不同的行（如真实 PSI + 模拟）记成 mixed，页面按「混合」标注
+    const psiType = typeof row?.psiType === 'string' && row.psiType.trim() ? row.psiType.trim() : undefined;
     const cur = summed.get(key);
-    if (cur) cur.qty += qty;
-    else summed.set(key, { week_id: week, country_code: cc, model_id: modelId, cat1, cat2, qty });
+    if (cur) {
+      cur.qty += qty;
+      if (psiType && cur.psiType === undefined) cur.psiType = psiType;
+      else if (psiType && cur.psiType !== psiType) cur.psiType = 'mixed';
+    } else {
+      summed.set(key, { week_id: week, country_code: cc, model_id: modelId, cat1, cat2, qty, ...(psiType ? { psiType } : {}) });
+    }
   }
   const facts = [...summed.values()].sort((a, b) =>
     a.week_id.localeCompare(b.week_id) || a.country_code.localeCompare(b.country_code)

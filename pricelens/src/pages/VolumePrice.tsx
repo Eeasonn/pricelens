@@ -151,7 +151,7 @@ import { curveNameOf, nameZoneWidthOf, seriesPillMetaOf, type LineShapeChoice } 
   type YScale,
 } from '../chart/PriceTrend/helpers';
 import { buildSeries, lowestPriceColorSku } from '../dataModel/aggregate';
-import { volumeByBuckets } from '../dataModel/volume';
+import { salesSourceBadge, volumeByBuckets } from '../dataModel/volume';
 import { dimProduct } from '../data';
 import type { Series, SeriesPoint } from '../dataModel/types';
 import { brandColorOf, color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
@@ -1408,7 +1408,7 @@ export default function VolumePrice() {
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         <i aria-hidden style={{ width: 8, height: 9, borderRadius: 2, background: 'rgba(199, 0, 11, 0.22)' }} />
-        销量 · 模拟
+        销量 · {salesSourceBadge()}
       </span>
     </div>
   );

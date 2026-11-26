@@ -1,0 +1,648 @@
+{
+  "_meta": {
+    "source": "models.dev",
+    "sourceUrl": "local:/tmp/modelsdev/api.json",
+    "sourceSha256": "b52e214c011d744f0c047f456e3124048b63c81c033670c8ab7e623ea830b010",
+    "generatedAt": "2026-11-26T16:18:07.235Z",
+    "generator": "scripts/gen_provider_presets.mjs",
+    "note": "由 models.dev 筛选生成；不要手改，改 SPEC 后重新运行 npm run providers:gen"
+  },
+  "providers": [
+    {
+      "id": "zhipu",
+      "name": "智谱 BigModel",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "https://open.bigmodel.cn/api/paas/v4",
+      "baseUrlSource": "models.dev",
+      "requiresKey": true,
+      "optionalKey": false,
+      "docsUrl": "https://docs.bigmodel.cn/cn/guide/start/pricing",
+      "presetModels": [
+        {
+          "id": "glm-5.3-flash",
+          "label": "GLM-5.3-Flash",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-08-26"
+        },
+        {
+          "id": "glm-5.3-flashx-legal",
+          "label": "GLM-5.3-FlashX-Legal",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-11-02"
+        },
+        {
+          "id": "glm-5.3-flashx",
+          "label": "GLM-5.3-FlashX",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-09-18"
+        },
+        {
+          "id": "glm-5.3",
+          "label": "GLM-5.3",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-08-14"
+        },
+        {
+          "id": "glm-5.2",
+          "label": "GLM-5.2",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-06-13"
+        },
+        {
+          "id": "glm-5.1",
+          "label": "GLM-5.1",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 200000,
+          "releaseDate": "2026-04-07"
+        },
+        {
+          "id": "glm-5v-turbo",
+          "label": "GLM-5V-Turbo",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 200000,
+          "releaseDate": "2026-04-01"
+        },
+        {
+          "id": "glm-5",
+          "label": "GLM-5",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 204800,
+          "releaseDate": "2026-02-12"
+        }
+      ],
+      "fetchModels": true,
+      "extraBody": {
+        "thinking": {
+          "type": "disabled"
+        }
+      }
+    },
+    {
+      "id": "moonshot",
+      "name": "Kimi / Moonshot",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "https://api.moonshot.ai/v1",
+      "baseUrlSource": "models.dev",
+      "requiresKey": true,
+      "optionalKey": false,
+      "docsUrl": "https://platform.moonshot.ai/docs/api/chat",
+      "presetModels": [
+        {
+          "id": "kimi-k3.1-pro",
+          "label": "Kimi K3.1 Pro",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-10-23"
+        },
+        {
+          "id": "kimi-k3.1-pro-highspeed",
+          "label": "Kimi K3.1 Pro Highspeed",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-10-23"
+        },
+        {
+          "id": "kimi-k3",
+          "label": "Kimi K3",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-07-16"
+        }
+      ],
+      "fetchModels": true
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "https://api.deepseek.com",
+      "baseUrlSource": "models.dev",
+      "requiresKey": true,
+      "optionalKey": false,
+      "docsUrl": "https://api-docs.deepseek.com/quick_start/pricing",
+      "presetModels": [
+        {
+          "id": "deepseek-flash",
+          "label": "DeepSeek V4.1 Flash 1017",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-10-17"
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "label": "DeepSeek V4 Pro",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-08-13"
+        }
+      ],
+      "fetchModels": true
+    },
+    {
+      "id": "bailian",
+      "name": "阿里百炼 Qwen",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "baseUrlSource": "models.dev",
+      "requiresKey": true,
+      "optionalKey": false,
+      "docsUrl": "https://www.alibabacloud.com/help/en/model-studio/models",
+      "presetModels": [
+        {
+          "id": "qwen4-max",
+          "label": "Qwen4 Max",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-11-16"
+        },
+        {
+          "id": "qwen3.8-omni-flash",
+          "label": "Qwen3.8 Omni Flash",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-09-17"
+        },
+        {
+          "id": "qwen3.8-flash",
+          "label": "Qwen3.8 Flash",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-08-26"
+        },
+        {
+          "id": "qwen3.8-max",
+          "label": "Qwen3.8 Max",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-08-03"
+        },
+        {
+          "id": "qwen3.7-flash",
+          "label": "Qwen3.7 Flash",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-07-15"
+        },
+        {
+          "id": "qwen3.7-plus",
+          "label": "Qwen3.7 Plus",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-06-02"
+        },
+        {
+          "id": "qwen3.7-max",
+          "label": "Qwen3.7 Max",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-05-21"
+        },
+        {
+          "id": "qwen3.6-flash",
+          "label": "Qwen3.6 Flash",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-04-27"
+        }
+      ],
+      "fetchModels": true
+    },
+    {
+      "id": "siliconflow",
+      "name": "硅基流动",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "https://api.siliconflow.cn/v1",
+      "baseUrlSource": "models.dev",
+      "requiresKey": true,
+      "optionalKey": false,
+      "docsUrl": "https://cloud.siliconflow.com/models",
+      "presetModels": [
+        {
+          "id": "deepseek-ai/DeepSeek-V4.1-Flash",
+          "label": "DeepSeek V4.1 Flash",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-09-10"
+        },
+        {
+          "id": "zai-org/GLM-5.3-Flash",
+          "label": "GLM-5.3-Flash",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-08-26"
+        },
+        {
+          "id": "Qwen/Qwen3.8-27B",
+          "label": "Qwen3.8 27B",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 262144,
+          "releaseDate": "2026-08-14"
+        },
+        {
+          "id": "zai-org/GLM-5.3",
+          "label": "GLM-5.3",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-08-14"
+        },
+        {
+          "id": "zai-org/GLM-5.2",
+          "label": "GLM-5.2",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1049000,
+          "releaseDate": "2026-06-13"
+        },
+        {
+          "id": "deepseek-ai/DeepSeek-V4-Flash",
+          "label": "DeepSeek V4 Flash",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1000000,
+          "releaseDate": "2026-04-24"
+        },
+        {
+          "id": "deepseek-ai/DeepSeek-V4-Pro",
+          "label": "deepseek-ai/DeepSeek-V4-Pro",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1049000,
+          "releaseDate": "2026-04-24"
+        },
+        {
+          "id": "Qwen/Qwen3.6-27B",
+          "label": "Qwen3.6 27B",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 262144,
+          "releaseDate": "2026-04-22"
+        }
+      ],
+      "fetchModels": true
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "https://api.openai.com/v1",
+      "baseUrlSource": "spec-table",
+      "requiresKey": true,
+      "optionalKey": false,
+      "docsUrl": "https://platform.openai.com/docs/models",
+      "presetModels": [
+        {
+          "id": "gpt-6-astra-healthcare",
+          "label": "GPT-6 Astra Healthcare",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1050000,
+          "releaseDate": "2026-11-24"
+        },
+        {
+          "id": "gpt-6.1-sol-healthcare",
+          "label": "GPT-6.1 Sol Healthcare",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1050000,
+          "releaseDate": "2026-11-24"
+        },
+        {
+          "id": "gpt-6.2-astra-healthcare",
+          "label": "GPT-6.2 Astra Healthcare",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1050000,
+          "releaseDate": "2026-11-24"
+        },
+        {
+          "id": "gpt-6.2-sol-healthcare",
+          "label": "GPT-6.2 Sol Healthcare",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1050000,
+          "releaseDate": "2026-11-24"
+        },
+        {
+          "id": "gpt-6.2-astra",
+          "label": "GPT-6.2 Astra",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1050000,
+          "releaseDate": "2026-11-17"
+        },
+        {
+          "id": "gpt-6.2-sol",
+          "label": "GPT-6.2 Sol",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1050000,
+          "releaseDate": "2026-11-17"
+        }
+      ],
+      "fetchModels": true
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "protocol": "anthropic",
+      "defaultBaseUrl": "",
+      "baseUrlSource": "models.dev",
+      "requiresKey": true,
+      "optionalKey": false,
+      "docsUrl": "https://docs.anthropic.com/en/docs/about-claude/models",
+      "presetModels": [],
+      "fetchModels": false,
+      "comingSoon": true
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "https://openrouter.ai/api/v1",
+      "baseUrlSource": "models.dev",
+      "requiresKey": true,
+      "optionalKey": false,
+      "docsUrl": "https://openrouter.ai/models",
+      "presetModels": [
+        {
+          "id": "upstage/solar-mini-4-5",
+          "label": "Solar Mini 4.5 (Preview)",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 524288,
+          "releaseDate": "2026-11-24"
+        },
+        {
+          "id": "upstage/solar-pro-4-contributor",
+          "label": "Solar Pro 4 Contributor",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 524288,
+          "releaseDate": "2026-11-24"
+        },
+        {
+          "id": "xiaomi/mimo-v2.6-flash-mopd",
+          "label": "MiMo-V2.6-Flash-MOPD",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-11-23"
+        },
+        {
+          "id": "radixark/daisyrose-27b",
+          "label": "DaisyRose 27B",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 262144,
+          "releaseDate": "2026-11-21"
+        },
+        {
+          "id": "thinkingmachines/inkling-2-mini",
+          "label": "Inkling 2 Mini",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-11-20"
+        },
+        {
+          "id": "google/gemini-4-neon",
+          "label": "Gemini 4 Neon",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1048576,
+          "releaseDate": "2026-11-18"
+        },
+        {
+          "id": "openai/gpt-6.2-astra",
+          "label": "GPT-6.2 Astra",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1050000,
+          "releaseDate": "2026-11-17"
+        },
+        {
+          "id": "openai/gpt-6.2-astra-pro",
+          "label": "GPT-6.2 Astra Pro",
+          "capabilities": [
+            "vision",
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 1050000,
+          "releaseDate": "2026-11-17"
+        }
+      ],
+      "fetchModels": true
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama（本地）",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "http://127.0.0.1:11434/v1",
+      "baseUrlSource": "spec-table",
+      "requiresKey": false,
+      "optionalKey": false,
+      "presetModels": [],
+      "fetchModels": true,
+      "local": true
+    },
+    {
+      "id": "lmstudio",
+      "name": "LM Studio（本地）",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "http://127.0.0.1:1234/v1",
+      "baseUrlSource": "models.dev",
+      "requiresKey": false,
+      "optionalKey": false,
+      "docsUrl": "https://lmstudio.ai/models",
+      "presetModels": [
+        {
+          "id": "openai/gpt-oss-20b",
+          "label": "GPT OSS 20B",
+          "capabilities": [
+            "reasoning",
+            "tools"
+          ],
+          "contextWindow": 131072,
+          "releaseDate": "2025-08-05"
+        },
+        {
+          "id": "qwen/qwen3-coder-30b",
+          "label": "Qwen3 Coder 30B",
+          "capabilities": [
+            "tools"
+          ],
+          "contextWindow": 262144,
+          "releaseDate": "2025-07-31"
+        },
+        {
+          "id": "qwen/qwen3-30b-a3b-2507",
+          "label": "Qwen3 30B A3B 2507",
+          "capabilities": [
+            "tools"
+          ],
+          "contextWindow": 262144,
+          "releaseDate": "2025-07-28"
+        }
+      ],
+      "fetchModels": true,
+      "local": true
+    },
+    {
+      "id": "custom",
+      "name": "自定义 OpenAI 兼容",
+      "protocol": "openai-compatible",
+      "defaultBaseUrl": "",
+      "baseUrlSource": "models.dev",
+      "requiresKey": false,
+      "optionalKey": true,
+      "presetModels": [],
+      "fetchModels": true,
+      "custom": true
+    }
+  ]
+}

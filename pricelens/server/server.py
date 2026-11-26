@@ -43,6 +43,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import ingest_pack  # noqa: E402
+import agent_gateway  # noqa: E402 —— Agent 模型服务网关（/api/agent/*，2026-11-26）
 
 PORT = int(os.environ.get("PRICLENS_PORT", "8321"))
 # 开发态（仓库内 pricelens/server/）：web 用 pricelens/dist、数据放 server/data；
@@ -60,6 +61,7 @@ DB_PATH = os.path.join(DATA_DIR, "pricelens.db")
 CONFIG_PATH = os.path.join(DATA_DIR, "config.json")
 LAST_IMPORT_PATH = os.path.join(DATA_DIR, "last-import.json")
 LATEST_PACK_PATH = os.path.join(DATA_DIR, "latest-pack.json")
+BUILD_STAMP_PATH = os.path.join(DATA_DIR, ".build-stamp.json")  # 派生包所用源文件清单（启动时据此判断预置包是否仍可信）
 # 数据文件夹（2026-11-18 Eason「后端数据极其简单，统一在一个文件夹承载、可直接
 # 编辑、改完前端就变化」）：offers.csv（街价原表行）+ sales.csv（PSI 销量行）
 # + config.json（配置，嵌套结构保持 JSON）= 唯一数据源。
@@ -76,7 +78,8 @@ SALES_JSON = os.path.join(DATA_DIR, "sales.json")
 # 配置表+补录表（数据建模方案 v2 §3：匹配表/竞品匹配/价格档位/大促档期四页签；
 # 《配置表补录表》工作簿回填后投递到此，存在即权威，缺页签回退 config.json）
 CONFIG_TABLES_PATH = os.path.join(DATA_DIR, "config_tables.xlsx")
-BUILD_STAMP = {"mtime": -1.0}  # 进程内上次构建时的源文件最大 mtime
+agent_gateway.init(DATA_DIR)  # 模型服务配置落 data/agent-providers.json（密钥不进 config.json）
+BUILD_STAMP = {"mtime": -1.0, "files": frozenset()}  # 进程内上次构建时的源文件快照（最大 mtime + 文件集合）
 
 
 def _offers_path():
@@ -136,11 +139,36 @@ def _write_rows_csv(path, rows):
     _write_with_retry(path, writer)
 
 
+_SOURCE_FILES = (CONFIG_PATH, OFFERS_PATH, OFFERS_JSON, SALES_PATH, SALES_XLSX_PATH, SALES_JSON,
+                 CONFIG_TABLES_PATH)
+
+
 def _folder_mtime():
-    parts = [CONFIG_PATH, OFFERS_PATH, OFFERS_JSON, SALES_PATH, SALES_XLSX_PATH, SALES_JSON,
-             CONFIG_TABLES_PATH]
-    mt = [os.path.getmtime(p) for p in parts if os.path.exists(p)]
+    mt = [os.path.getmtime(p) for p in _SOURCE_FILES if os.path.exists(p)]
     return max(mt) if mt else -1.0
+
+
+def _source_set():
+    """当前存在的源文件集合。文件被删除 / 改名时「最大 mtime」不会变大，只看 mtime 会漏判
+    （2026-11-26 内网部署演练：拿走 data/sales.csv 后页面仍显示已删除的销量）——集合变化也算变。"""
+    return frozenset(p for p in _SOURCE_FILES if os.path.exists(p))
+
+
+def _snapshot():
+    return {"mtime": _folder_mtime(), "files": _source_set()}
+
+
+def _dirty():
+    return _folder_mtime() > BUILD_STAMP["mtime"] or _source_set() != BUILD_STAMP["files"]
+
+
+def _mark_clean(snap):
+    """记下「已按这份快照构建」。快照取自构建之前：构建期间又被改过的源文件仍是 dirty。
+    同时把所用源文件名落盘（只记文件名：部署包拷到别的机器路径会变）——启动时据此判断
+    预置派生包是否仍与 data/ 里的源文件一致。"""
+    BUILD_STAMP["mtime"] = snap["mtime"]
+    BUILD_STAMP["files"] = snap["files"]
+    _write_json(BUILD_STAMP_PATH, {"sources": sorted(os.path.basename(p) for p in snap["files"])})
 
 
 def _now_tag():
@@ -148,77 +176,82 @@ def _now_tag():
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
 
 
+def _inherited_segments():
+    """monthly / 别名（ZA 小册子、PSI 别名）跨重派生继承：优先 last-import.json（历史上传
+    包携带的段——2026-11-23 审计修复：置空会丢数据），缺失或为空时回退上一版
+    latest-pack.json 的同名段。部署包只预置派生包、不预置 98MB 上传包时，替换
+    data/offers.csv 触发的重派生不会抹掉月度数据（2026-11-26 内网部署加固）。"""
+    def pick(src):
+        if not isinstance(src, dict):
+            return None, None
+        m = src.get("monthly") if isinstance(src.get("monthly"), list) else None
+        a = src.get("salesProductAliases") if isinstance(src.get("salesProductAliases"), dict) else None
+        return m, a
+    monthly, aliases = pick(_read_json(LAST_IMPORT_PATH))
+    if not monthly:
+        m2, a2 = pick(_read_json(LATEST_PACK_PATH))
+        monthly, aliases = m2, (aliases or a2)
+    return monthly or [], aliases or {}
+
+
+def rebuild_from_folder():
+    """数据文件夹（offers + sales + 继承段）→ v2 派生包 + SQLite。
+    阻塞重建、后台重建、命令行 --rebuild 三条路径共用；offers 缺失返回 None。"""
+    offers_path = _offers_path()
+    if offers_path is None:
+        return None
+    offers = _read_rows(offers_path)
+    sales = _read_rows(_sales_path())
+    monthly, aliases = _inherited_segments()
+    pack = {
+        "kind": "pricelens-data-pack", "v": 3,
+        "generatedAt": _now_tag(),
+        "offers": offers, "sales": sales,
+        "salesProductAliases": aliases, "monthly": monthly,
+    }
+    config = _read_json(CONFIG_PATH) or {}
+    v2_pack, diag, pack_id = ingest_pack.ingest_v3_pack(pack, config, REGION_BASE, DB_PATH)
+    _write_json(LATEST_PACK_PATH, v2_pack)
+    return diag, pack_id
+
+
 def maybe_rebuild():
-    """源文件被编辑 → 自动重派生（阻塞版：显式操作 datapack/rederive/config 用；
-    mtime 未变 = 零开销）"""
-    mt = _folder_mtime()
-    if mt <= BUILD_STAMP["mtime"]:
+    """源文件被编辑 / 增删 → 自动重派生（阻塞版：显式操作 datapack/rederive/config 用；
+    未变 = 零开销）"""
+    if not _dirty():
         return
     with INGEST_LOCK, STATE_LOCK:
-        mt = _folder_mtime()  # 双检（锁内再读一次，防并发竞态）
-        if mt <= BUILD_STAMP["mtime"]:
+        if not _dirty():  # 双检（锁内再看一次，防并发竞态）
             return
+        snap = _snapshot()
         try:
-            offers_path = _offers_path()
-            if offers_path is None:
-                BUILD_STAMP["mtime"] = mt
-                return
-            offers = _read_rows(offers_path)
-            sales = _read_rows(_sales_path())
-            # monthly/别名（ZA 小册子、PSI 别名）从 last-import 继承——CSV 重派生
-            # 不该抹掉历史上传包携带的段（2026-11-23 审计修复：原实现置空会丢数据）
-            prev = _read_json(LAST_IMPORT_PATH) or {}
-            prev_monthly = prev.get("monthly") if isinstance(prev.get("monthly"), list) else []
-            prev_aliases = prev.get("salesProductAliases") if isinstance(prev.get("salesProductAliases"), dict) else {}
-            pack = {
-                "kind": "pricelens-data-pack", "v": 3,
-                "generatedAt": _now_tag(),
-                "offers": offers, "sales": sales,
-                "salesProductAliases": prev_aliases, "monthly": prev_monthly,
-            }
-            config = _read_json(CONFIG_PATH) or {}
-            v2_pack, diag, pack_id = ingest_pack.ingest_v3_pack(pack, config, REGION_BASE, DB_PATH)
-            _write_json(LATEST_PACK_PATH, v2_pack)
-            BUILD_STAMP["mtime"] = mt
-            print(f"[pricelens-server] 数据文件变更已重派生（{diag.get('rowsOut')} 事实行，pack_id={pack_id}）")
+            built = rebuild_from_folder()
+            _mark_clean(snap)
+            if built:
+                diag, pack_id = built
+                print(f"[pricelens-server] 数据文件变更已重派生（{diag.get('rowsOut')} 事实行，pack_id={pack_id}）")
         except Exception:  # noqa: BLE001 —— 编辑坏档时保旧包、报完整栈
-            BUILD_STAMP["mtime"] = mt  # 坏档不无限重试；修好文件后 mtime 再变即重建
+            _mark_clean(snap)  # 坏档不无限重试；修好文件后源再变即重建
             traceback.print_exc()
 
 
 REBUILDING = {"flag": False}
 
 
-def _rebuild_worker(mt):
+def _rebuild_worker():
     """后台重建线程体（ping/pack 非阻塞路径用）"""
     try:
         with INGEST_LOCK:
-            cur = _folder_mtime()
-            if cur <= BUILD_STAMP["mtime"]:
+            if not _dirty():
                 return  # 已被阻塞路径或上一线程处理
-            offers_path = _offers_path()
-            if offers_path is None:
-                BUILD_STAMP["mtime"] = cur
-                return
-            offers = _read_rows(offers_path)
-            sales = _read_rows(_sales_path())
-            # monthly/别名继承同 maybe_rebuild（2026-11-23 审计修复）
-            prev = _read_json(LAST_IMPORT_PATH) or {}
-            prev_monthly = prev.get("monthly") if isinstance(prev.get("monthly"), list) else []
-            prev_aliases = prev.get("salesProductAliases") if isinstance(prev.get("salesProductAliases"), dict) else {}
-            pack = {
-                "kind": "pricelens-data-pack", "v": 3,
-                "generatedAt": _now_tag(),
-                "offers": offers, "sales": sales,
-                "salesProductAliases": prev_aliases, "monthly": prev_monthly,
-            }
-            config = _read_json(CONFIG_PATH) or {}
-            v2_pack, diag, pack_id = ingest_pack.ingest_v3_pack(pack, config, REGION_BASE, DB_PATH)
-            _write_json(LATEST_PACK_PATH, v2_pack)
-            BUILD_STAMP["mtime"] = cur
-            print(f"[pricelens-server] 数据文件变更已重派生（{diag.get('rowsOut')} 事实行，pack_id={pack_id}）")
+            snap = _snapshot()
+            built = rebuild_from_folder()
+            _mark_clean(snap)
+            if built:
+                diag, pack_id = built
+                print(f"[pricelens-server] 数据文件变更已重派生（{diag.get('rowsOut')} 事实行，pack_id={pack_id}）")
     except Exception:  # noqa: BLE001 —— 编辑坏档时保旧包、报完整栈
-        BUILD_STAMP["mtime"] = _folder_mtime()
+        _mark_clean(_snapshot())
         traceback.print_exc()
     finally:
         REBUILDING["flag"] = False
@@ -228,11 +261,10 @@ def kick_rebuild_if_dirty():
     """非阻塞重建踢一脚（ping/pack 快路径用——2026-11-18 审计：重建持锁 10-60s
     会把 ping 一起堵死，前端探测超时静默降级离线模式）。dirty 且没有在跑 →
     起后台线程；进行中/未 dirty = 立即返回。"""
-    mt = _folder_mtime()
-    if mt <= BUILD_STAMP["mtime"] or REBUILDING["flag"]:
+    if not _dirty() or REBUILDING["flag"]:
         return
     REBUILDING["flag"] = True
-    threading.Thread(target=_rebuild_worker, args=(mt,), daemon=True).start()
+    threading.Thread(target=_rebuild_worker, daemon=True).start()
 
 
 def _split_folder_files(pack):
@@ -355,14 +387,18 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- API ----------
     def _api(self, method):
         path = urlparse(self.path).path
+        # Agent 模型服务（2026-11-26）：本机服务器自带模型网关，端点见 agent_gateway.py；
+        # 未知子路径返回 None，落到下方的通用 404
+        if path.startswith("/api/agent/") and agent_gateway.handle(self, method, path) is not None:
+            return None
         # 快路径（ping/pack）= 非阻塞踢一脚：重建在后台线程跑、立即响应旧包 +
         # rebuilding 标志（2026-11-18 审计：阻塞版会把 ping 堵 10-60s，前端探测
         # 超时静默降级离线模式、启动白屏整个重建时长）。显式操作（datapack/
         # rederive/config POST）保持阻塞版等完成回执。
-        dirty = _folder_mtime() > BUILD_STAMP["mtime"]
+        dirty = _dirty()
         if dirty and not REBUILDING["flag"]:
             kick_rebuild_if_dirty()
-        rebuilding = REBUILDING["flag"] or (dirty and BUILD_STAMP["mtime"] < _folder_mtime())
+        rebuilding = REBUILDING["flag"] or dirty
         if method == "GET" and path == "/api/ping":
             return self._send_json({"ok": True, "service": "pricelens-server",
                                     "editableFolder": _offers_path() is not None,
@@ -420,7 +456,7 @@ class Handler(BaseHTTPRequestHandler):
                                     "salesProductAliases": pack.get("salesProductAliases") or {},
                                     "monthly": pack.get("monthly") or []}
                     v2_pack, diag, note = do_ingest(pack)
-                    BUILD_STAMP["mtime"] = _folder_mtime()  # 上传路径同步推进 stamp，防 maybe_rebuild 重复跑
+                    _mark_clean(_snapshot())  # 上传路径同步推进 stamp，防 maybe_rebuild 重复跑
                     return self._send_json({
                         "ok": True, "note": note, "diag": diag,
                         "meta": _pack_meta(),
@@ -462,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
                                         "offers": offers, "sales": sales,
                                         "salesProductAliases": {}, "monthly": []}
                             _, diag, _ = do_ingest(cfg_pack)
-                            BUILD_STAMP["mtime"] = _folder_mtime()
+                            _mark_clean(_snapshot())
                             rederived = True
                         except Exception:  # noqa: BLE001 —— 配置坏行时保配置、报派生错误
                             traceback.print_exc()
@@ -484,7 +520,7 @@ class Handler(BaseHTTPRequestHandler):
                           SALES_PATH, SALES_XLSX_PATH, SALES_JSON, CONFIG_TABLES_PATH):
                     if os.path.exists(p):
                         os.remove(p)
-                BUILD_STAMP["mtime"] = _folder_mtime()
+                _mark_clean(_snapshot())
                 if os.path.exists(DB_PATH):
                     conn = sqlite3.connect(DB_PATH)
                     try:
@@ -544,9 +580,40 @@ def _migrate_last_import_to_folder():
         print("[pricelens-server] 已把历史导入包拆写为 data/offers.csv + sales.csv（可编辑源）")
 
 
+def _adopt_prebuilt_pack():
+    """预置派生包免首启重建（2026-11-26 内网部署）：latest-pack.json 存在、不早于任何源
+    文件、且当初生成它的源文件清单与现在 data/ 里的一致 = 仍是最新，直接采信。
+    源文件之后被改过 / 增删过（比如删了文件就关服务器）则照常触发重派生——只比修改时间
+    会漏掉「删文件」（最大 mtime 不会变大），所以必须对清单。"""
+    try:
+        if not os.path.exists(LATEST_PACK_PATH) or os.path.getmtime(LATEST_PACK_PATH) < _folder_mtime():
+            return
+        stamp = _read_json(BUILD_STAMP_PATH)
+        used = stamp.get("sources") if isinstance(stamp, dict) else None
+        current = sorted(os.path.basename(p) for p in _source_set())
+        if used is not None and list(used) != current:
+            return
+        _mark_clean(_snapshot())
+    except OSError:
+        pass
+
+
 def main():
+    if "--rebuild" in sys.argv[1:]:
+        # 命令行重建（部署包装配 / 内网运维替换原始数据后手动触发）：数据文件夹 →
+        # 派生包 + SQLite 后退出，不启动 HTTP 服务
+        built = rebuild_from_folder()
+        if not built:
+            print("[pricelens-server] data/ 下没有 offers.csv（或 offers.json），无可重建的数据")
+            sys.exit(2)
+        diag, pack_id = built
+        sales = diag.get("sales") or {}
+        print("[pricelens-server] 重建完成 pack_id=%s 事实行=%s 型号=%s SKU=%s 销量事实行=%s" % (
+            pack_id, diag.get("rowsOut"), diag.get("models"), diag.get("skus"), sales.get("factSalesRows")))
+        return
     os.makedirs(DATA_DIR, exist_ok=True)
     _migrate_last_import_to_folder()
+    _adopt_prebuilt_pack()
     addr = ("127.0.0.1", PORT)
     httpd = _make_server(addr)
     url = f"http://localhost:{PORT}"

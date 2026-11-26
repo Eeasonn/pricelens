@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
 import { applyDataPack, buildDataPack, currencyOfCountry, dataMeta, dimBenchmark, dimProduct, dimTier, factPriceWeekly, factSalesWeekly, productRowBySku, type PricelensDataPack } from '../index';
 import { clearDataPack, loadDataPack, saveDataPack } from '../dataPackStore';
-import { salesSourceOf, volumeOfConfig } from '../../dataModel/volume';
+import { isSimulatedPsiType, salesSourceBadge, salesSourceNote, salesSourceOf, volumeOfConfig } from '../../dataModel/volume';
 import { effectiveSeriesOf } from '../../state/deriveConfig';
 import { LPL } from '../../state/lplKeys';
 import { afterEach, beforeAll } from 'vitest';
@@ -238,6 +238,65 @@ describe('数据包 v2 · PSI 销量（2026-11-17 接口预留）', () => {
     expect(factSalesWeekly[0].qty).toBe(130);
     expect(dataMeta().salesUnmatched).toBe(1);
     restore();
+  });
+
+  // ---- 销量来源类型（2026-11-26）：模拟数据不得标成「PSI 真实」 ----
+
+  it('来源类型 simulated：口径标「模拟」，不标 PSI 真实（此前只判断有无销量数据）', () => {
+    const pack = buildDataPack() as PricelensDataPack & { sales: unknown[] };
+    pack.sales = [{ ...watchSales[0], psiType: 'simulated' }];
+    const applied = applyDataPack(pack);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    expect(factSalesWeekly[0].psiType).toBe('simulated');
+    expect(salesSourceOf()).toBe('simulated');
+    expect(salesSourceBadge()).toBe('模拟');
+    expect(salesSourceNote()).toContain('非真实销量');
+    restore();
+  });
+
+  it('真实与模拟并存：口径标「混合」，徽标与说明都点明', () => {
+    const pack = buildDataPack() as PricelensDataPack & { sales: unknown[] };
+    pack.sales = [
+      { ...watchSales[0], psiType: 'Sell-out' },
+      { country: 'R国', product: 'Mate 80 Pro', category1: '12+512 GB', category2: null, periodId: '2026043', qty: 5, psiType: 'simulated' },
+    ];
+    const applied = applyDataPack(pack);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    expect(salesSourceOf()).toBe('mixed');
+    expect(salesSourceBadge()).toBe('混合');
+    expect(salesSourceNote()).toContain('混合');
+    restore();
+  });
+
+  it('同键并入真实行与模拟行：销量照常求和，来源记成 mixed', () => {
+    const pack = buildDataPack() as PricelensDataPack & { sales: unknown[] };
+    pack.sales = [
+      { ...watchSales[0], psiType: 'Sell-out' },
+      { country: 'RU', product: 'watch6', category1: '42mm', periodId: '202643', qty: 7, psiType: '模拟' },
+    ];
+    const applied = applyDataPack(pack);
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    expect(factSalesWeekly[0].qty).toBe(130);
+    expect(factSalesWeekly[0].psiType).toBe('mixed');
+    expect(salesSourceOf()).toBe('mixed');
+    restore();
+  });
+
+  it('真实 PSI（来源不含模拟标记）与未标来源的旧数据仍标 PSI；无销量数据 = 估算，徽标沿用「模拟」', () => {
+    expect(isSimulatedPsiType('Sell-out')).toBe(false);
+    expect(isSimulatedPsiType(undefined)).toBe(false);
+    expect(isSimulatedPsiType('mock')).toBe(true);
+    const pack = buildDataPack() as PricelensDataPack & { sales: unknown[] };
+    pack.sales = [{ ...watchSales[0], psiType: 'Sell-out' }];
+    expect(applyDataPack(pack).ok).toBe(true);
+    expect(salesSourceOf()).toBe('psi-weekly');
+    expect(salesSourceBadge()).toBe('PSI');
+    restore();
+    expect(salesSourceOf()).toBe('estimated');
+    expect(salesSourceBadge()).toBe('模拟');
   });
 
   it('v1 旧包兼容：ok、sales 视为空（销量回落估算）', () => {

@@ -11,6 +11,7 @@ import {
   ReloadOutlined, StopOutlined,
 } from '@ant-design/icons';
 import { color, font, fontSize, motion, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
+import ModelPicker from './ModelPicker';
 import './agent-thread.css';
 
 export interface ThreadMessage {
@@ -309,7 +310,11 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
               minRows={1} maxRows={6} submitMode={controller.running ? 'none' : 'enter'} cancelOnEscape={false}
               addAttachmentOnPaste={false} onChange={(event) => controller.setDraft(event.target.value)} />
             <div className="aui-composer-toolbar">
-              <span className="aui-composer-hint">{controller.running ? '正在查询 · 可先写下一个问题' : compact ? '询问当前看板数据' : 'Enter 发送 · Shift+Enter 换行'}</span>
+              <div className="aui-composer-tools">
+                {/* 模型选择器（2026-11-27）：仅本机服务器模式渲染，离线 / 在线 Pages 模式为空、工具栏原样 */}
+                <ModelPicker onLeave={controller.closeAgent} resumeFocus={focusComposer} />
+                <span className="aui-composer-hint">{controller.running ? '正在查询 · 可先写下一个问题' : compact ? '询问当前看板数据' : 'Enter 发送 · Shift+Enter 换行'}</span>
+              </div>
               <div className="aui-header-actions">
                 <ThreadPrimitive.ScrollToBottom className="aui-jump" aria-label="回到最新消息" title="回到最新消息"><ArrowDownOutlined aria-hidden /><span className="aui-jump-label">最新</span></ThreadPrimitive.ScrollToBottom>
                 {controller.running ? <ComposerPrimitive.Cancel className="aui-send" aria-label="停止运行"><StopOutlined /></ComposerPrimitive.Cancel>

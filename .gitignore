@@ -67,6 +67,9 @@ logs/
 # 便携版装配产物（PriceLens.html 副本 + 数据包，本地产物不入库）
 portable/
 
+# 服务器部署包装配产物（含原始数据与 SQLite 数据库，本地产物不入库；交付件走交接包）
+/PriceLens-Server/
+
 # ZA 册子源表（内部数据不入库，产物 JSON 承载）
 pricelens/data/real/booklet/*.xlsx
 pricelens/server/data/

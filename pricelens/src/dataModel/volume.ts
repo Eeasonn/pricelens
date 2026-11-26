@@ -188,11 +188,44 @@ function configShares(modelId: string, cc: string): Map<string, number> {
 
 // ---------------- 周销量（真实优先，估算兜底） ----------------
 
-/** 当前销量口径：'psi-weekly' = 已导入 PSI 真实销量（数据包 v2）；
- *  'estimated' = 估算口径。页面脚注/悬停说明据此显性标注。 */
-export type SalesSource = 'estimated' | 'psi-weekly';
+/** 当前销量口径：'psi-weekly' = 已导入 PSI 真实销量（数据包 v2）；'simulated' = 已导入的
+ *  销量全部是模拟数据；'mixed' = 真实与模拟并存；'estimated' = 无销量事实，估算口径。
+ *  页面脚注 / 悬停说明据此显性标注。2026-11-26 修：此前只判断「有无销量数据」，
+ *  模拟销量（PSI Type = simulated）会被标成「PSI 真实」。 */
+export type SalesSource = 'estimated' | 'psi-weekly' | 'simulated' | 'mixed';
+
+/** 行级来源类型是否属于模拟数据（PSI Type 原文：simulated / sim / mock / 模拟） */
+export function isSimulatedPsiType(psiType?: string | null): boolean {
+  const t = (psiType || '').trim().toLowerCase();
+  return t.includes('sim') || t.includes('mock') || t.includes('模拟');
+}
+
 export function salesSourceOf(): SalesSource {
-  return factSalesWeekly.length > 0 ? 'psi-weekly' : 'estimated';
+  if (factSalesWeekly.length === 0) return 'estimated';
+  // 「沾了模拟」= 纯模拟行，或真实与模拟并进同一行的 mixed 行；两者都不是才算真实。
+  // 只有全部是纯模拟行才标 simulated——否则一律 mixed，绝不把沾了模拟的数据标成 PSI 真实
+  let tainted = 0;
+  let pureSimulated = 0;
+  for (const row of factSalesWeekly) {
+    if ((row.psiType || '').trim().toLowerCase() === 'mixed') tainted += 1;
+    else if (isSimulatedPsiType(row.psiType)) { tainted += 1; pureSimulated += 1; }
+  }
+  if (tainted === 0) return 'psi-weekly';
+  return pureSimulated === factSalesWeekly.length ? 'simulated' : 'mixed';
+}
+
+/** 口径徽标文案。估算与模拟都沿用既定的「模拟」字样（估算即模拟口径）；真实 = PSI。 */
+export function salesSourceBadge(source: SalesSource = salesSourceOf()): string {
+  if (source === 'psi-weekly') return 'PSI';
+  return source === 'mixed' ? '混合' : '模拟';
+}
+
+/** 口径说明短语（悬停提示 / 说明弹层用）。 */
+export function salesSourceNote(source: SalesSource = salesSourceOf()): string {
+  if (source === 'psi-weekly') return 'PSI 真实销量';
+  if (source === 'simulated') return '模拟销量，非真实销量';
+  if (source === 'mixed') return '真实与模拟销量混合，请按来源核对';
+  return '估算口径，非真实销量';
 }
 
 const volCache = new Map<string, Map<string, number>>();

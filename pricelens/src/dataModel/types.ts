@@ -213,6 +213,9 @@ export interface SalesSourceRow {
   periodId: string;
   /** 销量（台）；非正数 = 计入 skipped */
   qty: number;
+  /** 销量来源类型（PSI Type 原文）：真实 PSI 的口径名（如 Sell-out），或 simulated / 模拟。
+   *  归一层据此判定「真实 / 模拟 / 混合」并在页面显性标注——模拟数据不得标成真实。 */
+  psiType?: string | null;
 }
 
 /** 已解析销量事实（应用内消费形态）：周 × 国家 × 型号 × 维度1 × 维度2，
@@ -224,6 +227,7 @@ export interface FactSalesWeekly {
   cat1: string;
   cat2: string;
   qty: number;
+  psiType?: string; // 来源类型；同键并入来源不同的行时为 'mixed'
 }
 
 // ---------------- 图表取数契约（§7.3 显示层聚合口径的输出） ----------------

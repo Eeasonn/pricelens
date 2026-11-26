@@ -135,6 +135,15 @@
 .aui-panel .aui-input:focus-visible { outline: none; }
 .aui-composer-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--aui-sm); margin-top: var(--aui-sm); }
 .aui-composer-hint { font-size: var(--aui-caption); color: var(--aui-mute); line-height: 1.5; }
+/* 工具栏左侧：模型选择器（仅服务器模式渲染）+ 键盘提示；宽度不足时自然换行，不挤右侧按钮 */
+.aui-composer-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--aui-xs) var(--aui-sm); min-width: 0; }
+.aui-model-picker { display: inline-flex; align-items: center; gap: var(--aui-xs); min-width: 0; max-width: 100%; height: var(--aui-xl); padding: 0 var(--aui-sm); border: 1px solid var(--aui-line); border-radius: var(--aui-control-radius); background: var(--aui-canvas); color: var(--aui-ink); font-size: var(--aui-caption); line-height: 1; }
+.aui-panel .aui-model-picker:not(:disabled):hover { background: var(--aui-hover); border-color: var(--aui-line-strong); }
+.aui-panel .aui-model-picker:disabled { opacity: 1; color: var(--aui-mute); }
+/* 警示态（未配置 / 读取失败）：琥珀底 + 琥珀墨字，文字本身说明状态；悬停不变灰 */
+.aui-model-picker[data-model-state="warning"] { background: var(--aui-warning-soft); border-color: var(--aui-warning); color: var(--aui-warning); font-weight: 600; }
+.aui-panel .aui-model-picker[data-model-state="warning"]:not(:disabled):hover { background: var(--aui-warning-soft); border-color: var(--aui-warning); }
+.aui-model-picker-name { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aui-send { width: var(--aui-xl); height: var(--aui-xl); display: inline-grid; place-items: center; background: var(--aui-ink); color: var(--aui-on-primary); border: 1px solid transparent; border-radius: var(--aui-control-radius); }
 .aui-send:disabled { border-color: var(--aui-line); background: var(--aui-hover); color: var(--aui-body); opacity: 1; }
 .aui-composer-note { max-width: 768px; margin: var(--aui-sm) auto 0; color: var(--aui-mute); font-size: var(--aui-caption); line-height: 1.5; }
@@ -143,6 +152,7 @@
   .aui-panel { top: 0; width: 100%; }
   .aui-conversation { padding: var(--aui-base) var(--aui-base) var(--aui-xl); }
   .aui-icon-button, .aui-jump, .aui-send { width: calc(var(--aui-xl) + var(--aui-md)); height: calc(var(--aui-xl) + var(--aui-md)); }
+  .aui-model-picker { min-height: calc(var(--aui-xl) + var(--aui-md)); }
   .aui-jump { padding: 0; }
   .aui-jump-label { display: none; }
   .aui-panel .aui-input { font-size: var(--aui-body-md); }

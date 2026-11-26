@@ -24,6 +24,7 @@
     "review:za": "python3 scripts/review_za_booklet.py",
     "portable": "node scripts/build_portable.mjs",
     "server": "python3 -X utf8 server/server.py",
+    "providers:gen": "node scripts/gen_provider_presets.mjs",
     "server:bundle": "node scripts/build_server_bundle.mjs"
   },
   "dependencies": {

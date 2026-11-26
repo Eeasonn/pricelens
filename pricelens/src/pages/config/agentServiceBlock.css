@@ -1,0 +1,173 @@
+/* ============================================================
+   配置页「Agent 模型服务」分块：左服务商列表 + 右配置详情。
+   颜色 / 字号 / 圆角 / 间距全部来自组件根节点上的 --las-* 桥接变量
+   （唯一来源 theme/tokens.ts，与 Agent 面板的 --aui-* 桥接同一做法）；
+   这里只写结构、交互态与窄屏回落，不放任何视觉数值。
+   ============================================================ */
+
+/* 左列固定 264px（局部布局决定，见 .impeccable/surfaces/agent-model-service.md），右列自适应 */
+.lpl-agent-service {
+  --las-list-width: 264px;
+  /* 列表行高 = 20px 徽标 + 上下各 8px */
+  --las-row-height: 36px;
+  display: grid;
+  grid-template-columns: var(--las-list-width) minmax(0, 1fr);
+  border: 1px solid var(--las-line);
+  border-radius: var(--las-control-radius);
+  background: var(--las-canvas);
+}
+
+.lpl-agent-service-list {
+  min-width: 0;
+  padding: var(--las-sm) var(--las-xs);
+  border-right: 1px solid var(--las-line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--las-xs);
+}
+
+.lpl-agent-service-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--las-xs);
+  min-height: var(--las-row-height);
+}
+
+.lpl-agent-service-item {
+  display: flex;
+  align-items: center;
+  gap: var(--las-sm);
+  width: 100%;
+  min-height: var(--las-row-height);
+  padding: var(--las-xs) var(--las-sm);
+  border: 0;
+  border-radius: var(--las-control-radius);
+  background: transparent;
+  color: var(--las-ink);
+  font: inherit;
+  font-size: var(--las-body-sm);
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+.lpl-agent-service-item:hover { background: var(--las-hover); }
+.lpl-agent-service-item[aria-selected="true"] { background: var(--las-select-soft); color: var(--las-select-ink); }
+.lpl-agent-service-item:focus-visible { outline: 2px solid var(--las-focus); outline-offset: -2px; }
+
+.lpl-agent-service-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lpl-agent-service-item[aria-selected="true"] .lpl-agent-service-item-name { font-weight: 600; }
+
+.lpl-agent-service-detail {
+  min-width: 0;
+  padding: var(--las-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--las-md);
+}
+
+/* 右列内部：表单 + 右侧静态说明（280px）；1280 以下说明移到表单下方 */
+.lpl-agent-service-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--las-base);
+  align-items: start;
+}
+.lpl-agent-service-form {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--las-md);
+}
+.lpl-agent-service-notes {
+  min-width: 0;
+  padding-left: var(--las-base);
+  border-left: 1px solid var(--las-line);
+}
+
+/* 表单行：88px 标签列 + 自适应控件列（与配置页既有 previewRow 同栅格） */
+.lpl-agent-service-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--las-sm);
+  align-items: start;
+}
+.lpl-agent-service-row > label,
+.lpl-agent-service-row > .lpl-agent-service-row-label {
+  padding-top: var(--las-xs);
+  color: var(--las-body);
+  font-size: var(--las-body-sm);
+  line-height: 20px;
+}
+
+.lpl-agent-service-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--las-sm);
+  min-width: 0;
+}
+
+/* 服务地址收在原生 details 里（无动画、键盘可达、reduced-motion 下行为不变）；
+   自带三角标记隐藏，由 summary 里的图标承担 */
+.lpl-agent-service-advanced > summary {
+  width: fit-content;
+  cursor: pointer;
+  list-style: none;
+  color: var(--las-body);
+  font-size: var(--las-body-sm);
+  line-height: 20px;
+  border-radius: var(--las-control-radius);
+}
+.lpl-agent-service-advanced > summary::-webkit-details-marker { display: none; }
+.lpl-agent-service-advanced > summary:focus-visible { outline: 2px solid var(--las-focus); outline-offset: 2px; }
+.lpl-agent-service-advanced[open] > summary { margin-bottom: var(--las-sm); }
+.lpl-agent-service-advanced > summary .anticon { margin-right: var(--las-xs); font-size: var(--las-caption); }
+.lpl-agent-service-advanced[open] > summary .anticon { transform: rotate(90deg); }
+
+.lpl-agent-service-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--las-xs);
+  color: var(--las-link);
+  font-size: var(--las-body-sm);
+  text-decoration: none;
+}
+.lpl-agent-service-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.lpl-agent-service-link:focus-visible { outline: 2px solid var(--las-focus); outline-offset: 2px; border-radius: var(--las-control-radius); }
+
+@media (max-width: 1279.98px) {
+  .lpl-agent-service-body { grid-template-columns: minmax(0, 1fr); }
+  .lpl-agent-service-notes {
+    padding-left: 0;
+    padding-top: var(--las-md);
+    border-left: 0;
+    border-top: 1px solid var(--las-line);
+  }
+}
+
+@media (max-width: 639.98px) {
+  .lpl-agent-service { grid-template-columns: minmax(0, 1fr); }
+  .lpl-agent-service-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--las-line);
+  }
+  /* 左列表收为顶部横向可滚动的一行，名称不截断成省略号 */
+  .lpl-agent-service-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    min-height: 0;
+  }
+  .lpl-agent-service-item { width: auto; flex-shrink: 0; }
+  .lpl-agent-service-row { grid-template-columns: minmax(0, 1fr); }
+  .lpl-agent-service-detail { padding: var(--las-md); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lpl-agent-service-advanced > summary .anticon { transition: transform var(--las-motion); }
+}
