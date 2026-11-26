@@ -347,31 +347,31 @@ def metric_rows(raw):
 # ================================================================ ② 维度映射
 DIM_ROWS = [
     (1, "tech_date", "采集日期", "week_id",
-     "采集日期归所在 ISO 周的周三锚，格式 YYYYWW；月指标再经 dim_time 取所属自然月 month_id（YYYYMM）",
-     "dim_time", "时间筛选器（最早 / 最晚时间）、粒度切换（周 / 月 / 季）",
+     "采集日期归所在 ISO 周的周三锚，格式 YYYYWW；月指标时间键 month_id（YYYYMM）随行 stamp 进 fact_price 宽列",
+     "fact_price.month_id", "时间筛选器（最早 / 最晚时间）、粒度切换（周 / 月 / 季）",
      "周指标时间键 = week_id；月指标 = month_id。底表 collection_time（采集时刻）只用于周内去重"),
-    (2, "category", "品类", "category", "英文品类翻译为中文产业（手机 / 平板 / 穿戴 / 音频；IoT / PC 同理）", "dim_category",
+    (2, "category", "品类", "category", "英文品类翻译为中文产业（手机 / 平板 / 穿戴 / 音频；IoT / PC 同理）", "fact_price.industry",
      "产业筛选器", "引擎内部产业码 phone / tablet / wearable / audio / iot / pc；事实表存中文"),
-    (3, "brand", "品牌", "brand", "直取（统一大写）", "dim_brand", "品牌筛选；我司 / 竞品分流（HUAWEI = 我司）", ""),
-    (4, "model", "型号", "model_id", "归一正名（剥品牌词、同义型号合并），拼 (own|cmp)-品牌slug-型号slug", "dim_model",
+    (3, "brand", "品牌", "brand", "直取（统一大写）", "fact_price.brand", "品牌筛选；我司 / 竞品分流（HUAWEI = 我司）", ""),
+    (4, "model", "型号", "model_id", "归一正名（剥品牌词、同义型号合并），拼 (own|cmp)-品牌slug-型号slug", "fact_price.model_id",
      "选品器（主分析卡 / 对比品）", "稳定键契约：维度调整不改键"),
-    (5, "color_size", "SKU", "sku_id", "按产业拆列：存储键 + 颜色键，拼 model_id__存储键__颜色键", "dim_sku",
+    (5, "color_size", "SKU", "sku_id", "按产业拆列：存储键 + 颜色键，拼 model_id__存储键__颜色键", "fact_price.sku_id",
      "配置（存储 / 表盘）、颜色", "前端主图线把同一配置的多个颜色 SKU 平均成一个价（上卷规则 U2）"),
-    (6, "platform", "平台", "platform", "别名归一（如 mvm → Mvideo）", "dim_platform", "平台筛选（渠道一级）", ""),
-    (7, "country", "国家", "country_code", "归一两位码（中文名 / 英文名 / 裸码均收）", "dim_region", "国家选择器（页头）", ""),
-    (8, "store_type", "店铺类型", "store_type", "归一为 1P / 3P / 独立站", "dim_store_type", "店铺类型筛选（渠道二级）", ""),
-    (9, "shop_name", "店铺名称", "shop", "取 shop_name_new（归一显示名），缺省回 shop_name", "dim_shop", "店铺筛选（渠道三级）", ""),
-    (10, "（派生）系列", "—", "—（经 model_id 关联）", "匹配表 map_product.series（系列规则预填 + 人工核对）", "dim_series",
+    (6, "platform", "平台", "platform", "别名归一（如 mvm → Mvideo）", "fact_price.platform", "平台筛选（渠道一级）", ""),
+    (7, "country", "国家", "country_code", "归一两位码（中文名 / 英文名 / 裸码均收）", "map_region", "国家选择器（页头）", ""),
+    (8, "store_type", "店铺类型", "store_type", "归一为 1P / 3P / 独立站", "fact_price.store_type", "店铺类型筛选（渠道二级）", ""),
+    (9, "shop_name", "店铺名称", "shop", "取 shop_name_new（归一显示名），缺省回 shop_name", "fact_price.shop", "店铺筛选（渠道三级）", ""),
+    (10, "（派生）系列", "—", "—（随行 stamp）", "匹配表 map_product.series（系列规则预填 + 人工核对）", "fact_price.series",
      "系列分组 / 产业页签下钻", "指标维度未列；前端按系列筛选时需要（Q12）"),
-    (11, "（派生）规格 category1", "—", "—（经 sku_id 关联）", "匹配表拆列：手机 / 平板 = 存储、穿戴 = 表盘尺寸", "dim_sku.cat1",
+    (11, "（派生）规格 category1", "—", "—（经 sku_id 关联）", "匹配表拆列：手机 / 平板 = 存储、穿戴 = 表盘尺寸", "（xlsx 匹配表拆列，未落 fact 宽列）",
      "配置切换", "同上"),
-    (12, "（派生）尺寸 category2", "—", "—（经 sku_id 关联）", "匹配表拆列：平板屏幕英寸", "dim_sku.cat2", "平板尺寸筛选", "同上"),
+    (12, "（派生）尺寸 category2", "—", "—（经 sku_id 关联）", "匹配表拆列：平板屏幕英寸", "（xlsx 匹配表拆列，未落 fact 宽列）", "平板尺寸筛选", "同上"),
     (13, "（派生）柔光 category3", "—", "—（经 map_product 关联）", "匹配表：PaperMatte / Normal（仅平板）", "map_product.category3",
      "（预留）平板柔光拆分", "同上"),
     (14, "（派生）档位", "—", "—（落档派生）", "按美金价落入 map_price_band（min ≤ 价 < max）", "map_price_band", "档位带 / 档位排序",
      "同上"),
-    (15, "（派生）大区", "—", "—（经 country_code 关联）", "dim_region.region_code（国家上卷层，对应 PSI 的 Management Region）",
-     "dim_region", "（预留）大区上卷", "同上"),
+    (15, "（派生）大区", "—", "—（随行 stamp）", "map_region.region_code（国家上卷层，对应 PSI 的 Management Region）",
+     "fact_price.region_name", "（预留）大区上卷", "同上"),
     (16, "（随行，非维度）exchange_rate / is_bundle", "—", "exchange_rate / is_bundle",
      "随事实行保留：汇率用于本币 ↔ 美金折算；组合标记用于取价「裸机优先」", "—", "币种切换", "不属于指标维度，但参与折算与取价规则"),
 ]
@@ -379,8 +379,8 @@ DIM_ROWS = [
 # ================================================================ ③ 口径约定
 RULE_ROWS = [
     ("C1", "计算", "时间键",
-     "tech_date → 所在 ISO 周的周三锚 week_id（YYYYWW）；月指标时间键 = week_id 所属自然月 month_id（YYYYMM），经 dim_time。"
-     "「本周 / 上周」「本月 / 上月」按自然周 / 月衔接，跨年经 dim_time。", "已定", "周指标 = week_id；月指标 = month_id"),
+     "tech_date → 所在 ISO 周的周三锚 week_id（YYYYWW）；月指标时间键 = week_id 所属自然月 month_id（YYYYMM），随行 stamp 进 fact_price。"
+     "「本周 / 上周」「本月 / 上月」按自然周 / 月衔接，跨年经周历宽列（week_wed_date / month_id）。", "已定", "周指标 = week_id；月指标 = month_id"),
     ("C2", "计算", "周内去重",
      "同一（周 × 国家 × 平台 × 店铺类型 × 店铺 × SKU）一周内多条采集 → 只保留采集时间最新的一行（同一时刻取平台成交价最低）。",
      "已定", "结果 = fact_price 一行；所以「周基价」就是事实表行值，无需再聚合"),
@@ -511,7 +511,7 @@ def fact_rows(raw):
             kind_base = f"{base}-{cur_cn}"
             short = name.replace("MSS_量价_", "")
             if kind == "wow":
-                shift = "week_id 减 1，跨年经 dim_time 衔接" if unit == "周" else "month_id 减 1，跨年经 dim_time 衔接"
+                shift = "week_id 减 1，跨年经周历宽列衔接" if unit == "周" else "month_id 减 1（fact_price 宽列），跨年自然衔接"
                 logic = (f"t = 本{unit}，t−1 = 上一自然{unit}（{shift}）；指标 =（基价(t) − 基价(t−1)）÷ 基价(t−1)，"
                          f"基价 = {kind_base}-{unit}。")
                 null = f"基价(t) 或基价(t−1) 缺失、或基价(t−1) ≤ 0 → 空"
@@ -696,7 +696,7 @@ def frontend_rows():
     return [(i,) + row for i, row in enumerate(r, 1)]
 
 
-# ================================================================ ⑥ 计算示例 SQL（SQLite，v2 表结构；均已在真实库全量实跑，单条 < 1s）
+# ================================================================ ⑥ 计算示例 SQL（SQLite，v3 宽表结构；均已在真实库全量实跑，单条 < 1s）
 def _ind(text, n=2):
     """整体右缩进（S7 把 S2 包成 CTE 用）"""
     pad = " " * n
@@ -705,9 +705,9 @@ def _ind(text, n=2):
 
 S2_QUERY = textwrap.dedent("""\
     WITH w AS (
-      SELECT t.month_id, f.country_code, f.platform, f.store_type, f.shop, f.sku_id, f.week_id,
+      SELECT f.month_id, f.country_code, f.platform, f.store_type, f.shop, f.sku_id, f.week_id,
              f.platform_selling_price_usd AS p, f.platform_rrp_usd AS r
-      FROM fact_price f JOIN dim_time t ON t.week_id = f.week_id
+      FROM fact_price f
       WHERE f.platform_selling_price_usd IS NOT NULL
     ),
     last_w AS (            -- 各组月内最后一个有值周
@@ -749,39 +749,40 @@ SQL_ROWS = [
     ("S3", "折后价周环比（严格上一自然周）", ids("DISCOUNT_WOW_USD", "DISCOUNT_WOW_LOCAL"),
      textwrap.dedent("""\
         WITH b AS (
-          SELECT f.week_id, f.country_code, f.platform, f.store_type, f.shop, f.sku_id,
+          SELECT f.week_id, f.week_wed_date, f.country_code, f.platform, f.store_type, f.shop, f.sku_id,
                  f.platform_selling_price_usd AS p,
                  LAG(f.week_id) OVER (
                      PARTITION BY f.country_code, f.platform, f.store_type, f.shop, f.sku_id
                      ORDER BY f.week_id) AS prev_week,
                  LAG(f.platform_selling_price_usd) OVER (
                      PARTITION BY f.country_code, f.platform, f.store_type, f.shop, f.sku_id
-                     ORDER BY f.week_id) AS prev_p
+                     ORDER BY f.week_id) AS prev_p,
+                 LAG(f.week_wed_date) OVER (
+                     PARTITION BY f.country_code, f.platform, f.store_type, f.shop, f.sku_id
+                     ORDER BY f.week_id) AS prev_wed
           FROM fact_price f
           WHERE f.platform_selling_price_usd IS NOT NULL
         )
         SELECT b.week_id, b.country_code, b.platform, b.store_type, b.shop, b.sku_id,
                (b.p - b.prev_p) * 1.0 / b.prev_p AS discount_wow_usd        -- 小数比率，0.052 = +5.2%
         FROM b
-        JOIN dim_time t  ON t.week_id = b.week_id
-        JOIN dim_time tp ON tp.week_id = b.prev_week
-                        AND tp.week_wed_date = date(t.week_wed_date, '-7 days')   -- 上一行必须恰好是上一自然周
-        WHERE b.prev_p > 0;"""),
-     "LAG 取同组上一有价周，再用 dim_time 校验它恰好是上一自然周（周三锚日期差 7 天，跨年也对）；"
-     "上一自然周缺采即不出行（= 指标为空）。若要改成「上一有值周」，去掉 dim_time tp 这个校验即可。"
+        WHERE b.prev_p > 0
+          AND b.prev_wed = date(b.week_wed_date, '-7 days');   -- 上一行必须恰好是上一自然周（周三锚差 7 天，跨年也对）"""),
+     "LAG 取同组上一有价周，再用周历宽列校验它恰好是上一自然周（周三锚日期差 7 天，跨年也对）；"
+     "上一自然周缺采即不出行（= 指标为空）。若要改成「上一有值周」，去掉 prev_wed 这个校验即可。"
      "月环比同理：把 week_id 换成 month_id、7 天换成上一自然月。"),
     ("S4", "折后价近4周周环比（窗口末周 = :end_week）", ids("DISCOUNT_4W_WOW_USD", "DISCOUNT_4W_WOW_LOCAL"),
      textwrap.dedent("""\
         WITH b AS (
-          SELECT f.week_id, f.country_code, f.platform, f.store_type, f.shop, f.sku_id,
+          SELECT f.week_id, f.week_wed_date, f.country_code, f.platform, f.store_type, f.shop, f.sku_id,
                  f.platform_selling_price_usd AS p
           FROM fact_price f
           WHERE f.platform_selling_price_usd IS NOT NULL
         ),
-        e AS (SELECT week_id AS end_week, week_wed_date AS end_date FROM dim_time WHERE week_id = :end_week),
+        e AS (SELECT DISTINCT week_wed_date AS end_date FROM fact_price WHERE week_id = :end_week),
         w AS (
-          SELECT b.*, CAST((julianday(e.end_date) - julianday(t.week_wed_date)) / 7 AS INTEGER) AS k   -- 距窗口末周的周数
-          FROM b JOIN dim_time t ON t.week_id = b.week_id CROSS JOIN e
+          SELECT b.*, CAST((julianday(e.end_date) - julianday(b.week_wed_date)) / 7 AS INTEGER) AS k   -- 距窗口末周的周数
+          FROM b CROSS JOIN e
         )
         SELECT country_code, platform, store_type, shop, sku_id,
                (AVG(CASE WHEN k BETWEEN 0 AND 3 THEN p END) - AVG(CASE WHEN k BETWEEN 4 AND 7 THEN p END))
@@ -796,25 +797,25 @@ SQL_ROWS = [
      ids("PLATFORM_SELLING_PRICE_USD", "PLATFORM_SELLING_PRICE_LOCAL"),
      textwrap.dedent("""\
         WITH pick AS (        -- U1：同 SKU 同周多条店铺行取最低在架价（裸机优先）
-          SELECT country_code, sku_id, week_id, platform_selling_price_usd AS p,
+          SELECT country_code, sku_id, week_id, model_id, romram, platform_selling_price_usd AS p,
                  ROW_NUMBER() OVER (PARTITION BY country_code, sku_id, week_id
                                     ORDER BY is_bundle, platform_selling_price_usd) AS rn
           FROM fact_price
           WHERE platform_selling_price_usd IS NOT NULL AND country_code = :cc
             AND platform = :platform AND store_type = :store_type      -- 渠道范围（U1）
         )
-        SELECT p.week_id, d.model_id, d.romram,
+        SELECT p.week_id, p.model_id, p.romram,
                AVG(p.p) AS discount_week_usd                               -- U2：颜色平均
         FROM pick p
-        JOIN dim_sku d ON d.sku_id = p.sku_id
-        WHERE p.rn = 1 AND d.model_id = :model_id AND d.romram = :romram
+        WHERE p.rn = 1 AND p.model_id = :model_id AND p.romram = :romram
         GROUP BY 1, 2, 3 ORDER BY 1;"""),
      "实库复算：RU · Pura 90s Pro Max 12+256 · DNS 独立站，202639–202645 = 992 / 1012 / 1030 / 1021 /（202643 无采）/ 1096 / 1074，"
      "与前端主图及宽表逐周一致。"),
     ("S6", "配置级近4周周环比（U1 + U2 + 近4周）—— 复算前端宽表「近4周环比」", ids("DISCOUNT_4W_WOW_USD", "DISCOUNT_4W_WOW_LOCAL"),
      textwrap.dedent("""\
         WITH pick AS (
-          SELECT country_code, sku_id, week_id, platform_selling_price_usd AS p,
+          SELECT country_code, sku_id, week_id, week_wed_date, model_id, romram,
+                 platform_selling_price_usd AS p,
                  ROW_NUMBER() OVER (PARTITION BY country_code, sku_id, week_id
                                     ORDER BY is_bundle, platform_selling_price_usd) AS rn
           FROM fact_price
@@ -822,15 +823,15 @@ SQL_ROWS = [
             AND platform = :platform AND store_type = :store_type
         ),
         cfg AS (             -- U2：颜色平均 → 配置级周价
-          SELECT p.week_id, AVG(p.p) AS p
-          FROM pick p JOIN dim_sku d ON d.sku_id = p.sku_id
-          WHERE p.rn = 1 AND d.model_id = :model_id AND d.romram = :romram
-          GROUP BY p.week_id
+          SELECT p.week_id, p.week_wed_date, AVG(p.p) AS p
+          FROM pick p
+          WHERE p.rn = 1 AND p.model_id = :model_id AND p.romram = :romram
+          GROUP BY p.week_id, p.week_wed_date
         ),
-        e AS (SELECT week_wed_date AS end_date FROM dim_time WHERE week_id = :end_week),
+        e AS (SELECT DISTINCT week_wed_date AS end_date FROM fact_price WHERE week_id = :end_week),
         w AS (
-          SELECT cfg.p, CAST((julianday(e.end_date) - julianday(t.week_wed_date)) / 7 AS INTEGER) AS k
-          FROM cfg JOIN dim_time t ON t.week_id = cfg.week_id CROSS JOIN e
+          SELECT cfg.p, CAST((julianday(e.end_date) - julianday(cfg.week_wed_date)) / 7 AS INTEGER) AS k
+          FROM cfg CROSS JOIN e
         )
         SELECT (AVG(CASE WHEN k BETWEEN 0 AND 3 THEN p END) - AVG(CASE WHEN k BETWEEN 4 AND 7 THEN p END))
                / AVG(CASE WHEN k BETWEEN 4 AND 7 THEN p END) AS discount_4w_wow_usd

@@ -5,7 +5,7 @@
 - 编码 utf-8-sig（中文 Windows Excel 双击直开不乱码）+ CRLF + RFC4180 引号转义
 - 全表全量、表头即列名；只读源库，不做任何派生
 - 表清单不硬编码：取库里实际存在的表，按 server/ingest_pack.py TABLES 的分层顺序排列
-  （2026-11-23 后端 v2 重构后为 24 表；旧库的 v1 表、自定义表排在后面照常导出）
+  （2026-11-26 v3 裁撤 DIM 层后为 11 表；旧库的 v1/v2 表、自定义表排在后面照常导出）
 用法：python3 scripts/export_all_tables_csv.py <db路径> <输出目录>
 """
 import csv
