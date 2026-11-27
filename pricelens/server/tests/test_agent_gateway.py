@@ -88,7 +88,7 @@ class AgentGatewayTest(unittest.TestCase):
         threading.Thread(target=cls.upstream.serve_forever, daemon=True).start()
 
         cls.deploy = tempfile.mkdtemp(prefix="pricelens-agent-test-")
-        for name in ("server.py", "ingest_pack.py", "xlsx_reader.py", "agent_gateway.py"):
+        for name in ("server.py", "ingest_pack.py", "psi_linkage.py", "xlsx_reader.py", "agent_gateway.py"):
             shutil.copy(os.path.join(PRICLENS, "server", name), cls.deploy)
         shutil.copy(os.path.join(PRICLENS, "src", "data", "dim_region.json"), cls.deploy)
         shutil.copy(os.path.join(PRICLENS, "src", "agentService", "providers.generated.json"),

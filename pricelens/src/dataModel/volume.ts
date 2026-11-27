@@ -14,7 +14,7 @@
 // ============================================================
 import { dimProduct, dimPromo, dimTime, factSalesWeekly } from '../data';
 import type { DimProduct, FactPriceWeekly, Granularity, Industry } from './types';
-import { effectiveCatsOf } from './salesIngest';
+import { effectiveCat3Of, effectiveCatsOf } from './salesIngest';
 import { defaultPlatformAnchorOf, factRows, minPriceOfRows, tierOf, tierOrderOf } from './aggregate';
 import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 
@@ -244,18 +244,22 @@ if (typeof window !== 'undefined') {
 }
 
 /** PSI 真实周销量（真实优先路径）：该型号在该国存在任何销量行 → 返回本配置
- *  维度（cat1/cat2 按 effectiveCatsOf 解析，与 PSI 归一同函数同键）的周求和 Map；
+ *  维度（cat1/cat2 按 effectiveCatsOf、cat3 按 effectiveCat3Of 解析，与销量事实同键）的周求和 Map；
  *  该型号该国完全无销量行 → null（整系列回落估算，不混口径）。
- *  同维度不同 info（颜色/联网等）的配置共享同一销量（Eason 2026-11-17 口径）。 */
+ *  同维度不同 info（颜色/联网等）的配置共享同一销量（Eason 2026-11-17 口径）。
+ *  cat3（平板柔光）是配置维度而非 info：事实行带了 cat3 的必须相等——同存储同尺寸的
+ *  Normal 与 PaperMatte 各取各的数（2026-11-27）；事实行没带 cat3 的（历史包 / 不带柔光的
+ *  模拟数据）按通配，保持旧行为。 */
 function realSalesOf(head: DimProduct, countryCode: string): Map<string, number> | null {
   if (factSalesWeekly.length === 0) return null;
   const { cat1, cat2 } = effectiveCatsOf(head);
+  const cat3 = effectiveCat3Of(head);
   const byWeek = new Map<string, number>();
   let modelCovered = false;
   for (const row of factSalesWeekly) {
     if (row.country_code !== countryCode || row.model_id !== head.model_id) continue;
     modelCovered = true;
-    if (row.cat1 === cat1 && row.cat2 === cat2) {
+    if (row.cat1 === cat1 && row.cat2 === cat2 && (!row.cat3 || row.cat3 === cat3)) {
       byWeek.set(row.week_id, (byWeek.get(row.week_id) ?? 0) + row.qty);
     }
   }

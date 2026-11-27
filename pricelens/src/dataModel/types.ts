@@ -67,6 +67,10 @@ export interface DimProduct {
   cat1?: string | null;
   /** 维度2（Category2）：平板 = 屏幕（`11.5"`）；其余产业 null。 */
   cat2?: string | null;
+  /** 维度3（Category3）：平板 = 柔光（`Normal` / `PaperMatte`），取自人工匹配行（2026-11-27 PSI 关联：
+   *  销量事实到 category 粒度，取数键必须与匹配表行同源）；未回填的历史包缺省（按 romram 推断）；
+   *  其余产业 null。 */
+  cat3?: string | null;
 }
 
 export type StoreType = '1P' | '3P' | '独立站';
@@ -216,9 +220,15 @@ export interface SalesSourceRow {
   /** 销量来源类型（PSI Type 原文）：真实 PSI 的口径名（如 Sell-out），或 simulated / 模拟。
    *  归一层据此判定「真实 / 模拟 / 混合」并在页面显性标注——模拟数据不得标成真实。 */
   psiType?: string | null;
+  /** 已解析标记（2026-11-27 四表结构）：服务器把 PSI 原始行经 map_psi_sku × 匹配表算成
+   *  fact_sales 后直接发已解析的行——带 modelId 即直接采用（category1~3 已是匹配表目标行的值），
+   *  不再按型号名重新解析。旧静态包 / 历史形态的原始行没有这个字段，走按型号名解析的兼容路径。 */
+  modelId?: string | null;
+  /** 维度3：平板 = 柔光（`Normal` / `PaperMatte`）；仅已解析的行携带。 */
+  category3?: string | null;
 }
 
-/** 已解析销量事实（应用内消费形态）：周 × 国家 × 型号 × 维度1 × 维度2，
+/** 已解析销量事实（应用内消费形态）：周 × 国家 × 型号 × 维度1 × 维度2（× 维度3），
  *  同键多行已求和；cat1/cat2 空串 = 该维度不存在（音频产品级）。 */
 export interface FactSalesWeekly {
   week_id: string; // YYYYWW（periodId 归一后）
@@ -228,6 +238,9 @@ export interface FactSalesWeekly {
   cat2: string;
   qty: number;
   psiType?: string; // 来源类型；同键并入来源不同的行时为 'mixed'
+  /** 维度3（平板柔光 Normal / PaperMatte）：服务器已解析的行携带；缺省 = 未知，
+   *  取数时按通配处理（兼容历史包与不带柔光的模拟数据） */
+  cat3?: string;
 }
 
 // ---------------- 图表取数契约（§7.3 显示层聚合口径的输出） ----------------
@@ -315,6 +328,10 @@ export interface Series {
   financeLabel?: string | null;
   /** 药丸短标注（2026-11-11 Eason：线侧名称药丸标分期）：'先付' / '36期'，随 financeLabel 同源生成 */
   financeTag?: string | null;
+  /** 线型（2026-11-27 品牌全景）：同品牌多条线共享品牌色，以虚线节律区分；缺省 = 实线。
+   *  纯呈现字段，由呈现层按品牌内序赋值，取数层（buildSeries）不产出。缺采跨接段
+   *  仍固定为 [4, 4] 短虚线桥，与本字段无关。 */
+  lineDash?: number[];
 }
 
 export interface DataScope {

@@ -16,7 +16,7 @@
 //   │    ├─ last-import.json    月度数据载体（只带 monthly/别名段，不带上传原包）
 //   │    ├─ sales.csv|.xlsx     销量原始数据（默认不带；--with-sales 才带）
 //   │    ├─ latest-pack.json    派生包（包内 server.py --rebuild 生成）
-//   │    └─ pricelens.db        SQLite v3 四节 11 表（同上）
+//   │    └─ pricelens.db        SQLite v3 四节 12 表（同上）
 //   ├─ 启动PriceLens.bat / 重建数据.bat / 安装依赖.bat
 //   ├─ 使用说明.md / VERSION.txt / SHA256SUMS.txt
 //   └─ 配置表/                 配置表预填参考件
@@ -156,8 +156,9 @@ if (monthly.length) {
 }
 
 // ---- 销量原始数据：默认不入包 ----
-// 模拟销量不得冒充真实：前端销量口径判定只看「有无销量数据」，模拟数据进包会被标成
-// 「PSI 真实」。真实 PSI 到位后放 data/sales.csv 即生效；确需带模拟数据用 --with-sales。
+// 销量默认不入包：真实 PSI 到位后放 data/sales.csv 即生效（7 列格式见下方「数据编辑说明」）。
+// 模拟数据行的 psi_type=simulated 在页面上标「模拟」，不会冒充真实 PSI；确需带模拟数据
+// 用 --with-sales（2026-11-27 起 psi_type 带下划线的表头也能被识别，此前会被当成真实 PSI）。
 if (withSales) {
   const s = live('sales.xlsx') ?? live('sales.csv') ?? live('sales.json');
   if (s) {
@@ -197,8 +198,14 @@ writeFileSync(
     '                        兼容旧 24 列中文表头（自动识别，无需转换）',
     '  sales.csv / sales.xlsx 销量原始数据（周粒度）——新 7 列',
     '                        （Management Region, Management Country/Region, Product, Product SKU,',
-    '                         Period ID（周 YYYYWWW）, PSI Type, QTY）；兼容旧 6 列 country/product/…',
+    '                         Period ID（周，如 2025008 = 2025 年第 8 周）, PSI Type（口径，如 Sell Out）, QTY）；',
+    '                        兼容旧 6 列 country/product/…（可带 category1/2/3 配置列）',
     '                        本包默认未带销量文件：放入后自动生效',
+    '                        销量怎么对到产品：Product（型号名）+ Product SKU 串里拆出的存储 / 尺寸 / 柔光 / 表盘',
+    '                        = 匹配表该行的 psi_product + category1~3；同型号同配置的多个 SKU 串销量相加，',
+    '                        颜色 / 插头 / 渠道版等信息不参与。PSI 型号名与匹配表型号名叫法不同的，',
+    '                        在匹配表该行的 psi_product 列登记 PSI 叫法；某个 SKU 串规则拆不对的，可在',
+    '                        config_tables.xlsx 加「PSI规格对照」页签（psi_product / product_sku / category1~4）手填。',
     '',
     '【配置 · 人工维护】',
     '  config_tables.xlsx    配置表 + 补录表（匹配表 / 竞品匹配 / 价格档位 / 大促档期）',
@@ -208,7 +215,8 @@ writeFileSync(
     '',
     '【派生产物 · 不要手编】',
     '  latest-pack.json      派生数据包（服务器发给前端的那一份）',
-    '  pricelens.db          SQLite 数据库（v3 四节 11 表，可用 DB Browser 打开查看）',
+    '  pricelens.db          SQLite 数据库（v3 四节 12 表，可用 DB Browser 打开查看）',
+    '                        对不上的销量行在 fact_sales 里 model_id 为空、match_status 记原因（待处理清单）',
     '',
     '每周替换数据 = 换 offers.csv（价格）+ 放入 sales 文件（销量），其余不动。',
     '注意：CSV 用 Excel 编辑保存时请选「CSV UTF-8」（GBK 编码也能自动识别）。',
@@ -451,7 +459,7 @@ const usage = `# PriceLens 服务器版（内部部署）· ${ymd}
 - **价格原始数据**：\`data/offers.csv\`（${inventory.offers}），已在包内重建完成，首次启动即可用。
 - **配置与权威匹配表**：\`data/config.json\`、\`data/config_tables.xlsx\`（${inventory.configTables}）。
 - **月度数据**：${inventory.monthlyRows} 行（运营商月度价格，随包携带）。
-- **派生产物**：\`data/latest-pack.json\`（服务器发给前端的数据包）与 \`data/pricelens.db\`（SQLite，v3 四节 11 表）。
+- **派生产物**：\`data/latest-pack.json\`（服务器发给前端的数据包）与 \`data/pricelens.db\`（SQLite，v3 四节 12 表）。
 - **销量原始数据**：${inventory.sales || '**未带**——量价页的销量为「估算」口径（页面有标注）。真实销量到位后按第 3 节放入即可'}。
 
 ## 3. 替换数据（每周 SOP）
@@ -466,7 +474,7 @@ const usage = `# PriceLens 服务器版（内部部署）· ${ymd}
 保存后约 10-60 秒自动重新派生，浏览器约 15 秒内自动刷新。不想等就双击 \`重建数据.bat\` 立即重建。
 也可以在应用「配置」页用「导入数据包」上传 v3 JSON 数据包，效果相同。
 
-${'## 4. 数据结构（v3 · 四节 11 表）'}
+${'## 4. 数据结构（v3 · 四节 12 表）'}
 
 派生结果落 \`data/pricelens.db\`，可用 DB Browser for SQLite 直接打开查看：
 
@@ -474,8 +482,9 @@ ${'## 4. 数据结构（v3 · 四节 11 表）'}
 |---|---|---|
 | ODS 原始层 | ods_offer、ods_psi | 价格采集、销量原始数据，原样落库 |
 | 补录 / 配置 | cfg_competitor、map_price_band、map_promo、map_region | 竞品配置、价格档位、大促档期、国家匹配 |
-| MAP | map_product | 统一匹配表（原文 → 产品身份，含人工修订前的原值 orig_*） |
-| FACT | fact_price、fact_sales | 价格宽表（39 列）、销量 |
+| MAP | map_product | 匹配表（只对应价格侧：原文 → 产品身份，含人工修订前的原值 orig_*；行上的 psi_product + category1~3 是销量取数键） |
+| MAP | map_psi_sku | PSI 规格对照：一个不同的「Product + Product SKU」串一行，拆出 category1~3（规则每次刷新生成，可人工覆盖） |
+| FACT | fact_price、fact_sales | 价格宽表（39 列）；销量 = 周 × 口径 × 国家 × 型号 × category 求和 |
 | 系统 | cfg_kv、meta_import | 导入记录 |
 
 数据质量问题直接改原始文件或配置表，派生层不做兜底清洗。

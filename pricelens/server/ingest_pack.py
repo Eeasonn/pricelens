@@ -1321,18 +1321,11 @@ PSI_HEADER_MAP = {
     "country": "country_raw", "product": "product",
     "product sku": "product_sku", "product_sku": "product_sku",
     "period id": "period_id", "periodid": "period_id", "period_id": "period_id",
-    "psi type": "psi_type", "qty": "qty", "category1": "category1", "category2": "category2",
+    # psi_type 带下划线的写法（模拟数据文件 / 程序导出）也要认：此前只认「PSI Type」，
+    # 模拟销量的来源类型一直是空的，页面会把它当成真实 PSI（2026-11-27 修）
+    "psi type": "psi_type", "psi_type": "psi_type", "psitype": "psi_type",
+    "qty": "qty", "category1": "category1", "category2": "category2", "category3": "category3",
 }
-_SERIES_PREFIX = [
-    ("MATEPAD PRO MAX", "MatePad Pro Max"), ("MATEPAD PRO", "MatePad Pro"), ("MATEPAD AIR", "MatePad Air"),
-    ("MATEPAD SE", "MatePad SE"), ("MATEPAD MINI", "MatePad Mini"), ("MATEPAD", "MatePad"),
-    ("MATE X", "Mate X"), ("MATE", "Mate"), ("PURA", "Pura"), ("NOVA", "nova"),
-    ("WATCH ULTIMATE", "WATCH Ultimate"), ("WATCH GT", "WATCH GT"), ("WATCH FIT", "WATCH FIT"),
-    ("WATCH KIDS", "WATCH KIDS"), ("WATCH D", "WATCH D"), ("WATCH BUDS", "WATCH Buds"), ("WATCH", "WATCH"),
-    ("BAND", "Band"), ("手环", "手环"), ("超新星", "超新星"), ("SCALE", "Scale"), ("HONMA", "HONMA联名"),
-    ("FREEBUDS", "FreeBuds"), ("FREECLIP", "FreeClip"), ("FREELACE", "FreeLace"),
-    ("FREEARC", "FreeArc"), ("EYEWEAR", "Eyewear"),
-]
 
 
 def _today_str():
@@ -1363,17 +1356,6 @@ def _psi_industry_of(product):
     return "phone"
 
 
-def _cat_key_of_text(text):
-    """规格文本 → 匹配键：存储 (ram, rom) 或表盘 mm；解析不出 = None"""
-    p = storage_parse(text)
-    if p and (p[0] or p[1]):
-        return ("sto", round(p[0]), round(p[1]))
-    m = re.search(r"(\d{2}(?:\.\d+)?)\s*mm", str(text or ""), re.I)
-    if m:
-        return ("mm", float(m.group(1)))
-    return None
-
-
 def normalize_psi_rows(sales_rows, dict_country=None):
     """PSI 源行归一（新 7 列 Management…/旧 6 列 country/product 双形态自适应）：
     表头小写匹配、国家归一两位码、qty 数值化。行 = {region, country_raw, cc, product,
@@ -1383,7 +1365,8 @@ def normalize_psi_rows(sales_rows, dict_country=None):
         if not isinstance(src, dict):
             continue
         row = {"region": "", "country_raw": "", "cc": "", "product": "", "product_sku": "",
-               "category1": "", "category2": "", "period_id": "", "psi_type": "", "qty": None}
+               "category1": "", "category2": "", "category3": "", "period_id": "", "psi_type": "",
+               "qty": None}
         extras = {}
         for k, v in src.items():
             target = PSI_HEADER_MAP.get(str(k).strip().lower())
@@ -1396,30 +1379,6 @@ def normalize_psi_rows(sales_rows, dict_country=None):
         row["extra_json"] = json.dumps(extras, ensure_ascii=False) if extras else None
         out.append(row)
     return out
-
-
-def _psi_prefill_dims(s):
-    """PSI SKU 串正则预填（category1=存储/表盘、category2=平板屏幕、category3=平板柔光、
-    info=去数值段剩余）——与《配置表补录表-预填》同一套规则；人工核对后以 xlsx 为准"""
-    industry = _psi_industry_of(s["product"])
-    text = jstr(s["product_sku"] or s["product"])
-    cat1 = normalize_storage(text) or normalize_case_size(text) or ""
-    cat2 = (normalize_screen(text) or "") if industry == "tablet" else ""
-    cat3 = ""
-    if industry == "tablet":
-        cat3 = "PaperMatte" if ("柔光" in text or "papermatte" in text.lower()) else "Normal"
-    info = re.sub(r"\d+\s*(?:GB|TB)?\s*\+\s*\d+\s*(?:GB|TB)", " ", text, flags=re.I)
-    info = re.sub(r"\d{2}(?:\.\d+)?\s*mm", " ", info, flags=re.I)
-    info = re.sub(r"\s+", " ", info).strip(" ，,；;")
-    return cat1, cat2, cat3, info[:80]
-
-
-def series_guess_from_product(product):
-    u = strip_brand_text(product).upper()
-    for p, sv in _SERIES_PREFIX:
-        if u.startswith(p):
-            return sv
-    return ""
 
 
 def _offer_inventory(built):
@@ -1449,200 +1408,123 @@ def _offer_inventory(built):
     return rows
 
 
-def build_map_product(xlsx_rows, offer_rows, psi_rows):
-    """匹配表三源合并：①xlsx 人工行（config_tables.xlsx「匹配表(补录)」，权威）
-    ②自动 offer 行（引擎派生清单）③PSI 行（正则预填+启发式配对）。
-    match_status：xlsx 行按人工值；自动行 = matched / offer_only / psi_only。"""
+def _brand_key(b):
+    return re.sub(r"[^a-z0-9\u4e00-\u9fff]", "", fold(str(b or "")).lower())
+
+
+def _cat3_of_offer(o):
+    import psi_linkage
+    return psi_linkage.cat3_of_spec(o.get("color_size") or "") if o.get("industry") == "tablet" else ""
+
+
+def _hook_ok(a, industry, want):
+    """人工行能否挂到这条引擎 SKU：品牌与型号已先对上，这里只比 category。
+    人工行声明了的配置段必须与 SKU 相等；SKU 没拆出的段（空）不拦（穿戴塌缩行等）；
+    人工行没声明而 SKU 拆出了的段不挂（防止空配置行把 SKU 的配置抹掉）。
+    平板只比存储与尺寸两段——柔光相反时仍可挂接（人工行权威，覆盖时以人工值为准），
+    但同存储同尺寸有 Normal 与 PaperMatte 两条 SKU 时各归各行（见 _same_matte）。
+    人工行品类缺失或与 SKU 产业不一致时，只认品牌 + 型号。"""
+    import psi_linkage
+    if not industry or a.get("industry") != industry:
+        return True
+    have = psi_linkage.cat_key(a["industry"], a.get("cat1"), a.get("cat2"), _cat3_of_offer(a))
+    n = 2 if industry == "tablet" else (1 if industry in ("phone", "wearable") else 0)
+    for i in range(n):
+        if have[i] != want[i] and have[i] != "":
+            return False
+    return True
+
+
+def _same_matte(a, industry, want):
+    import psi_linkage
+    if industry != "tablet" or not want[2]:
+        return True
+    return psi_linkage.cat_key(a["industry"], a.get("cat1"), a.get("cat2"), _cat3_of_offer(a))[2] == want[2]
+
+
+def build_map_product(xlsx_rows, offer_rows):
+    """匹配表两源合并（2026-11-27 结构对齐：主表只对应 offer，PSI 行不再进本表——
+    PSI 一侧见 psi_linkage 的 map_psi_sku）：①xlsx 人工行（config_tables.xlsx
+    「匹配表(补录)」，权威）②自动 offer 行（引擎派生清单，未被人工行接管的 offer）。
+    人工行挂接引擎 SKU 的键 = 国家 × 品牌 × 型号（人工改过 model 时回落 orig_model）
+    × category（见 _hook_ok）。挂接即整键压制：被接管的 SKU 不再生成自动行。
+    psi_product = 该行从 PSI 的哪个型号名取销量（空 = 按型号名自动对）。"""
+    import psi_linkage
     rows = []
     seen_offer = set()
-    seen_psi = set()
-
-    def base_row(**kw):
-        row = {"country": "", "category": "", "brand": "", "model": "",
-               "orig_brand": "", "orig_model": "", "color_size": "",
-               "series": "", "category1": "", "category2": "", "category3": "", "category4": "",
-               "info": "", "psi_product": "", "product_sku": "", "is_active": 1,
-               "match_status": "offer_only", "updated_at": _today_str(), "maintainer": "auto",
-               "model_id": "", "sku_id": "", "source": "auto"}
-        row.update(kw)
-        return row
-
-    # 自动 offer 行索引（xlsx 人工行的 model_id/sku_id 回填源；xlsx 结构无 ID 列）。
-    # 同键多行全存——挂接即整键压制（人工行接管整个 (国家, 型号, 规格键) 组合）
-    auto_by_key = {}
+    groups, by_name = {}, {}
     for o in offer_rows:
-        auto_by_key.setdefault((o["country"], _norm_text(o["model"]), _cat_key_of_text(o["cat1"])), []).append(o)
+        groups.setdefault((o["country"], _brand_key(o.get("brand")), _norm_text(o["model"])), []).append(o)
+        by_name.setdefault((o["country"], _norm_text(o["model"])), []).append(o)
 
     for r in xlsx_rows or []:
         # 全空/无键行跳过（Excel 尾部残留空行、误插行不入表）
         if not any(jstr(v).strip() for v in r.values()):
             continue
-        pp, ps = jstr(r.get("psi_product")).strip(), jstr(r.get("product_sku")).strip()
         cc = cc_of_loose(r.get("country"), COUNTRY_CODES)
-        status = jstr(r.get("match_status")).strip().lower()
-        if status not in ("matched", "offer_only", "psi_only"):
-            status = "matched" if (pp and ps) else ("psi_only" if pp else "offer_only")
-        act = jnum(r.get("is_active"))
-        # 工程键回填：xlsx 行按 (国家, 型号弱归一, 规格键) 挂接引擎 SKU（音频等
-        # 无规格键行以 key=None 精确对位）；同键多 SKU 取首条（颜色级由人工定夺）。
-        # 人工改过 model 原文时用 orig_model（修订前引擎值）兜底；挂接即整键压制
-        cat_key = _cat_key_of_text(jstr(r.get("category1")).strip())
-        autos = (auto_by_key.get((cc, _norm_text(jstr(r.get("model")).strip()), cat_key))
-                 or auto_by_key.get((cc, _norm_text(jstr(r.get("orig_model")).strip()), cat_key))
-                 or [])
-        auto = autos[0] if autos else None
-        if not autos and cat_key is not None:
-            # 规格键失配兜底（穿戴塌缩行：引擎侧 cat1=None 而 xlsx 行带表盘）：
-            # 退 (国家, 型号, None) 键；info（颜色等非表盘信息）用于选同 model 最优行
-            autos = (auto_by_key.get((cc, _norm_text(jstr(r.get("model")).strip()), None))
-                     or auto_by_key.get((cc, _norm_text(jstr(r.get("orig_model")).strip()), None))
-                     or [])
+        model = jstr(r.get("model")).strip()
+        industry = industry_of_cat(r.get("category")) or ""
+        cands = []
+        for nm in dict.fromkeys([_norm_text(model), _norm_text(jstr(r.get("orig_model")).strip())]):
+            if nm:
+                cands += groups.get((cc, _brand_key(r.get("brand")), nm), [])
+        if not cands:
+            # 同品牌下没有候选：人工行写的是母公司 / 子品牌叫法时（如 TRANSSION 与 TECNO、
+            # OPPO 与 REALME）仍可挂接——但只限按型号名找到的候选全属同一个品牌；
+            # 同名分属多个品牌的（华为与小米各有一款 Band 10）不回落，防止跨品牌串行
+            for nm in dict.fromkeys([_norm_text(model), _norm_text(jstr(r.get("orig_model")).strip())]):
+                if not nm:
+                    continue
+                loose = by_name.get((cc, nm), [])
+                if len({_brand_key(a.get("brand")) for a in loose}) == 1:
+                    cands += loose
+        want = (psi_linkage.cat_key(industry, r.get("category1"), r.get("category2"), r.get("category3"))
+                if industry else None)
+        hits = [a for a in cands if _hook_ok(a, industry, want)] if want else list(cands)
+        if want:
+            hits = [a for a in hits if _same_matte(a, industry, want)] or hits
+        auto = None
+        if hits:
+            for a in hits:
+                a["_covered"] = True
+            # 同键多 SKU（颜色级）取首条；行 info（颜色）与 SKU 规格对得上的优先
             info_n = _norm_text(jstr(r.get("info")).strip())
-            auto = (next((a for a in autos if info_n and info_n in _norm_text(a["color_size"])), None)
-                    or (autos[0] if autos else None))
-        for a in autos:
-            a["_covered"] = True
-        rows.append(base_row(
-            country=cc, category=jstr(r.get("category")).strip(), brand=jstr(r.get("brand")).strip(),
-            model=jstr(r.get("model")).strip(),
-            orig_brand=jstr(r.get("orig_brand")).strip(), orig_model=jstr(r.get("orig_model")).strip(),
-            color_size=jstr(r.get("color_size")).strip(),
-            series=jstr(r.get("series")).strip() or (auto["series"] if auto else ""),
-            category1=jstr(r.get("category1")).strip(), category2=jstr(r.get("category2")).strip(),
-            category3=jstr(r.get("category3")).strip(), category4=jstr(r.get("category4")).strip(),
-            info=jstr(r.get("info")).strip(), psi_product=pp, product_sku=ps,
-            is_active=0 if act == 0 else 1, match_status=status,
-            updated_at=excel_date_to_str(r.get("updated_at")) or _today_str(),
-            maintainer=jstr(r.get("maintainer")).strip() or "xlsx", source="xlsx",
-            model_id=(auto["model_id"] if auto else ""), sku_id=(auto["sku_id"] if auto else "")))
-        if cc and jstr(r.get("model")).strip():
-            seen_offer.add((cc, jstr(r.get("model")).strip(), jstr(r.get("color_size")).strip()))
-        if pp:
-            seen_psi.add((pp, ps))
+            auto = (next((a for a in hits if info_n and info_n in _norm_text(a.get("color_size"))), None)
+                    or hits[0])
+        pp, ps = jstr(r.get("psi_product")).strip(), jstr(r.get("product_sku")).strip()
+        status = jstr(r.get("match_status")).strip().lower()
+        if status not in ("matched", "offer_only"):
+            status = "matched" if auto else "offer_only"
+        act = jnum(r.get("is_active"))
+        rows.append({
+            "country": cc, "category": jstr(r.get("category")).strip(), "brand": jstr(r.get("brand")).strip(),
+            "model": model, "orig_brand": jstr(r.get("orig_brand")).strip(),
+            "orig_model": jstr(r.get("orig_model")).strip(), "color_size": jstr(r.get("color_size")).strip(),
+            "series": jstr(r.get("series")).strip() or (auto["series"] if auto else ""),
+            "category1": jstr(r.get("category1")).strip(), "category2": jstr(r.get("category2")).strip(),
+            "category3": jstr(r.get("category3")).strip(), "category4": jstr(r.get("category4")).strip(),
+            "info": jstr(r.get("info")).strip(), "psi_product": pp, "product_sku": ps,
+            "is_active": 0 if act == 0 else 1, "match_status": status,
+            "updated_at": excel_date_to_str(r.get("updated_at")) or _today_str(),
+            "maintainer": jstr(r.get("maintainer")).strip() or "xlsx", "source": "xlsx",
+            "model_id": (auto["model_id"] if auto else ""), "sku_id": (auto["sku_id"] if auto else ""),
+        })
+        if cc and model:
+            seen_offer.add((cc, model, jstr(r.get("color_size")).strip()))
 
     for o in offer_rows:
         if o.get("_covered") or (o["country"], o["model"], o["color_size"]) in seen_offer:
             continue
-        cat3 = ""
-        if o["industry"] == "tablet":
-            spec_l = str(o["color_size"]).lower()
-            cat3 = "PaperMatte" if ("柔光" in spec_l or "papermatte" in spec_l) else "Normal"
-        rows.append(base_row(
-            country=o["country"], category=o["category"], brand=o["brand"], model=o["model"],
-            color_size=o["color_size"], series=o["series"], category1=o["cat1"],
-            category2=o["cat2"], category3=cat3, info="",
-            model_id=o["model_id"], sku_id=o["sku_id"],
-            match_status="offer_only", maintainer="auto", source="auto-offer"))
-    offer_by_key = {}
-    for r in rows:
-        if r["model"] and r["country"]:
-            offer_by_key.setdefault((r["country"], _norm_text(r["model"])), []).append(r)
-
-    for s in psi_rows:
-        if not s["product"] or (s["product"], s["product_sku"]) in seen_psi:
-            continue
-        cat1, cat2, cat3, info = _psi_prefill_dims(s)
-        cands = offer_by_key.get((s["cc"], _norm_text(s["product"]))) or []
-        key = _cat_key_of_text(s["product_sku"] or s["product"])
-        m = next((c for c in cands if c["match_status"] != "matched"
-                  and (key is None or _cat_key_of_text(c["category1"]) == key)), None)
-        industry = (m["category"] if m else _psi_industry_of(s["product"]))
-        rows.append(base_row(
-            country=s["cc"], category=industry,
-            brand=(m["brand"] if m else _psi_brand_of(s["product"])),
-            model=m["model"] if m else s["product"], color_size="",
-            series=(m["series"] if m else series_guess_from_product(s["product"])),
-            category1=cat1 or (m["category1"] if m else ""),
-            category2=cat2 or (m["category2"] if m else ""),
-            category3=cat3, info=info,
-            psi_product=s["product"], product_sku=s["product_sku"],
-            match_status="matched" if m else "psi_only",
-            model_id=(m["model_id"] if m else ""), sku_id=(m["sku_id"] if m else ""),
-            maintainer="auto", source="auto-psi"))
+        cat3 = _cat3_of_offer(o)
+        rows.append({
+            "country": o["country"], "category": o["category"], "brand": o["brand"], "model": o["model"],
+            "orig_brand": "", "orig_model": "", "color_size": o["color_size"],
+            "series": o["series"], "category1": o["cat1"], "category2": o["cat2"],
+            "category3": cat3, "category4": "", "info": "", "psi_product": "", "product_sku": "",
+            "is_active": 1, "match_status": "offer_only", "updated_at": _today_str(),
+            "maintainer": "auto", "model_id": o["model_id"], "sku_id": o["sku_id"], "source": "auto-offer",
+        })
     return rows
-
-
-def derive_fact_sales(psi_rows, match_rows):
-    """PSI × 匹配表 → fact_sales（粒度=周期×口径×国家×型号×SKU；同键 qty 求和；
-    未匹配行也落库（model_id=''，维度留空）——销量口径「型号×国家有真实行即整型号
-    走真实」由前端 realSalesOf 判定，本表只供真实 PSI 承载。"""
-    psi_idx = {}
-    offer_idx = {}
-    for m in match_rows:
-        if jnum(m.get("is_active")) == 0:
-            continue
-        pp, ps = jstr(m.get("psi_product")).strip(), jstr(m.get("product_sku")).strip()
-        # 只收挂接成功的行（model_id 非空）——psi_only 预填行未挂接，纳入会自我命中空行
-        if pp and ps and m.get("model_id"):
-            psi_idx.setdefault((pp, ps), m)
-        cc, model = jstr(m.get("country")).strip(), jstr(m.get("model")).strip()
-        if cc and model and m.get("model_id"):
-            offer_idx.setdefault((cc, _norm_text(model)), []).append(m)
-    acc = {}
-    matched = unmatched = 0
-    no_period = 0
-    non_positive = 0
-    for s in psi_rows:
-        if s["qty"] is None:
-            continue
-        if s["qty"] <= 0:
-            # 非正销量不进事实（契约：QTY ≤0 / 非法行剔除并计数）；负值若参与求和会冲低真实销量
-            non_positive += 1
-            continue
-        if not s["period_id"]:
-            # 周期解不出 = 周粒度事实无法定位（拍板②），不落脏行，diag 计数
-            no_period += 1
-            continue
-        m = psi_idx.get((s["product"], s["product_sku"])) if s["product_sku"] else None
-        if m is None and s["product"]:
-            cands = offer_idx.get((s["cc"], _norm_text(s["product"]))) or []
-            key = _cat_key_of_text(s["product_sku"] or s["product"])
-            m = next((c for c in cands
-                      if key is None or _cat_key_of_text(c.get("category1")) == key), None)
-        if m is not None:
-            matched += 1
-        else:
-            unmatched += 1
-        k = (s["period_id"] or "", s["psi_type"] or "", s["cc"] or "",
-             jstr(m.get("model_id")).strip() if m else "", s["product_sku"] or s["product"])
-        slot = acc.get(k)
-        if slot is None:
-            slot = acc[k] = {
-                "period_id": k[0], "psi_type": k[1], "country_code": k[2], "model_id": k[3],
-                "product_sku": k[4], "category": "", "brand": "", "series": "",
-                "category1": "", "category2": "", "category3": "", "category4": "", "qty": 0.0,
-            }
-            if m is not None:
-                slot.update(category=jstr(m.get("category")).strip(),
-                            brand=jstr(m.get("brand")).strip(), series=jstr(m.get("series")).strip(),
-                            category1=jstr(m.get("category1")).strip(),
-                            category2=jstr(m.get("category2")).strip(),
-                            category3=jstr(m.get("category3")).strip(),
-                            category4=jstr(m.get("category4")).strip())
-        slot["qty"] += s["qty"] or 0.0
-    rows = sorted(acc.values(), key=lambda r: (r["period_id"], r["country_code"], r["model_id"], r["product_sku"]))
-    return rows, {"psiIn": len(psi_rows), "psiMatched": matched, "psiUnmatched": unmatched,
-                  "psiNoPeriod": no_period, "psiNonPositiveQty": non_positive,
-                  "factSalesRows": len(rows)}
-
-
-def sales_pack_view(s):
-    """PSI 归一行 → 前端 SalesSourceRow 形态（country=两位码；product_sku/psiType/
-    region 为容忍附加键，前端 normalizeSalesRows 只读已知键；qty 整数化保持
-    JSON 字节形态与旧透传一致——parity 金标约束）"""
-    qty = s["qty"]
-    if isinstance(qty, float) and qty.is_integer():
-        qty = int(qty)
-    row = {"country": s["cc"], "product": s["product"],
-           "category1": s["category1"] or None, "category2": s["category2"] or None,
-           "periodId": s["period_id"], "qty": qty}
-    if s["product_sku"]:
-        row["productSku"] = s["product_sku"]
-    if s["psi_type"]:
-        row["psiType"] = s["psi_type"]
-    if s["region"]:
-        row["region"] = s["region"]
-    return row
 
 
 def build_sales_aliases(match_rows, raw_aliases):
@@ -1660,22 +1542,23 @@ def build_sales_aliases(match_rows, raw_aliases):
     return aliases
 
 
-def _psi_brand_of(product):
-    """PSI 产品串品牌词兜底识别（BRAND_TOKENS 扫描）；无品牌词 = 我司
-    （PSI 表首期为我司销量导出）"""
-    low = str(product or "").lower()
-    for brand, tokens in BRAND_TOKENS.items():
-        for t in tokens:
-            if t in low:
-                return brand
-    return "HUAWEI"
-
-
 def excel_date_to_str(v):
     """Excel 日期序列号兜底（数值 20000–60000 ≈ 1954–2064）→ YYYY-MM-DD；其余原样"""
     if isinstance(v, (int, float)) and not isinstance(v, bool) and 20000 <= v <= 60000:
         return (date(1899, 12, 30) + timedelta(days=int(v))).strftime("%Y-%m-%d")
     return jstr(v).strip()
+
+
+def _psi_sku_overrides(rows):
+    """config_tables.xlsx「PSI规格对照」页签 → {(psi_product, product_sku): {category1..4}}。
+    只有 category 列填了值的行生效；product_sku 留空 = 该 PSI 型号名下所有 SKU 串。"""
+    out = {}
+    for r in rows or []:
+        pp, ps = jstr(r.get("psi_product")).strip(), jstr(r.get("product_sku")).strip()
+        cats = {f: jstr(r.get(f)).strip() for f in ("category1", "category2", "category3", "category4")}
+        if pp and any(cats.values()):
+            out[(pp, ps)] = cats
+    return out
 
 
 def read_config_tables(path):
@@ -1697,6 +1580,8 @@ def read_config_tables(path):
             "competitorRows": pick("竞品匹配"),
             "priceBandRows": pick("价格档位"),
             "promoRows": pick("大促档期"),
+            # PSI 规格对照的人工覆盖页签（可选）：规则解析不对的 SKU 串在此手填 category
+            "psiSkuOverrides": pick("PSI规格"),
         }
     except Exception:  # noqa: BLE001 —— 配置表坏档不阻断主链，回退 config.json
         return None
@@ -1882,6 +1767,17 @@ def apply_human_overrides(built, match_rows):
         target["color"] = jstr(r.get("info")).strip() or "—"
         target["spec_display"] = jstr(r.get("color_size")).strip()
         target["spec_info"] = jstr(r.get("info")).strip()
+        # category 归一键随行带上（2026-11-27 PSI 关联）：页面按「型号 + category」找销量，
+        # 键必须与匹配表行同源——人工修订过的配置以此为准，不再用引擎原始解析值
+        import psi_linkage
+        c1, c2, c3 = psi_linkage.cat_key(target.get("industry") or "",
+                                        r.get("category1"), r.get("category2"), r.get("category3"))
+        if c1:
+            target["cat1"] = c1
+        if c2:
+            target["cat2"] = c2
+        if c3:
+            target["cat3"] = c3
     built["diag"]["humanOverrides"] = diag
 
 
@@ -1892,14 +1788,20 @@ def build_v2_pack(raw_pack, ctx):
     if not all(r is not None and isinstance(r, dict) for r in offers):
         raise ValueError("offers 必须是对象数组（每行一条采集明细）")
     built = build_from_offers(offers, ctx)
-    # --- PSI × 匹配表 × 配置三表（数据建模方案 v2 主链；无 sales/config_tables 时
-    # 全部退化为 v1 行为：sales=[]、aliases 透传、dims 维持 config.json 路径） ---
+    # --- PSI 销量关联（2026-11-27 对齐的四表结构，见 psi_linkage）：
+    # ods_psi（原样）→ map_psi_sku（SKU 串拆 category）× map_product（psi_product + category）
+    # → fact_sales（周 × 口径 × 国家 × 型号 × category 求和）→ 派生包只发已解析的行。
+    # 无 sales / config_tables 时退化为 v1 行为：sales=[]、map_psi_sku 与 fact_sales 为空 ---
+    import psi_linkage
     cfg = ctx.get("configTables") or {}
     psi_rows = normalize_psi_rows(raw_pack.get("sales"))
-    match_rows = build_map_product(cfg.get("matchRows"), _offer_inventory(built), psi_rows)
+    match_rows = build_map_product(cfg.get("matchRows"), _offer_inventory(built))
     apply_human_overrides(built, match_rows)
-    fact_sales_rows, sales_diag = derive_fact_sales(psi_rows, match_rows)
-    sales_pack_rows = [sales_pack_view(s) for s in psi_rows]
+    psi_sku_rows = psi_linkage.build_map_psi_sku(psi_rows, match_rows, _psi_sku_overrides(cfg.get("psiSkuOverrides")))
+    fact_sales_rows, sales_diag = psi_linkage.derive_fact_sales(psi_rows, psi_sku_rows, match_rows)
+    sales_fact_rows, dropped_types = psi_linkage.pick_sales_types(fact_sales_rows)
+    sales_pack_rows = psi_linkage.sales_pack_rows(sales_fact_rows, match_rows)
+    sales_diag["salesTypeExcluded"] = dropped_types
     aliases = build_sales_aliases(match_rows, raw_pack.get("salesProductAliases")
                                   if isinstance(raw_pack.get("salesProductAliases"), dict) else {})
     if cfg.get("competitorRows") is not None:
@@ -1914,6 +1816,7 @@ def build_v2_pack(raw_pack, ctx):
     built["diag"]["sales"] = dict(sales_diag, **bench_diag)
     built["psi"] = psi_rows
     built["mapProduct"] = match_rows
+    built["mapPsiSku"] = psi_sku_rows
     built["factSales"] = fact_sales_rows
     built["configTables"] = cfg
     v2 = {
@@ -1937,7 +1840,8 @@ TABLES = (
     # 补录/配置层（人工维护的业务配置；xlsx 权威行规范化落库）
     "cfg_competitor", "map_price_band", "map_promo", "map_region",
     # MAP 匹配层（「我们加的」匹配规则；xlsx 人工行权威，auto 行引擎预填）
-    "map_product",
+    #   map_product = offer 侧匹配表；map_psi_sku = PSI 侧规格对照（SKU 串 → category）
+    "map_product", "map_psi_sku",
     # FACT 事实层（宽表：描述属性/周历/大区随行 stamp，查询免 join）
     "fact_price", "fact_sales",
     # CFG / META
@@ -1955,8 +1859,9 @@ LEGACY_TABLES = (
     "dim_region", "dim_time", "dim_fx", "dim_promo", "dim_benchmark", "dim_tier",
 )
 # schema 版本（PRAGMA user_version）：v1/v2 落库从未设置（=0），v3=3、v3.1（map_region
-# 瘦身三列）=4——版本不符时 _sqlite_clear_and_load 先整体 DROP 再建，防旧结构残留
-SCHEMA_VERSION = 5
+# 瘦身三列）=4、v3.2（map_product 加 orig_*）=5、v3.3（PSI 关联：map_psi_sku 新表 +
+# fact_sales 加 match_status）=6——版本不符时 _sqlite_clear_and_load 先整体 DROP 再建，防旧结构残留
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 -- ODS 原样层（数据建模方案 v2 §2：offer 底表 29 规范列 / PSI 表 7 规范列+旧形态 2 列）
@@ -1991,8 +1896,19 @@ CREATE TABLE IF NOT EXISTS map_product (
     is_active INTEGER, match_status TEXT, updated_at TEXT, maintainer TEXT,
     model_id TEXT, sku_id TEXT, source TEXT
 );
-CREATE INDEX IF NOT EXISTS ix_map_product_psi ON map_product(psi_product, product_sku);
 CREATE INDEX IF NOT EXISTS ix_map_product_offer ON map_product(country, model);
+CREATE INDEX IF NOT EXISTS ix_map_product_psi ON map_product(psi_product);
+-- PSI 规格对照（2026-11-27 与 Eason 对齐的四表结构）：一个不同的 (Product, Product SKU) 串一行、
+-- 不分国家。category1~3 来源优先级 = 人工覆盖(override) > 源表自带配置列(source) > 规则从 SKU 串
+-- 解析(rule)；解析不出 = unparsed（不分配销量，进待处理）。model_id = 该 PSI 型号名对应的清洗后
+-- 型号（model_source：xlsx=人工登记的 psi_product / auto=型号名自动对上 / 其余见 psi_linkage）。
+-- 每次刷新整表重生成；人工覆盖读 config_tables.xlsx「PSI规格对照」页签
+CREATE TABLE IF NOT EXISTS map_psi_sku (
+    psi_product TEXT, product_sku TEXT,
+    category TEXT, category1 TEXT, category2 TEXT, category3 TEXT, category4 TEXT,
+    info TEXT, model_id TEXT, model_source TEXT, parse_source TEXT, countries INTEGER
+);
+CREATE INDEX IF NOT EXISTS ix_map_psi_sku_key ON map_psi_sku(psi_product, product_sku);
 -- 竞品配置表 17 权威列（country=国家 category=品类 main_*=我司品牌/系列/规格/尺寸/
 -- 柔光/预留 com_*=竞品品牌/系列/型号/规格/尺寸/柔光/预留 comp_rank=竞品排序
 -- is_active=生效位）+ main_model 建议增补列（resolve_benchmarks 型号精确反解）；
@@ -2042,12 +1958,16 @@ CREATE TABLE IF NOT EXISTS fact_price (
 );
 CREATE INDEX IF NOT EXISTS ix_fact_price_week_sku ON fact_price(week_id, sku_id);
 CREATE INDEX IF NOT EXISTS ix_fact_price_country_month ON fact_price(country_code, month_id);
+-- 周销量事实：一行 = 周 × 口径(PSI Type) × 国家 × 型号 × category1~3，qty 为同键求和
+-- （配置值取匹配表目标行的值，info 不进事实）。未分配的 PSI 行同样留痕：model_id 为空、
+-- product_sku 记 PSI 串、match_status 记原因，供待处理清单取用；页面只读 matched 行
 CREATE TABLE IF NOT EXISTS fact_sales (
     period_id TEXT, psi_type TEXT, country_code TEXT, category TEXT, brand TEXT,
     model_id TEXT, series TEXT, category1 TEXT, category2 TEXT, category3 TEXT,
-    category4 TEXT, product_sku TEXT, qty REAL
+    category4 TEXT, product_sku TEXT, qty REAL, match_status TEXT
 );
 CREATE INDEX IF NOT EXISTS ix_fact_sales_period ON fact_sales(period_id, model_id);
+CREATE INDEX IF NOT EXISTS ix_fact_sales_pending ON fact_sales(match_status);
 CREATE TABLE IF NOT EXISTS cfg_kv (key TEXT PRIMARY KEY, json TEXT);
 CREATE TABLE IF NOT EXISTS meta_import (
     id TEXT PRIMARY KEY, ts TEXT, kind TEXT, rows_in INTEGER, rows_out INTEGER, diag_json TEXT
@@ -2137,6 +2057,14 @@ def _sqlite_clear_and_load(conn, raw_pack, built, pack_id, kind="v3-offers"):
           r.get("maintainer") or None, r.get("model_id") or None, r.get("sku_id") or None,
           r.get("source") or None]
          for r in (built.get("mapProduct") or [])])
+    # PSI 规格对照（整表重生成；人工覆盖已在派生时并入 parse_source=override 的行）
+    cur.executemany(
+        f"INSERT INTO map_psi_sku VALUES ({','.join('?' * 12)})",
+        [[r.get("psi_product") or None, r.get("product_sku") or None, r.get("category") or None,
+          r.get("category1") or None, r.get("category2") or None, r.get("category3") or None,
+          r.get("category4") or None, r.get("info") or None, r.get("model_id") or None,
+          r.get("model_source") or None, r.get("parse_source") or None, r.get("countries")]
+         for r in ((built.get("mapPsiSku") or []) if isinstance(built, dict) else [])])
     cfg = (built.get("configTables") or {}) if isinstance(built, dict) else {}
     # 补录/配置层：xlsx 权威行规范化落库（v3：竞品配置 17+1 列，不再 row_json 照存）
     comp_rows = cfg.get("competitorRows") or []
@@ -2268,18 +2196,36 @@ def _load_dims_and_facts(cur, dims, fact_rows, pack_id, spec_split=None, kind="p
                 r["url"], r["screenshot"], r["crawled_at"]]
     cur.executemany(f"INSERT INTO fact_price VALUES ({','.join('?' * 39)})",
                     [_stamp(r) for r in fact_rows])
-    # fact_sales（周粒度物理化，拍板⑦）
-    cur.executemany(f"INSERT INTO fact_sales VALUES ({','.join('?' * 13)})",
+    # fact_sales：matched = 周 × 口径 × 国家 × 型号 × category 求和；其余 = 未分配留痕（待处理清单）
+    cur.executemany(f"INSERT INTO fact_sales VALUES ({','.join('?' * 14)})",
                     [[r.get("period_id"), r.get("psi_type") or None, r.get("country_code"),
                       r.get("category") or None, r.get("brand") or None, r.get("model_id") or None,
                       r.get("series") or None, r.get("category1") or None,
                       r.get("category2") or None, r.get("category3") or None,
-                      r.get("category4") or None, r.get("product_sku") or None, r.get("qty")]
+                      r.get("category4") or None, r.get("product_sku") or None, r.get("qty"),
+                      r.get("match_status") or "matched"]
                      for r in fact_sales_rows or []])
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     cur.execute("INSERT OR REPLACE INTO meta_import VALUES (?,?,?,?,?,?)",
                 [pack_id, now, kind, diag.get("rowsIn") if diag else len(fact_rows),
                  len(fact_rows), json.dumps(diag or {"rowsOut": len(fact_rows)}, ensure_ascii=False)])
+
+
+def _match_rows_from_dims(dims_product):
+    """dims.product（型号 × 配置 × 国家）→ 等价的匹配行：一行 = 国家 × 型号 × category。
+    仅用于导入外部 v1/v2 规范化包（没有 config_tables.xlsx）时的 PSI 关联。"""
+    import psi_linkage
+    out = []
+    for p in dims_product or []:
+        ind = p.get("industry") or ""
+        c3 = psi_linkage.cat3_of_spec(p.get("romram")) if ind == "tablet" else ""
+        for cc in p.get("countries") or []:
+            out.append({"country": cc, "category": CAT_CN.get(ind, ind), "brand": p.get("brand"),
+                        "model": p.get("model_name"), "series": p.get("series"),
+                        "category1": p.get("cat1"), "category2": p.get("cat2"), "category3": c3,
+                        "category4": None, "info": p.get("color"), "psi_product": "",
+                        "is_active": 1, "model_id": p.get("model_id"), "source": "pack"})
+    return out
 
 
 def load_v2_pack_to_sqlite(db_path, v2_pack, pack_id):
@@ -2322,12 +2268,16 @@ def load_v2_pack_to_sqlite(db_path, v2_pack, pack_id):
             "crawled_at": cols["t"][i], "crawl_status": "ok",
             "currency": None, "exchange_rate": fx_i,
         })
+    # 外部 v1/v2 规范化包没有匹配表：用包内 dims.product 拼等价的匹配行，PSI 关联在这条
+    # 导入路径上同样走四表结构（ods_psi → map_psi_sku × 匹配行 → fact_sales）
+    import psi_linkage
     psi_rows = normalize_psi_rows(v2_pack.get("sales"))
-    match_rows = build_map_product(None, [], psi_rows)
-    fact_sales_rows, sales_diag = derive_fact_sales(psi_rows, match_rows)
+    match_rows = _match_rows_from_dims(v2_pack.get("dims") or {})
+    psi_sku_rows = psi_linkage.build_map_psi_sku(psi_rows, match_rows, None)
+    fact_sales_rows, sales_diag = psi_linkage.derive_fact_sales(psi_rows, psi_sku_rows, match_rows)
     built = {
         "dims": v2_pack.get("dims") or {}, "factRows": fact_rows,
-        "psi": psi_rows, "mapProduct": match_rows, "factSales": fact_sales_rows,
+        "psi": psi_rows, "mapProduct": [], "mapPsiSku": psi_sku_rows, "factSales": fact_sales_rows,
         "configTables": {}, "diag": {"rowsIn": len(fact_rows), "rowsOut": len(fact_rows), "sales": sales_diag},
     }
     os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)

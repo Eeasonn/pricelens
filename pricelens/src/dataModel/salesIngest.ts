@@ -195,6 +195,15 @@ export function effectiveCatsOf(p: DimProduct): { cat1: string; cat2: string } {
   }
 }
 
+/** 维度3（平板柔光 Normal / PaperMatte）：优先 DimProduct.cat3（服务器随人工匹配行回填）；
+ *  未回填的历史包按 romram 文本推断（PaperMatte / 柔光 → PaperMatte，其余平板 → Normal）；
+ *  非平板 = ''。销量取数键的第三段（2026-11-27：事实到 category 粒度，同存储同尺寸的
+ *  Normal 与 PaperMatte 是两个配置）。 */
+export function effectiveCat3Of(p: DimProduct): string {
+  if (p.cat3 != null) return p.cat3;
+  return p.industry === 'tablet' ? (/paper\s?matte|柔光/i.test(p.romram) ? 'PaperMatte' : 'Normal') : '';
+}
+
 // ---------------- PSI 源行 → 已解析事实 ----------------
 
 export interface NormalizedSales {
@@ -205,6 +214,8 @@ export interface NormalizedSales {
     cat1: string;
     cat2: string;
     qty: number;
+    /** 仅服务器已解析的行（带 category3）携带 */
+    cat3?: string;
   }[];
   /** 国家 / 型号解析失败的行数（诊断：别名缺口的信号） */
   unmatched: number;
@@ -212,14 +223,18 @@ export interface NormalizedSales {
   skipped: number;
 }
 
-/** PSI 源行归一 + 同键（国家×型号×cat1×cat2×周）求和。纯函数：不改输入。 */
+/** PSI 行归一 + 同键（国家×型号×cat1×cat2×cat3×周）求和。纯函数：不改输入。
+ *  两种入参形态（2026-11-27 四表结构）：
+ *  ① 已解析行（服务器发来的 fact_sales matched 行）：带 modelId，category1~3 已是匹配表目标行的值，
+ *     直接采用，不再按型号名解析；
+ *  ② 原始行（旧静态包 / 历史形态）：按型号名 + 别名解析型号，按产业归一 category1/2（兼容路径）。 */
 export function normalizeSalesRows(
   rows: SalesSourceRow[],
   ctx: { regions: DimRegion[]; products: DimProduct[]; aliases?: Record<string, string>; countryAliases?: Record<string, string> },
 ): NormalizedSales {
   const unmatched = ctx.products.length === 0 ? rows.length : 0;
   if (ctx.products.length === 0) return { facts: [], unmatched, skipped: 0 };
-  const summed = new Map<string, { week_id: string; country_code: string; model_id: string; cat1: string; cat2: string; qty: number; psiType?: string }>();
+  const summed = new Map<string, { week_id: string; country_code: string; model_id: string; cat1: string; cat2: string; cat3?: string; qty: number; psiType?: string }>();
   let skipped = 0;
   let bad = 0;
   for (const row of rows) {
@@ -230,16 +245,36 @@ export function normalizeSalesRows(
       continue;
     }
     const cc = normalizeCountryCode(row?.country, ctx.regions, ctx.countryAliases);
-    const modelId = resolveModelId(row?.product, ctx.products, ctx.aliases);
-    if (cc == null || modelId == null) {
+    const resolvedId = typeof row?.modelId === 'string' ? row.modelId.trim() : '';
+    let modelId: string | null;
+    let cat1: string;
+    let cat2: string;
+    let cat3 = '';
+    if (resolvedId) {
+      if (!ctx.products.some((p) => p.model_id === resolvedId)) {
+        bad += 1; // 型号不在当前维表（数据包与维表不同批）
+        continue;
+      }
+      modelId = resolvedId;
+      cat1 = row?.category1 ?? '';
+      cat2 = row?.category2 ?? '';
+      cat3 = row?.category3 ?? '';
+    } else {
+      modelId = resolveModelId(row?.product, ctx.products, ctx.aliases);
+      if (modelId == null) {
+        bad += 1;
+        continue;
+      }
+      const head = ctx.products.find((p) => p.model_id === modelId);
+      const industry = head?.industry;
+      cat1 = industry === 'phone' || industry === 'tablet' ? normalizeStorage(row?.category1) : industry === 'wearable' ? normalizeCaseSize(row?.category1) ?? '' : '';
+      cat2 = industry === 'tablet' ? normalizeScreenColumn(row?.category2) ?? '' : '';
+    }
+    if (cc == null) {
       bad += 1;
       continue;
     }
-    const head = ctx.products.find((p) => p.model_id === modelId);
-    const industry = head?.industry;
-    const cat1 = industry === 'phone' || industry === 'tablet' ? normalizeStorage(row?.category1) : industry === 'wearable' ? normalizeCaseSize(row?.category1) ?? '' : '';
-    const cat2 = industry === 'tablet' ? normalizeScreenColumn(row?.category2) ?? '' : '';
-    const key = `${cc}|${modelId}|${cat1}|${cat2}|${week}`;
+    const key = `${cc}|${modelId}|${cat1}|${cat2}|${cat3}|${week}`;
     // 来源类型随行保留：同键并入来源不同的行（如真实 PSI + 模拟）记成 mixed，页面按「混合」标注
     const psiType = typeof row?.psiType === 'string' && row.psiType.trim() ? row.psiType.trim() : undefined;
     const cur = summed.get(key);
@@ -248,11 +283,12 @@ export function normalizeSalesRows(
       if (psiType && cur.psiType === undefined) cur.psiType = psiType;
       else if (psiType && cur.psiType !== psiType) cur.psiType = 'mixed';
     } else {
-      summed.set(key, { week_id: week, country_code: cc, model_id: modelId, cat1, cat2, qty, ...(psiType ? { psiType } : {}) });
+      summed.set(key, { week_id: week, country_code: cc, model_id: modelId, cat1, cat2, qty, ...(psiType ? { psiType } : {}), ...(cat3 ? { cat3 } : {}) });
     }
   }
   const facts = [...summed.values()].sort((a, b) =>
     a.week_id.localeCompare(b.week_id) || a.country_code.localeCompare(b.country_code)
-      || a.model_id.localeCompare(b.model_id) || a.cat1.localeCompare(b.cat1) || a.cat2.localeCompare(b.cat2));
+      || a.model_id.localeCompare(b.model_id) || a.cat1.localeCompare(b.cat1) || a.cat2.localeCompare(b.cat2)
+      || (a.cat3 ?? '').localeCompare(b.cat3 ?? ''));
   return { facts, unmatched: bad, skipped };
 }

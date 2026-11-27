@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { DimProduct, DimRegion } from '../types';
 import {
   effectiveCatsOf,
+  effectiveCat3Of,
   normalizeCaseSize,
   normalizeCountryCode,
   normalizeModelKey,
@@ -221,5 +222,68 @@ describe('normalizeSalesRows（PSI 源行 → 事实行）', () => {
   it('normalizeModelKey 保留中日韩文字', () => {
     expect(normalizeModelKey('Watch 6')).toBe('watch6');
     expect(normalizeModelKey('华为 Watch-6（Pro）')).toBe('华为watch6pro');
+  });
+});
+
+// ============================================================
+// 2026-11-27 四表结构：服务器发已解析的销量事实（fact_sales matched 行），页面直接采用；
+// cat3（平板柔光）进取数键。原始行（旧静态包 / 模拟数据）仍走上面的型号名解析路径。
+// ============================================================
+describe('normalizeSalesRows（已解析行：带 modelId 直接采用）', () => {
+  it('不再按型号名解析：product 只是展示用，别名表不参与', () => {
+    const out = normalizeSalesRows([
+      { country: 'RU', product: '', modelId: 'own-huawei-nova-14', category1: '12+512 GB', periodId: '202508', qty: 10 },
+      { country: '德国', product: '随便写的名字', modelId: 'own-huawei-freearc', periodId: '202643', qty: 4 },
+    ], { regions, products, aliases: { '随便写的名字': 'own-huawei-watch-6' } });
+    expect(out.facts).toEqual([
+      { week_id: '202508', country_code: 'RU', model_id: 'own-huawei-nova-14', cat1: '12+512 GB', cat2: '', qty: 10 },
+      { week_id: '202643', country_code: 'DE', model_id: 'own-huawei-freearc', cat1: '', cat2: '', qty: 4 },
+    ]);
+    expect(out.unmatched).toBe(0);
+  });
+
+  it('category 原样采用（已是匹配表目标行的值），cat3 非空才随行携带', () => {
+    const out = normalizeSalesRows([
+      { country: 'RU', product: '', modelId: 'own-huawei-matepad-pro', category1: '12+256 GB', category2: '12.2"', category3: 'Normal', periodId: '202508', qty: 3 },
+      { country: 'RU', product: '', modelId: 'own-huawei-matepad-pro', category1: '12+256 GB', category2: '12.2"', category3: 'PaperMatte', periodId: '202508', qty: 8 },
+      { country: 'RU', product: '', modelId: 'own-huawei-matepad-pro', category1: '12+256 GB', category2: '12.2"', periodId: '202508', qty: 5 },
+    ], { regions, products });
+    // 同存储同尺寸：Normal / PaperMatte / 未带 cat3 是三个不同的键，不互相合并（cat3 空的排最前）
+    expect(out.facts).toEqual([
+      { week_id: '202508', country_code: 'RU', model_id: 'own-huawei-matepad-pro', cat1: '12+256 GB', cat2: '12.2"', qty: 5 },
+      { week_id: '202508', country_code: 'RU', model_id: 'own-huawei-matepad-pro', cat1: '12+256 GB', cat2: '12.2"', cat3: 'Normal', qty: 3 },
+      { week_id: '202508', country_code: 'RU', model_id: 'own-huawei-matepad-pro', cat1: '12+256 GB', cat2: '12.2"', cat3: 'PaperMatte', qty: 8 },
+    ]);
+  });
+
+  it('同键求和 + psiType 混合标注；型号不在维表 → unmatched', () => {
+    const out = normalizeSalesRows([
+      { country: 'RU', product: '', modelId: 'own-huawei-nova-14', category1: '12+256 GB', periodId: '202508', qty: 10, psiType: 'Sell Out' },
+      { country: 'RU', product: '', modelId: 'own-huawei-nova-14', category1: '12+256 GB', periodId: '202508', qty: 2, psiType: 'simulated' },
+      { country: 'RU', product: '', modelId: 'own-huawei-ghost', periodId: '202508', qty: 99 },
+    ], { regions, products });
+    expect(out.facts).toEqual([
+      { week_id: '202508', country_code: 'RU', model_id: 'own-huawei-nova-14', cat1: '12+256 GB', cat2: '', qty: 12, psiType: 'mixed' },
+    ]);
+    expect(out.unmatched).toBe(1);
+  });
+
+  it('PSI 的 Period ID 2025008 → 202508（Eason 2026-11-27 真实写法）', () => {
+    const out = normalizeSalesRows([
+      { country: 'RU', product: '', modelId: 'own-huawei-nova-14', category1: '12+256 GB', periodId: '2025008', qty: 1 },
+    ], { regions, products });
+    expect(out.facts[0].week_id).toBe('202508');
+  });
+});
+
+describe('effectiveCat3Of（平板柔光：取数键第三段）', () => {
+  it('显式 cat3 优先', () => {
+    expect(effectiveCat3Of(mkProduct({ sku_id: 'x', model_id: 'm', model_name: 'M', industry: 'tablet', cat3: 'PaperMatte' }))).toBe('PaperMatte');
+  });
+  it('未回填时按 romram 推断；非平板为空', () => {
+    expect(effectiveCat3Of(mkProduct({ sku_id: 'x', model_id: 'm', model_name: 'M', industry: 'tablet', romram: '12.2" 12+256 GB PaperMatte' }))).toBe('PaperMatte');
+    expect(effectiveCat3Of(mkProduct({ sku_id: 'x', model_id: 'm', model_name: 'M', industry: 'tablet', romram: '12" 柔光版 8+256 GB' }))).toBe('PaperMatte');
+    expect(effectiveCat3Of(mkProduct({ sku_id: 'x', model_id: 'm', model_name: 'M', industry: 'tablet', romram: '12.2" 12+256 GB' }))).toBe('Normal');
+    expect(effectiveCat3Of(mkProduct({ sku_id: 'x', model_id: 'm', model_name: 'M', industry: 'phone' }))).toBe('');
   });
 });
