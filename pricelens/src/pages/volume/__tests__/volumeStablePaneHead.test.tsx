@@ -1,7 +1,7 @@
 // ============================================================
-// 量价页 · 稳定版图层标题 head 版式接线（2026-11-07 稳定版三轮，Eason「标题还是不好」）：
-// vi.mock 把 appChannel 钉在 stable（vitest 本体 = dev 形态 = iterate，演进版断言见
-// volumeChartSkeleton）。面板 Chart 收 paneLabelLayout='head'，gridTop = 刻度顶带 16 +
+// 量价页 · 图层标题 head 版式接线（2026-11-07 稳定版三轮，Eason「标题还是不好」；
+// 2026-11-27 演进版退场后 head 是唯一口径，原迭代通道的 pill 版式断言随之退役）。
+// 面板 Chart 收 paneLabelLayout='head'，gridTop = 刻度顶带 16 +
 // 标题行 PANE_HEAD_H 20——价格标题独占图顶一行、不再与 Y 刻度字同行。
 // 组装模式照 volumeChartSkeleton（mock buildSeries / FiltersContext / Chart）。
 // ============================================================
@@ -14,14 +14,6 @@ const harness = vi.hoisted(() => ({
   mains: [] as unknown[],
   chartProps: [] as Record<string, unknown>[],
   noop: vi.fn(),
-}));
-
-vi.mock('../../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
 }));
 
 vi.mock('../../../dataModel/aggregate', async (importOriginal) => {

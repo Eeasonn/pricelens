@@ -258,7 +258,7 @@ describe('图层标题 head 版式（稳定版）', () => {
     expect(parseFloat(pill.style.top)).toBe(bandTop + 50);
   });
 
-  it('缺省版式（pill，演进版）不变：价格标题仍在名称带列', async () => {
+  it('缺省版式（pill）不变：价格标题仍在名称带列', async () => {
     const { container } = render(<Chart {...baseProps} /> as ReactElement);
     await waitForGeom(container);
     // gridLeft 60 − nameZoneWidth 120 + 4 → 钳到 2（名称带列左缘），不是 head 的 0

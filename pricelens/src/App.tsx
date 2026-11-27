@@ -3,30 +3,23 @@ import { App as AntdApp, Button, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { ArrowUpOutlined } from '@ant-design/icons';
 import { usePage, PageProvider } from './state/PageContext';
-import { ONLINE_ITERATE } from './appChannel';
 import { FiltersProvider, useFilters } from './state/FiltersContext';
 import { OverviewViewProvider } from './state/OverviewViewContext';
 import { scopeLabels } from './dataModel/scope';
 import Overview from './pages/Overview';
 import Dashboard from './pages/Dashboard';
 import VolumePrice from './pages/VolumePrice';
-import MarketBoardPage from './pages/MarketBoardPage';
 import PricingPage from './pages/pricing/PricingPage';
 import Config from './pages/Config';
 import AlertsPage from './pages/AlertsPage';
-import IntelligenceCenter from './pages/IntelligenceCenter';
-import ForecastPage from './pages/ForecastPage';
 import PageHeader from './components/PageHeader';
 import FilterBar from './components/FilterBar';
 import { ChartContentProvider } from './state/chartContent';
-// 2026-11-07 整合：Agent 栈按构建通道并存——稳定版用稳定线实现（4966d02，含 R6–R8
-// 平台级归一与页内说明），迭代版用迭代线实现（e98d9b1，batch4 + R2–R7）。两边
-// useAgent 门面接口一致，页面代码不分通道。
-import { STABLE } from './appChannel';
+// 2026-11-27 演进版退场：Agent 栈只剩稳定线实现（agent-stable 内核 + CopilotStable
+// 面板，经 state/AgentContext 的 Provider 与上下文取值）。迭代线（src/agent +
+// components/Copilot）与按构建通道切换的门面已随双通道一并删除。
 import { AgentProvider } from './state/AgentContext';
-import AgentPanel from './components/Copilot/AgentPanel';
-import { AgentProvider as AgentProviderStable } from './state/AgentContextStable';
-import AgentPanelStable from './components/CopilotStable/AgentPanel';
+import AgentPanel from './components/CopilotStable/AgentPanel';
 import { color, font, shadow, space } from './theme/tokens';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import { BRAND_NAME } from './components/PriceAgentMark';
@@ -60,29 +53,17 @@ export default function App() {
         <AppErrorBoundary>
           <PageProvider>
             <FiltersProvider>
-              {/* 2026-11-07 整合：Agent Provider 按构建通道切换——稳定版整树挂
-                  AgentProviderStable（稳定栈内部状态机），页头稳定组件与面板直接
-                  命中稳定 ctx；页面消费者（ForecastPage 等）经 useAgent 门面转发
-                  （稳定构建 → 稳定 ctx），页面代码不分通道。迭代版照旧。 */}
-              {STABLE ? (
-                <AgentProviderStable>
-                  <OverviewViewProvider>
-                    <ChartContentProvider>
-                      <AppBody />
-                      <AgentPanelStable />
-                    </ChartContentProvider>
-                  </OverviewViewProvider>
-                </AgentProviderStable>
-              ) : (
-                <AgentProvider>
-                  <OverviewViewProvider>
-                    <ChartContentProvider>
-                      <AppBody />
-                      <AgentPanel />
-                    </ChartContentProvider>
-                  </OverviewViewProvider>
-                </AgentProvider>
-              )}
+              {/* Agent Provider 挂在整棵分析树外层：页头入口（AgentLauncher /
+                  PriceTrendSearch）、面板（CopilotStable）与页面消费者（AlertsPage）
+                  都从同一个上下文取值。 */}
+              <AgentProvider>
+                <OverviewViewProvider>
+                  <ChartContentProvider>
+                    <AppBody />
+                    <AgentPanel />
+                  </ChartContentProvider>
+                </OverviewViewProvider>
+              </AgentProvider>
             </FiltersProvider>
           </PageProvider>
         </AppErrorBoundary>
@@ -100,27 +81,18 @@ function AppBody() {
     overview: '国家总览',
     dashboard: '价格走势',
     volume: '量价走势',
-    marketboard: '大盘走势',
     pricing: '定价推演',
     config: '配置',
     alerts: '预警',
-    intelligence: '情报中心',
-    forecast: '量价预测',
   };
-  // 稳定版 / 迭代版双通道（Eason 2026-11-05）：大盘走势 / 量价预测 / 情报中心
-  // 仅迭代版（本地 dev）可达；稳定版的页 id 直达已在 PageContext（唯一页写入口）
-  // 统一落回 dashboard，故此处渲染分支与标题映射原样保留即可（迭代版继续使用）。
   useEffect(() => {
-    document.title = `${BRAND_NAME}${ONLINE_ITERATE ? ' · 演进版' : ''} · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
+    document.title = `${BRAND_NAME} · ${pageLabel[page] ?? '价格分析'} · ${region} / ${country}`;
   }, [page, region, country]);
   // 第一百八十四轮（Eason）：分析页（价格走势/量价走势/定价推演）共享同一页面
   // 壳（页头+筛选条+滚动容器）——页内切换只换图表主体，不再整页重挂载（顶部
   // 筛选器不刷新）；非分析页仍按页 key 重挂载播淡入。
-  // 2026-11-03：大盘走势（marketboard）加入分析壳，同享切页不重挂筛选器。
-  // 2026-11-04（WP6 集成）：量价预测（forecast）入壳——showFilters=false
-  //（fixture 固定样本，不渲染会被误解为联动数据的 FilterBar），页头/滚动
-  // 容器/回滚按钮全部共享，页头页签退役（同页单 current，见 PageHeader）。
-  const analysis = page === 'dashboard' || page === 'volume' || page === 'marketboard' || page === 'pricing' || page === 'forecast';
+  // 2026-11-27（演进版退场）：大盘走势 / 量价预测两页下线，不再在分析壳内渲染。
+  const analysis = page === 'dashboard' || page === 'volume' || page === 'pricing';
   return (
     <>
       <a
@@ -146,21 +118,11 @@ function AppBody() {
         {page === 'overview' ? (
           <Overview />
         ) : analysis ? (
-          page === 'forecast' ? (
-            // 推演工作台：固定演示样本，无 FilterBar（showFilters=false），
-            // 避免被误解为会联动数据的筛选器（计划 8.1 Step 1）
-            <AnalysisShell showFilters={false}>
-              <ForecastPage />
-            </AnalysisShell>
-          ) : (
-            <AnalysisShell>
-              {page === 'volume' ? <VolumePrice /> : page === 'marketboard' ? <MarketBoardPage /> : page === 'pricing' ? <PricingPage /> : <Dashboard />}
-            </AnalysisShell>
-          )
+          <AnalysisShell>
+            {page === 'volume' ? <VolumePrice /> : page === 'pricing' ? <PricingPage /> : <Dashboard />}
+          </AnalysisShell>
         ) : page === 'config' ? (
           <Config />
-        ) : page === 'intelligence' ? (
-          <IntelligenceCenter />
         ) : (
           <AlertsPage />
         )}
@@ -172,10 +134,8 @@ function AppBody() {
 /** 分析页共享壳（第一百八十四轮）：页头、顶部筛选条、滚动容器与回滚按钮只挂载
  *  一次，价格走势/量价走势（定价推演就绪后同）在壳内换主体——切页签不再触发
  *  筛选器刷新（原各页自带壳，切换即整页重挂）。滚动容器原属价格看板页（第五十
- *  四轮的顶部居中 ↑ 回滚按钮随迁，量价页同样生效）。
- *  showFilters（默认 true 不改旧行为）：量价预测传 false——fixture 固定样本
- *  不随全局筛选联动，不渲染会被误解为联动数据的 FilterBar（计划 8.1 Step 1）。 */
-function AnalysisShell({ children, showFilters = true }: { children: ReactNode; showFilters?: boolean }) {
+ *  四轮的顶部居中 ↑ 回滚按钮随迁，量价页同样生效）。 */
+function AnalysisShell({ children }: { children: ReactNode }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [showTop, setShowTop] = useState(false);
   const onScroll = (): void => setShowTop((rootRef.current?.scrollTop ?? 0) > 140);
@@ -223,9 +183,8 @@ function AnalysisShell({ children, showFilters = true }: { children: ReactNode; 
       <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {/* 顶栏 64px（共享 PageHeader，预警中心重构统一四页铬架） */}
         <PageHeader />
-        {/* 分析对象与当前对比口径；showTime = 时间筛选簇（第一百三十一轮波2上移）。
-            forecast（showFilters=false）不渲染筛选条，页面自带固定样本范围行 */}
-        {showFilters && <FilterBar showTime showPlatform={false} />}
+        {/* 分析对象与当前对比口径；showTime = 时间筛选簇（第一百三十一轮波2上移） */}
+        <FilterBar showTime showPlatform={false} />
         <main style={{ flex: 1, padding: `${space.md}px ${space.lg}px ${space.lg}px`, minWidth: 0 }}>{children}</main>
       </div>
     </div>

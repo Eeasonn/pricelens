@@ -20,7 +20,7 @@
 // 「每周全平台最低价」口径曾取 OZON 1P 332.62 → 333）。
 // ============================================================
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FiltersProvider, useFilters } from '../FiltersContext';
@@ -29,13 +29,6 @@ import PlatformScopeNoticeBanner from '../../components/FilterBar/PlatformScopeN
 import { platformQueryEquals } from '../../dataModel/platformScope';
 import { buildAgentContext, runAgent } from '../../agent-stable/core';
 import type { AgentAlertRecord, AgentCardAction, ChartResultCard, PriceAdvantageResultCard, TableResultCard } from '../../agent-stable/contracts';
-
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-}));
 
 // 本仓库 vitest jsdom 不带 localStorage：装内存桩（同 R7 测试手法）
 beforeEach(() => {

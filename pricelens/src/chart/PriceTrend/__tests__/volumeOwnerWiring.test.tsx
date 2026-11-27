@@ -3,7 +3,7 @@
 // Chart 用桩捕获 props（ECharts 在 jsdom 无 canvas，渲染行为由 volumeLayer 覆盖）——
 // ①合并图 = 第一张卡主品；②分图 = 每面板各自主品；③主品是竞品时不出销毛（口径 = 我司产品）。
 // 2026-11-13 Eason 拍板「销量只认我司」：合并图竞品主品不再出任量带归属（无量带/
-// 无「量」按钮）；分图面板仍如实显示各自主品（演进版逐面板量价呈现不变）。
+// 无「量」按钮）；分图面板仍如实显示各自主品。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -2,17 +2,16 @@ import { buildSeries, lowestPriceColorSku, platformPriceSpread } from '../dataMo
 import { normalizePlatformScope, platformScopeProvenanceNote } from '../dataModel/platformScope';
 import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { INDUSTRY_LABELS } from '../dataModel/scope';
-import { STABLE } from '../appChannel';
 import { platformLevelForChannel } from '../state/urlSync';
 import { buildCards, tidyMains, flatSelections, remapSelectionForCountry, selKey, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
 import type { AgentActionTarget, AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, FilterPatch, FilterResultCard, ForecastContextInput, AgentSuggestion } from './contracts';
 import { contextFingerprint } from './contracts';
-import { BASELINE_DRAFT, type ForecastDataset, type ScenarioDraft } from '../pages/forecast/forecastModel';
+import { BASELINE_DRAFT, type ForecastDataset, type ScenarioDraft } from './forecast/forecastModel';
 import type { ForecastDraftInput } from './contracts';
-import { simpleDemoDataset as forecastFixture } from '../pages/forecast/forecastDatasetRegistry';
-import { createForecastSnapshot, type ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
+import { simpleDemoDataset as forecastFixture } from './forecast/forecastDatasetRegistry';
+import { createForecastSnapshot, type ForecastSnapshot } from './forecast/forecastSnapshot';
 import { provenanceSummary } from '../dataModel/provenance';
 import { buildPriceAdvantageResult } from './priceAdvantage';
 import { priceDataVersionOf } from '../dataModel/priceProvenance';
@@ -365,19 +364,18 @@ function selections(state: FiltersState): ProductSelection[] {
 }
 
 function seriesQueryOf(state: FiltersState): SeriesQuery | null {
-  // R5-M1：stable 看板取数每组 platform = 全局平台/店铺（PriceTrend 第196轮整改3
+  // R5-M1：看板取数每组 platform = 全局平台/店铺（PriceTrend 第196轮整改3
   // 口径；2026-11-14 店铺级恢复，platformLevelForChannel = 透传）；Agent 趋势/平台
   // 查询必须同口径，否则卡上数值与回看落地后的看板渠道集不同（如全局选 OZON 时
-  // 卡按全渠道自动算、落地却是 OZON）。iterate 保持每线覆写（现状不变）。
-  const stablePlatform = STABLE ? platformLevelForChannel(state.platform) : null;
+  // 卡按全渠道自动算、落地却是 OZON）。2026-11-27 演进版退场：原迭代通道的
+  // 「每线覆写 platform」分支随之删除，只保留全局平台口径。
+  const platform = platformLevelForChannel(state.platform);
   const groups = selections(state).map((selection) => ({
     modelId: selection.modelId,
     romram: selection.romram,
     skuIds: selection.skuIds,
     isOwn: selection.skuIds.some((sku) => dimProduct.find((p) => p.sku_id === sku)?.is_own),
-    platform: STABLE
-      ? stablePlatform
-      : selection.platform ? { platforms: selection.platform.platforms, shopIds: selection.platform.shopIds, seller: selection.platform.seller } : null,
+    platform,
   }));
   if (!groups.length) return null;
   return { scope: { countryCode: state.countryCode, industry: state.industry }, groups, granularity: state.granularity, startBucket: state.rangeStart, endBucket: state.rangeEnd, currency: state.currency, agg: state.agg, financingType: state.financingType, financingTerms: state.financingTerms };
@@ -418,9 +416,9 @@ function stateForEntityQuery(state: FiltersState, entities: AgentEntityResolutio
   // 沿用的旧国平台（AE 的 NOON 进 RU）剔除合法子集保留、全部非法回落未选
   // 平台口径，并产出透明说明；同国合法选择幂等无说明。
   const withLawfulPlatform = (queryState: FiltersState): FiltersState => {
-    // R6-M1：归一 = 国家合法性 + 稳定版能力（店铺级透明展开平台级）一条路径，
-    // 在进入任何实际取数前完成——计算口径、结果卡 filterPatch 与落地 state 同源。
-    // 迭代版店铺级照旧保留（normalizePlatformScope 内按通道分流）。
+    // 归一在进入任何实际取数前完成——计算口径、结果卡 filterPatch 与落地 state 同源。
+    // normalizePlatformScope 自 2026-11-14 起是 lawfulPlatformScope 的透传（合法的
+    // 店铺级选择原样保留）；2026-11-27 演进版退场后只剩一条路径，不再按通道分流。
     const scope = normalizePlatformScope(queryState.countryCode, queryState.platform);
     if (scope.note) notes.push(scope.note);
     return scope.platform === queryState.platform ? queryState : { ...queryState, platform: scope.platform };
@@ -713,11 +711,10 @@ function forecastExplanationCards(
       `价格因子使用参考价 ${forecastDataset.params.referencePrice} 与当前弹性 ${effectiveElasticity.toFixed(2)}；fit 是否注入预测由快照安全门决定。`,
       `当前 fit 状态为${snapshot.fit.status === 'completed' ? '已完成' : '证据不足，回退先验'}；总体有效样本 ${snapshot.fit.sampleCount} 周，排除删失 ${snapshot.fit.excluded.censored}、混杂 ${snapshot.fit.excluded.confounded}、缺失 ${snapshot.fit.excluded.missing}。`,
       snapshot.competitorEvents.some((event) => event.marketEffect === 'unknown') ? '竞品上市的市场扩盘 / 分流状态仍待验证，当前只作为份额压力情景。' : '竞品事件已带有显式市场效应状态，仍需结合证据核对。',
-      // 推演工作台界面能力口径（A4 同步，2026-11-04 评审修订：把握区间带下线，大盘月粒度调整上线）。
-      '参照品联动：在推演工作台切换上一代参照后，基线按同周龄比值校正（选中参照 / 默认参照）；友商参照仅作对照，不进入主链。',
-      '库存上限修正：SO = min(基线 SO, 可售)，修正结果回写主图；修正周以琥珀描边标注，截断事实独立保留，手调不覆盖。',
-      '大盘月粒度：大盘工作台覆盖未来 4 个季度逐月预测，点击预测月就地调整（原因选填），调整季度经季内三月均值同步主链；人工事件三字段（起始时间/时长/幅度），月中起始按日均摊。',
-      '复制关键假设：推演工作台可一键复制结构化关键假设文本（范围与模拟状态 → 模型版本 → 季度基线 → 行业事件 → 大盘月度事件与按月调整 → 上一代参照 → 产品事件 → SI → 手调原因 → 库存规则 → 结果摘要），供会议与评审直接引用。',
+      // 2026-11-27 演进版退场：原 A4 同步的四条里，参照品联动 / 大盘月粒度 / 复制关键假设
+      // 是已下线的推演工作台界面能力（共用模型里没有对应实现），随工作台一并移除；
+      // 只保留模型本身仍成立的供给上限口径，不再描述任何页面上的操作。
+      '库存上限修正：SO = min(基线 SO, 可售)，供给截断的事实独立保留。',
     ],
     boundaries: [
       `${forecastDataset.meta.status === 'simulated' ? '当前数据为模拟演示，不能当作真实销量、库存或利润事实。' : '当前数据状态已标记。'}`,
@@ -725,7 +722,7 @@ function forecastExplanationCards(
       current.stockout ? `${current.week} 可供量低于无约束需求，SO 被供给截断；需核对真实配额与缺货状态。` : '当前周未出现供给截断，但仍需核对实际 SO 与可供量。',
     ],
     actions: [
-      { id: id('action'), label: '查看计算路径', kind: 'open', prompt: '回到量价预测页查看计算路径', target: actionTarget },
+      { id: id('action'), label: '查看计算路径', kind: 'open', prompt: '展开这次预测的计算路径', target: actionTarget },
       { id: id('action'), label: '继续做价格情景', kind: 'followup', prompt: '如果价格下调 5% 会怎样？', target: actionTarget },
     ],
     evidence: [

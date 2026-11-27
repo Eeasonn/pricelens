@@ -1,18 +1,9 @@
-import { vi, describe, expect, it } from 'vitest';
-// 2026-11-07 整合：稳定栈只在稳定构建启用，其测试按出货通道（STABLE）运行
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
+import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
 import { buildAgentContext, buildFilterCard, buildFilterPatch, clarificationReasonForQuery, classifyIntent, resolveAgentEntities, runAgent } from '../core';
 import { isContextStale, validateFilterPatch } from '../contracts';
-import { simpleFullDataset } from '../../pages/forecast/forecastDatasetRegistry';
-import { createForecastSnapshot } from '../../pages/forecast/forecastSnapshot';
+import { simpleFullDataset } from '../forecast/forecastDatasetRegistry';
+import { createForecastSnapshot } from '../forecast/forecastSnapshot';
 
 const state = { ...defaultFilters, rangeStart: '202619', rangeEnd: '202642' };
 
@@ -188,25 +179,25 @@ describe('PriceLens Agent deterministic core', () => {
     }
   });
 
-  it('covers workbench interface wording in the forecast explanation (A4 sync)', async () => {
+  it('keeps only model-caliber assumptions and no retired workbench wording in the forecast explanation', async () => {
     const context = buildAgentContext('forecast', state, []);
     const response = await runAgent('解释当前简单版预测的关键假设、证据和风险', context, undefined, 'forecast_explain');
     const card = response.cards[0];
     expect(card?.kind).toBe('forecast_explanation');
     if (card?.kind === 'forecast_explanation') {
-      const capabilityLines = card.assumptions.slice(-4).join('\n');
-      // 四条新口径：参照品联动比值校正 / 库存上限修正回写 / 大盘月粒度调整 / 复制关键假设（把握区间带已于 2026-11-04 评审下线）。
-      expect(capabilityLines).toContain('上一代参照');
-      expect(capabilityLines).toContain('比值校正');
-      expect(capabilityLines).toContain('库存上限修正');
-      expect(capabilityLines).toContain('min(基线 SO, 可售)');
-      expect(capabilityLines).toContain('大盘月粒度');
-      expect(capabilityLines).toContain('未来 4 个季度');
-      expect(capabilityLines).toContain('点击预测月');
-      expect(capabilityLines).toContain('复制关键假设');
-      // 新增口径遵循正典禁词（因子 / 约束 / 置信区间 / 无约束需求 / 我司）。
+      // 2026-11-27 演进版退场：原 A4 同步的四条推演工作台界面口径随工作台下线，
+      // 只保留模型里确有实现的供给上限口径（forecastModel：forecastSO = min(modelDemand, available)）。
+      const caliberLines = card.assumptions.slice(-1).join('\n');
+      expect(caliberLines).toContain('库存上限修正');
+      expect(caliberLines).toContain('min(基线 SO, 可售)');
+      // 解释卡与动作提示不得再把用户指向已下线的页面或工作台操作。
+      const allText = [...card.assumptions, ...(card.actions ?? []).map((action) => action.prompt ?? '')].join('\n');
+      for (const retired of ['推演工作台', '大盘工作台', '量价预测页', '点击预测月', '一键复制', '上一代参照']) {
+        expect(allText).not.toContain(retired);
+      }
+      // 口径行遵循正典禁词（因子 / 约束 / 置信区间 / 无约束需求 / 我司）。
       for (const banned of ['因子', '约束', '置信区间', '无约束需求', '我司']) {
-        expect(capabilityLines).not.toContain(banned);
+        expect(caliberLines).not.toContain(banned);
       }
     }
   });

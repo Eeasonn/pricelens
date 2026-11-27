@@ -604,17 +604,20 @@ describe('remapSelectionForCountry（R4-m1：多 SKU 过滤所有无效 SKU / �
     expect(remapSelectionForCountry(sel, 'DE', 'phone')).toBeNull();
   });
 
-  it('取价口径 platform 随映射保留但按目标国逐线归一（R3-M3：跨国不再 spread 残留源国渠道）', () => {
-    // 源国渠道口径（JD 不在 RU/ID 渠道表）→ 目标国不可落地，该线回自动（null）
-    const foreign = { platforms: ['JD'], shopIds: [], seller: null };
-    const selForeign: ProductSelection = { modelId: mateX6, romram: '12+512 GB', skuIds: [ru12.sku_id], platform: foreign };
-    expect(remapSelectionForCountry(selForeign, 'ID', 'phone')?.platform).toBeNull();
-    // 目标国可落地口径原样保留（引用不变）；同国映射同样原样保留
+  it('取价口径 platform 随映射原样保留、不做逐线归一（2026-11-27 演进版退场：原迭代线 R3-M3 逐线归一随通道删除）', () => {
+    // 精确配置在目标国有效：platform 原样保留（引用不变）；同国映射同样原样保留
     const idChannel = dimChannel.find((c) => c.country_code === 'ID');
     const valid = { platforms: [], shopIds: [idChannel!.channel_id], seller: null };
     const selValid: ProductSelection = { modelId: mateX6, romram: '16+512 GB', skuIds: [], platform: valid };
     expect(remapSelectionForCountry(selValid, 'ID', 'phone')?.platform).toBe(valid);
     expect(remapSelectionForCountry(selValid, 'ID', 'phone')).toBe(selValid);
+    // 配置整体不在目标国 → 映射到同型号首个合法配置，是新选择项，不带源国的每线口径
+    const foreign = { platforms: ['JD'], shopIds: [], seller: null };
+    const selForeign: ProductSelection = { modelId: mateX6, romram: '12+512 GB', skuIds: [ru12.sku_id], platform: foreign };
+    const remapped = remapSelectionForCountry(selForeign, 'ID', 'phone');
+    expect(remapped?.romram).toBe('16+512 GB');
+    expect(remapped?.skuIds).toEqual([id16.sku_id]);
+    expect(remapped?.platform).toBeUndefined();
   });
 });
 

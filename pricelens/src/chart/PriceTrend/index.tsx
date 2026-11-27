@@ -49,7 +49,7 @@
 //   取筛选范围末端 12 个周桶（点距过密改善；宽屏/月季/手动窗口行为不变）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ConfigProvider, message, Segmented, Tooltip } from 'antd';
+import { ConfigProvider, Segmented, Tooltip } from 'antd';
 import { HolderOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { useChartContent } from '../../state/chartContent';
@@ -58,7 +58,7 @@ import { navBus } from '../../state/navBus';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
-import { buildSeries, defaultPlatformAnchorOf, effectiveLinePlatform, lifecycleDeltaOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
+import { buildSeries, defaultPlatformAnchorOf, lifecycleDeltaOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
 import { flatSelections } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
@@ -69,7 +69,7 @@ import type {
   SeriesQuery,
   SkuGroupQuery,
 } from '../../dataModel/types';
-import type { PlatformSelection, ProductSelection } from '../../state/filtersTypes';
+import type { ProductSelection } from '../../state/filtersTypes';
 import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, space } from '../../theme/tokens';
 import Chart from './Chart';
 // 区间量尺（2026-11-06 Eason 拍板）：读数方式类型与默认值
@@ -124,10 +124,10 @@ import { marginCostOf, type MarginCostPoint } from '../../pages/volume/marginCos
 import { volumeByBuckets } from '../../dataModel/volume';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { useConfigVersion } from '../../state/configStore';
-// 第196轮复检整改3（2026-11-05，Eason：稳定版价格页全局平台化）：STABLE 通道判定 +
-// 店铺级→平台级归一（与量价页同源的全局 state.platform 口径）。iterate 全部门控失效，
-// 行为逐字节不变
-import { STABLE } from '../../appChannel';
+// 第196轮复检整改3（2026-11-05，Eason：价格页全局平台化）：取数口径 = 顶部全局平台
+// 筛选器（state.platform，与量价页同源同键；2026-11-14 店铺级恢复后
+// platformLevelForChannel = 透传）。2026-11-27 演进版退场：原「iterate 保持每线
+// 覆写」的通道分支删除，全局平台是唯一口径。
 import { platformLevelForChannel } from '../../state/urlSync';
 import AnomalyQualityChip, { anomalyBucketTextOf, registerAnomalyIsolated, type AnomalyChipPoint } from '../../components/AnomalyQualityChip';
 import PlatformCompareView from './PlatformCompareView';
@@ -136,7 +136,6 @@ import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
 import LegendTools from './LegendTools';
-import { pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, syncComparesWithMain, type PlatformSyncCardSnap } from './platformSync';
 
 /** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之。
  *  空对组名分工：图表面板/图例保留「对比产品」（组名仍有内容），宽表组头用
@@ -152,10 +151,6 @@ const LOAD_ERROR_HINT = (
     <div style={{ marginTop: 4, fontSize: fontSize.caption }}>请刷新重试</div>
   </>
 );
-
-// 店铺同步不可用的轻提示（本轮，Eason）：主品还没价格数据时解析不出可跟随的
-// 店铺口径，点了同步不生效。沿全站轻提示通道（antd message），不弹解释框
-const SYNC_BLOCKED_HINT = '主品暂无价格数据，暂不能同步';
 
 export default function PriceTrend(props: {
   /** 第110轮（评审）立、第一百二十三轮按组：图下「价差与明细」取数口——按主分析卡
@@ -177,12 +172,13 @@ export default function PriceTrend(props: {
   // 面板取数 = state.mains 原样。
   const effMains = state.mains;
   const mainsEmpty = effMains.length === 0;
-  // 第196轮复检整改3（2026-11-05，Eason）：稳定版价格页取数口径 = 顶部全局平台
+  // 第196轮复检整改3（2026-11-05，Eason）：价格页取数口径 = 顶部全局平台
   // 筛选器（state.platform，与量价页 2026-11-05 同源同键）。2026-11-14（Eason「平台
   // 还是能选到店铺」）：店铺级降级退役（platformLevelForChannel = 透传）——店铺级
   // 全局选择原样钉该店铺取价；平台级/自动 = 平台内每周最低价（折扣率最大）店铺。
-  // 每产品选择项上的 platform 覆写在 stable 仍失效。iterate = null 哨兵，走每线 platform
-  const stablePlatform = useMemo(() => (STABLE ? platformLevelForChannel(state.platform) : null), [state.platform]);
+  // 每产品选择项上的 platform 覆写不参与取数。2026-11-27 演进版退场：原迭代通道的
+  // 「每线 platform」分支删除，全局平台是唯一口径。
+  const stablePlatform = useMemo(() => platformLevelForChannel(state.platform), [state.platform]);
   // 合并图（单卡）取数组：全部主品配置 + 全部对比区并集（按卡序去重）
   const { mainSels, compareSels } = useMemo(() => flatSelections(effMains), [effMains]);
 
@@ -209,13 +205,11 @@ export default function PriceTrend(props: {
       .join(','),
     [effMains],
   );
-  // 第196轮复检整改3：stable 的实际取数口径 = 全局平台（每线覆写失效）——
-  // 全局平台变化必须进入限位作用域签名（换平台即回自动）；R4（三审 M1）：
-  // iterate 未覆写线也回落全局平台，全局平台变化同样 = 价格线口径真实变化，
-  // 两通道都入键
+  // 第196轮复检整改3：实际取数口径 = 全局平台——全局平台变化必须进入限位
+  // 作用域签名（换平台即回自动）
   const limitScopeSig = useMemo(
-    () => `${contentSignature(effMains)}#${platformSig}#${STABLE ? JSON.stringify(stablePlatform) : JSON.stringify(state.platform)}#${state.currency}`,
-    [effMains, platformSig, stablePlatform, state.platform, state.currency],
+    () => `${contentSignature(effMains)}#${platformSig}#${JSON.stringify(stablePlatform)}#${state.currency}`,
+    [effMains, platformSig, stablePlatform, state.currency],
   );
   // 币种或产品集一变，旧限位还停在上一币种的数字上。若等 effect 再清，
   // 这一帧会用错的端点算出过细的步长，并被冻结进后续自适应（USD→本币时刻度炸开）。
@@ -277,26 +271,6 @@ export default function PriceTrend(props: {
   const { priceSubview, setPriceSubview } = useChartContent();
   const compareTab = priceSubview === 'platforms';
   const [compareInit, setCompareInit] = useState<{ modelId: string; romram: string } | null>(null);
-
-  // 店铺同步（本轮重定口径，Eason）：同步只让本组对比品的店铺跟随本组主品，
-  // 主品自身永不改写。开关态 + 触发快照按卡存进会话级持久（LPL3.view.price.
-  // platformSync）——platform 值本身随 LPL3.filters 落地，若开关与快照只在内存，
-  // 刷新后按钮回落「未同步」而数据仍钉着，再点同步会把钉着的状态当「原始」
-  // 快照，取消回不到真原始；会话化后刷新即按钮态与数据一致，取消仍还原真原始。
-  // ref 持「开」镜像供 pickChannel 免依赖读值；togglePlatformSyncOf 依赖
-  // visSeries（主品自动口径要解析实际取价平台），在 visSeries 之后定义（见下）。
-  interface PlatformSyncEntry {
-    on: boolean;
-    snap: PlatformSyncCardSnap[] | null;
-  }
-  const [platformSyncStore, setPlatformSyncStore] = usePageViewState<Record<string, PlatformSyncEntry>>(
-    'price.platformSync',
-    () => ({}),
-  );
-  const platformSyncMapRef = useRef<Record<string, boolean>>({});
-  platformSyncMapRef.current = Object.fromEntries(
-    Object.entries(platformSyncStore).map(([id, entry]) => [id, entry.on]),
-  );
 
   // 时点摘要：入口在工具行 ⋯ 内，默认收起，不持久化
   const [pointPanelOpen, setPointPanelOpen] = useState(false);
@@ -397,12 +371,9 @@ export default function PriceTrend(props: {
     () => ({
       // isOwn 由数据层按型号事实判定（华为产品恒真）；主分析/对比是角色，
       // 图上不因角色改样式（第一百一十七轮）。
-      // 第196轮复检整改3：stable 每组 platform = 全局平台（state.platform 降级归一），
-      // 每线 sel.platform 覆写失效；iterate 保持每线覆写（与量价页全局化同款口径）。
-      // R4（三审 M1）：iterate 未带每线口径的线回落全局 state.platform（经共享
-      // effectiveLinePlatform：每线 > 全局 > 自动）——与 Agent 趋势/价格优势同口径，
-      // URL shop=RU:ozon:3P 的全局店铺级不再在趋势被混池成 333。
-      groups: [...mainSels, ...compareSels].map((g) => ({ ...g, isOwn: false, platform: STABLE ? stablePlatform : effectiveLinePlatform(g, state.platform) })),
+      // 第196轮复检整改3：每组 platform = 全局平台（state.platform），每线
+      // sel.platform 覆写不参与取数（与量价页全局化同款口径）。
+      groups: [...mainSels, ...compareSels].map((g) => ({ ...g, isOwn: false, platform: stablePlatform })),
       granularity: state.granularity,
       startBucket: dataStart,
       endBucket: dataEnd,
@@ -590,101 +561,7 @@ export default function PriceTrend(props: {
       .filter((s) => s.points.length > 0);
   }, [allSeries, win]);
 
-  /** 图例药丸比价入口：记录发起产品并打开弹窗 */
-  // 第一百六十二轮：药丸上方平台小药丸的回写——seriesKey（modelId__配置去空格）
-  // 与 selKey（modelId|配置去空格）同口径，剥出两段拼 selKey 定位选择项。
-  // 第一百八十四轮（Eason）：「同步平台筛选」改组内语义——平台改动只施加到
-  // 所属组的全部产品（保持「本组与主产品一致」不变式），各组互相独立。
-  // 第一百九十一轮（Eason 五点）：整体下移到 visSeries 之后（同步分支要读主品
-  // 系列的平台徽标，依赖数组补 visSeries）；修真机 bug——同步中点浮层底部「自动」
-  // 不再把整组置 null 散伙：主品回 null（底部胶囊回按下态），对比品统一钉到
-  // 主品当前口径解析出的平台（pinnedSelectionFromBadge，badge + 主品当前显式
-  // 选择，与开启同步的钉定同源同函数，对照第一百七十四轮「三星还是 Mvideo」
-  // 问题：null 直发全员会各解各的平台），同步标志与快照都不动——同步状态不因
-  // 点自动被消除；显式选了平台/渠道仍全员同写。
-  const pickChannel = useCallback(
-    (seriesKey: string, sel: PlatformSelection | null) => {
-      // 融资后缀感知（2026-11-16 审视修复）：ZA 月度融资系列 key 带 __i24/__pp
-      // 后缀，先剥后缀再还原选择键（selKey = 型号|配置）——否则写进
-      // setSelectionPlatform 的键带残尾，平台/店铺选择静默落空
-      const bare = seriesKey.replace(/__(?:i\d+|pp)$/, '');
-      const idx = bare.indexOf('__');
-      if (idx <= 0) return;
-      const key = `${bare.slice(0, idx)}|${bare.slice(idx + 2)}`;
-      const owner = effMains.find((c) =>
-        [c.main, ...c.compares].some((s) => s && seriesKeyMatches(seriesKey, seriesKeyOf(s))),
-      );
-      if (owner && platformSyncMapRef.current[owner.id]) {
-        // 同步中点「自动」（第一百九十一轮，Eason 五点）：主品回自动，对比品钉定
-        // 继续跟随。钉定与开启同步（togglePlatformSyncOf）同源同函数，第二参 =
-        // 主品当前显式选择：主品已显式（开启同步后的常态）= 原样透传；主品本就
-        // 自动 = null 落到徽标解析实际平台。不能直传 null——开启同步后主品徽标
-        // auto=false，解析出 null 会整组散伙，同步名存实亡
-        if (sel == null) {
-          const badge = owner.main ? visSeries.find((s) => seriesKeyMatches(s.key, seriesKeyOf(owner.main!)))?.channelBadge ?? null : null;
-          const pinned = pinnedSelectionFromBadge(badge, owner.main?.platform ?? null);
-          actions.setMains(
-            effMains.map((c) =>
-              c.id === owner.id
-                ? {
-                    ...c,
-                    main: c.main ? { ...c.main, platform: null } : c.main,
-                    compares: c.compares.map((s) => ({ ...s, platform: pinned })),
-                  }
-                : c,
-            ),
-          );
-          return;
-        }
-        actions.setMains(
-          effMains.map((c) =>
-            c.id === owner.id
-              ? {
-                  ...c,
-                  main: c.main ? { ...c.main, platform: sel } : c.main,
-                  compares: c.compares.map((s) => ({ ...s, platform: sel })),
-                }
-              : c,
-          ),
-        );
-        return;
-      }
-      actions.setSelectionPlatform(key, sel);
-    },
-    [actions, effMains, visSeries],
-  );
-
   // 图例可见系列：声明下移至 cappedVisSeries 之后（见 splitActive 段）
-
-  // 店铺同步开关（本轮重定口径，Eason）：开 = 本组对比品的店铺跟随主品——主品
-  // 自动口径先经 syncComparesWithMain 按其最新有价周的实际取价平台（与平台小
-  // 药丸显示同名）钉定再写给对比品，主品显式选择 = 原样写给对比品；主品自身
-  // 永不改写。解析不出（主品无价格数据）= 不同步、不开启同步态，轻提示一句。
-  // 关 = 按触发快照整组还原（含主品）。快照在写数据之前收，取消即回真原始。
-  const togglePlatformSyncOf = useCallback(
-    (cardId: string) => () => {
-      const card = effMains.find((c) => c.id === cardId);
-      if (!card) return;
-      const entry = platformSyncStore[cardId];
-      if (entry?.on) {
-        const restored = restorePlatformSync([card], entry.snap ?? [])[0] ?? card;
-        actions.setMains(effMains.map((c) => (c.id === cardId ? restored : c)));
-        setPlatformSyncStore((prev) => ({ ...prev, [cardId]: { on: false, snap: null } }));
-        return;
-      }
-      const badge = card.main ? visSeries.find((s) => seriesKeyMatches(s.key, seriesKeyOf(card.main!)))?.channelBadge ?? null : null;
-      const synced = syncComparesWithMain(card, badge);
-      if (!synced) {
-        message.info(SYNC_BLOCKED_HINT);
-        return;
-      }
-      actions.setMains(effMains.map((c) => (c.id === cardId ? synced : c)));
-      setPlatformSyncStore((prev) => ({ ...prev, [cardId]: { on: true, snap: snapshotPlatformSync([card]) } }));
-      // 同步改了什么要可见（Eason 修复要求）：激活即报跟随范围与还原路径
-      message.success(`店铺同步：${synced.compares.length} 款对比品已跟随主品取价口径（主品不变；取消同步即还原）`);
-    },
-    [effMains, visSeries, actions, platformSyncStore, setPlatformSyncStore],
-  );
 
   const toggleLegend = (key: string): void => {
     setHiddenKeys((prev) => {
@@ -750,13 +627,11 @@ export default function PriceTrend(props: {
       let failed = false;
       try {
         series = buildSeries({
-          // 第196轮复检整改3：stable 每组 platform = 全局平台（与合并图同口径，
-          // 每线覆写失效）；R4（三审 M1）：iterate 经 effectiveLinePlatform
-          // 每线覆写优先、未覆写线回落全局平台（与合并图同口径）
+          // 第196轮复检整改3：每组 platform = 全局平台（与合并图同口径，每线覆写不参与）
           groups: [...(card.main ? [card.main] : []), ...card.compares].map((g) => ({
             ...g,
             isOwn: false,
-            platform: STABLE ? stablePlatform : effectiveLinePlatform(g, state.platform),
+            platform: stablePlatform,
           })),
           granularity: state.granularity,
           startBucket: dataStart,
@@ -1226,11 +1101,6 @@ export default function PriceTrend(props: {
   // 选区态只留主品（2026-11-06 Eason）：主品 = 第一组主品；悬停图顶对比品药丸可临时带出
   const rangeMainKey = ownMainKey ?? chartSeries[0]?.key ?? null;
   const rangeFocusKey = legendHoverKey != null && mergedBrush ? legendHoverKey : null;
-  // 图顶药丸：选区态主品以外降透明
-  const rangeMutedKeys = useMemo(
-    () => (mergedBrush && rangeMainKey != null ? new Set(chartSeries.map((s) => s.key).filter((k) => k !== rangeMainKey)) : undefined),
-    [mergedBrush, rangeMainKey, chartSeries],
-  );
   const chartSeriesForRange = useMemo(
     () =>
       !mergedBrush || rangeMainKey == null
@@ -1315,9 +1185,8 @@ export default function PriceTrend(props: {
     state.currency, state.granularity, state.rangeStart, state.rangeEnd,
     yCompress,
     volumeOn, // 第196轮整改5：量层开合 = 价格区高度变化 → 步长冻结解冻重适配
-    // 第196轮复检整改3：stable 全局平台变化 = 价格线口径真实变化 → 解冻重适配；
-    // R4（三审 M1）：iterate 全局平台同样参与取数（未覆写线的回落层）→ 一并入键
-    ...(STABLE ? [stablePlatform] : [state.platform]),
+    // 第196轮复检整改3：全局平台变化 = 价格线口径真实变化 → 解冻重适配
+    stablePlatform,
   ]);
   const yBaseRef = useRef<{ key: string; intervalUsd: number } | null>(null);
   const yCfg = useMemo(() => {
@@ -1348,15 +1217,13 @@ export default function PriceTrend(props: {
   // 左侧 63px 宽）退役，收到 16px，合并/分图的整条空白一并归零。
   const Y_AXIS_TOP_BAND = 16;
   // 2026-11-07 稳定版三轮（Eason「标题还是不好」）：图层标题改 head 版式——价格标题独占图顶一行，
-  // gridTop 计入 PANE_HEAD_H（分离共享轴列按同一 panelGridTop 对齐，不错位）；演进版版式不变
-  const panelGridTop = (yAxisVisible ? Y_AXIS_TOP_BAND : 8) + (STABLE ? PANE_HEAD_H : 0);
-  // 分离面板内图例带高度（定高：共享轴列按此对齐面板绘图区顶；本轮拍板回归面板内）：
-  // 54 = 平台小药丸 16 + 两行药丸 27 + 行距与内边距（渠道行改药丸上方平台行）
-  const PANEL_LEGEND_H = 54;
-  // 面板头行实际高度（共享轴列 paddingTop 与面板头行同源，2026-11-07 修稳定版轴列错位）：
-  // 稳定版不出药丸带（采纳 A），只留拖柄呼吸位 10px——此前面板头收到 30 而轴列仍按 54 垫，
-  // 共享刻度整列比面板绘图区低 24px。10 + 图顶标题行 20 ≈ 原 30，绘图区纵向位置基本不变
-  const panelHeadRowH = STABLE ? 10 : PANEL_LEGEND_H;
+  // gridTop 计入 PANE_HEAD_H（分离共享轴列按同一 panelGridTop 对齐，不错位）
+  const panelGridTop = (yAxisVisible ? Y_AXIS_TOP_BAND : 8) + PANE_HEAD_H;
+  // 面板头行实际高度（共享轴列 paddingTop 与面板头行同源，2026-11-07 修轴列错位）：
+  // 面板头不出药丸带（2026-11-07 采纳 A），只留拖柄呼吸位 10px——此前面板头收到 30
+  // 而轴列仍按 54 垫，共享刻度整列比面板绘图区低 24px。10 + 图顶标题行 20 ≈ 原 30，
+  // 绘图区纵向位置基本不变
+  const panelHeadRowH = 10;
   // ---- 第196轮整改5（量层）：量带高度规划——量带 = 压缩前总高 × 30%（Eason 口径
   //      28~32%，以视觉舒适为准），价格绘图区以有效 sliderScale 等比压缩：
   //      plot' = plot0 − volH ⇔ sEff = (plot' − 断裂条) / (cells×TICK_PX / s0)。格值与
@@ -1803,38 +1670,8 @@ export default function PriceTrend(props: {
           </div>
         </div>
       )}
-      {/* 药丸行（仅合并模式）：产品药丸居中；分离模式药丸在各面板内，不渲染本行 */}
-      {/* 2026-11-07（Eason 采纳 A）：稳定版去顶排药丸带——品牌信息由名称带（悬停展开）
-          与悬停明细卡（产品名前品牌）承接；iterate 保留（顶排还承担渠道 chip / 店铺同步） */}
-      {!compareTab && !splitActive && !STABLE && (
-        <div style={{ marginBottom: space.md, padding: '0 6px' }}>
-          <ChartToolbar
-            mode="pills"
-            legend={(
-              <BrandLegendStrip
-                groups={tableGroups}
-                hiddenKeys={hiddenKeys}
-                onToggleHidden={toggleLegend}
-                onHover={setLegendHoverKey}
-                mutedKeys={rangeMutedKeys}
-                // 第196轮复检整改3：稳定版不渲染每线渠道选择 chip / 店铺同步按钮 /
-                // 渠道小药丸（取数口径 = 顶部全局平台筛选器）；iterate 照旧
-                channelCtl={STABLE ? undefined : { cc: state.countryCode, onPick: pickChannel }}
-                hideChannelBadges={STABLE}
-                syncCtlOf={(g) => {
-                  if (STABLE) return undefined;
-                  const card = state.mains.find((c) => c.id === g.id);
-                  if (!card || card.compares.length === 0) return undefined;
-                  return {
-                    active: platformSyncStore[g.id]?.on ?? false,
-                    onToggle: togglePlatformSyncOf(g.id),
-                  };
-                }}
-              />
-            )}
-          />
-        </div>
-      )}
+      {/* 合并模式没有顶排药丸带（2026-11-07 Eason 采纳 A）：品牌信息由名称带（悬停展开）
+          与悬停明细卡（产品名前品牌）承接；分离模式的药丸在各面板头内 */}
 
       {/* 空态引导带（第一百一十七轮）：未选主分析产品时给一句出口；
           「无对比」「超线截断」等旧引导退役（无对比是合法状态；配额已前移到选择时） */}
@@ -2034,28 +1871,16 @@ export default function PriceTrend(props: {
                         <HolderOutlined style={{ fontSize: 10 }} />
                       </span>
                       {/* 组/角色图例带（本轮拍板回归面板内，Eason：药丸在面板框里，
-                          不在共享行加小框）：本面板单组（主品药丸 + vs + 对比药丸，
-                          含屏蔽者）；悬停药丸 = 该系列高亮、点击 = 屏蔽/恢复折线；
-                          「店铺同步」固定在本卡主品左侧（组内同步） */}
+                          不在共享行加小框）。2026-11-07（Eason 采纳 A）：分离面板头不再出
+                          药丸带（拖柄保留，行高收窄为 10px），品牌由名称带 / 悬停卡承接——
+                          图例条以空组挂载。2026-11-27 演进版退场：原迭代通道在面板头出
+                          药丸 + 每线渠道 chip / 店铺同步的分支随之删除 */}
                       <div style={{ height: panelHeadRowH, padding: '0 4px 2px', display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                        {/* 2026-11-07（Eason 采纳 A）：稳定版分离面板头不再出药丸带（拖柄保留），
-                            品牌由名称带 / 悬停卡承接；行高收窄补偿面板头高度 */}
                         <BrandLegendStrip
-                          groups={STABLE ? [] : groupsOfCards([p.card], p.all)}
+                          groups={[]}
                           hiddenKeys={hiddenKeys}
-                          mutedKeys={brushInWindow(brushRange, (effWins[p.key] ?? [win.s, win.e])[0], (effWins[p.key] ?? [win.s, win.e])[1])
-                            ? new Set(p.vis.map((v) => v.key).filter((k) => k !== panelExtra[p.key]?.diffBaseKey))
-                            : undefined}
                           onToggleHidden={toggleLegend}
                           onHover={(key) => setPanelLegendHover(key == null ? null : { panel: p.key, key })}
-                          // 第196轮复检整改3：稳定版不渲染每线渠道 chip / 店铺同步 / 渠道小药丸
-                          channelCtl={STABLE ? undefined : { cc: state.countryCode, onPick: pickChannel }}
-                          hideChannelBadges={STABLE}
-                          syncCtlOf={() => (
-                            STABLE || p.card.compares.length === 0
-                              ? undefined
-                              : { active: platformSyncStore[p.key]?.on ?? false, onToggle: togglePlatformSyncOf(p.key) }
-                          )}
                         />
                       </div>
                       <Chart
@@ -2088,7 +1913,7 @@ export default function PriceTrend(props: {
                         yScale={splitYFinal ?? undefined}
                         nameZoneWidth={nameZoneW} // 第196轮整改3（复检定版）：名称带恢复（刻度右→绘图区左、线位对齐）
                         paneLabels // 2026-11-06：图层标注
-                        paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行
+                        paneLabelLayout="head" // 2026-11-07 稳定版三轮：标题独占行（2026-11-27 起唯一口径）
                         tipDiffBaseKey={panelExtra[p.key]?.diffBaseKey ?? null} // 第196轮整改1：价差列基准 = 本卡主品
                         margins={panelExtra[p.key]?.margins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）
                         marginMiniOn={marginOn} // 2026-11-17：销毛率小卡开关（与合并图同开关）
@@ -2175,7 +2000,7 @@ export default function PriceTrend(props: {
             // 密度按 axisTickPlan 抽稀；底部轨道收敛为拖柄/跨年标注的查看窗口毛刷
             nameZoneWidth={nameZoneW} // 第196轮整改3：名称带恢复（与图顶品牌图例带并存）
             paneLabels // 2026-11-06：名称带列顶部写「价格 USD」「销量 台 模拟」
-            paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行、左缘对齐轴列
+            paneLabelLayout="head" // 2026-11-07 稳定版三轮：标题独占行、左缘对齐轴列（2026-11-27 起唯一口径）
             axisTickTexts={yAxisTickTexts} // 第196轮整改2：仅刻度场景轴列宽随内容自适应
             tipDiffBaseKey={ownMainKey} // 第196轮整改1：价差列基准 = 第一组主品
             margins={mergedMargins ?? undefined} // 第196轮整改4：销毛迷你卡（我司主品）

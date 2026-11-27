@@ -166,7 +166,6 @@ import MainControlBand, { GroupCompareEntry } from './volume/MainControlBand';
 import { weekDetailModel } from './volume/weekDetail';
 import { normalizePanelWindow, vMaxOf, type VolumeSlot } from './volume/volumeAxis';
 import { formatVolumeAmount, resolveSelectedWindow, shouldUseWanUnits } from './volume/periodSummary';
-import { STABLE } from '../appChannel';
 
 // 与价格走势分离卡片同一套：拖柄骑在上边线正中，上半凸出卡片；滚动区垫高避免裁切
 const PANEL_GRIP_H = 14;
@@ -880,8 +879,9 @@ export default function VolumePrice() {
   // 量带规划：量带 = 压缩前总高 × 30%，价格绘图区以有效 sliderScale 等比压缩
   //（格值与步长不变，只改每格像素高）——与价格页合并图/分离面板同一算法同一比例
   // 2026-11-07 稳定版三轮（Eason「标题还是不好」）：图层标题 head 版式——价格标题独占图顶一行，
-  // gridTop 计入 PANE_HEAD_H（同价格页）；演进版版式不变
-  const panelGridTop = (showYTicks ? Y_AXIS_TOP_BAND : 8) + (STABLE ? PANE_HEAD_H : 0);
+  // gridTop 计入 PANE_HEAD_H（同价格页）。2026-11-27 演进版退场：原迭代通道的
+  // pill 版式分支删除，head 版式是唯一口径
+  const panelGridTop = (showYTicks ? Y_AXIS_TOP_BAND : 8) + PANE_HEAD_H;
   const volPlan = useMemo<{ scale: YScale; volH: number }>(() => {
     const breaks = yCfg.breaks.length * BREAK_PX;
     const unit = yCfg.plotHeight - breaks; // cells × TICK_PX × sliderScale
@@ -1251,7 +1251,7 @@ export default function VolumePrice() {
                           yScale={yFinal}
                           nameZoneWidth={nameZoneW} // 名称带（刻度右→绘图区左、与线位对齐，同价格页）
                           paneLabels // 图层标注：价格 USD / 销量 台·模拟（有成本时价格行写「价格 / 成本」）
-                          paneLabelLayout={STABLE ? 'head' : 'pill'} // 2026-11-07 稳定版三轮：标题独占行、左缘对齐轴列
+                          paneLabelLayout="head" // 2026-11-07 稳定版三轮：标题独占行、左缘对齐轴列（2026-11-27 起唯一口径）
                           tipDiffBaseKey={p.vis[0]?.key ?? null}
                           margins={hasCost ? (marginMasked ?? undefined) : undefined} // 销毛迷你卡（我司）
                           costs={hasCost ? (costs ?? undefined) : undefined} // 成本细线（我司；Y 轴已把成本算进来）

@@ -28,10 +28,9 @@ import type {
 import type { Granularity } from '../dataModel/types';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { dimProduct, dimRegion, dimTime, factPriceMonthly } from '../data';
-import { lowestPriceColorSku, platformSelectionForCountry, sellersOfChannel } from '../dataModel/aggregate';
+import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { normalizePlatformScope, platformQueryEquals } from '../dataModel/platformScope';
 import type { LawfulPlatformScope } from '../dataModel/platformScope';
-import { STABLE } from '../appChannel';
 import { setCurrentCountry } from './currentScope';
 import { setLocalCurrencyByCountry } from './fx';
 import type { Industry } from '../dataModel/types';
@@ -41,7 +40,7 @@ import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache, productHasDataInCountry } from '../components/ProductCascader/tree';
 import { autoComparesFor, expandV11Cards, filterMainsByFinancingTerm, migrateV10, mainsValidFor, newCardId, remapMainsForScope, restoreAutoOn, selKey, tidyMains, toggleAllAuto, toggleCardAuto, withAutoOn, withCompares, withComparesAdded } from './mainSelection';
 import { EMPTY_PANORAMA, isPanorama, sanitizePanorama } from './panorama';
-import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
+import { readUrlOverrides, writeUrlPatch, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
 /** 追补⑨：四类预警全局缺省（阈值小数；own-gap = 低于 15% 视为档位太近） */
@@ -385,145 +384,14 @@ function computeDataDefaults(countryCode: string, industry: Industry, financingT
   return { mains: [] };
 }
 
-/* ---------- 迭代线实现（e98d9b1） ---------- */
-/** 口径（国家/产业）变化后的状态整理：规范作用域、平台归一化到目标国可落地
- *  范围（R5-M1 共享规则：不可落地部分剔除、全部不可落地回默认电渠，同国有效
- *  平台与 shopIds 保留）、主分析失效时按新口径重算默认卡；开启「自动匹配竞品」
- *  的组对比区随新口径矩阵重算（矩阵分国，维表换代同样在启动读档时借此自愈） */
-function applyScopeDefaultsIterate(s: FiltersState, force: boolean): FiltersState {
-  // R4-m1：坏载荷/外部调用可能给出 mains:undefined——入口归一，后续 .length/.map 不崩
-  const state: FiltersState = Array.isArray(s.mains) ? s : { ...s, mains: [] };
-  const scope = normalizeDataScope({ countryCode: state.countryCode, industry: state.industry });
-  syncScopeRegistries(scope.countryCode);
-  // 空 mains = 用户显式清空（空态），读档/读链接时不回填默认卡；口径切换
-  // 走 switchScope 的 force=true 照常重算默认卡
-  // 2026-11-11：切换付费口径/期数不再清空已选产品（口径切换 = 查看方式）
-  const scopedMains = state.mains;
-  const needMain = force || (state.mains.length > 0 && !mainsValidFor(scopedMains, scope.countryCode, scope.industry, state.financingType, state.financingTerms));
-  const defaults = needMain ? computeDataDefaults(scope.countryCode, scope.industry, state.financingType, state.financingTerms) : {};
-  const next: FiltersState = {
-    ...state,
-    ...scope,
-    // R5-M1：平台归一化走与 Agent 跨国计算/回看同一共享规则——部分可落地保留
-    // 有效子集（旧逻辑整体清空会误伤多平台勾选的合法部分），全部不可落地回
-    // 默认电渠（null）
-    platform: platformSelectionForCountry(state.platform, scope.countryCode),
-    ...defaults,
-    mains: needMain ? (defaults.mains ?? []) : scopedMains,
-  };
-  // 卖家细化合法性：单渠道且该渠道确有此卖家（URL/旧持久化漂移防御）——
-  // 不合法只剥 seller，渠道选择保留（回渠道内最低价口径）
-  if (next.platform?.seller) {
-    const ch = next.platform.shopIds[0];
-    const ok =
-      next.platform.shopIds.length === 1 &&
-      ch != null &&
-      sellersOfChannel(scope.countryCode, ch).some((x) => x.seller === next.platform!.seller);
-    if (!ok) next.platform = { ...next.platform, seller: null };
-  }
-  next.mains = next.mains.map((c) => (c.auto && c.main ? withAutoOn(c) : c));
-  return next;
-}
-
-/** 口径切换（国家/产业变化）+ 按国快照：切走前把当前整套产品卡存该国会话快照；
- *  目的国存在本会话快照且仍有效（产品在新口径有数据）时恢复快照而非重算默认卡——
- *  高频的国家来回切换不再静默清空用户搭好的选择。快照会话级（关页即清），
- *  不跨会话复活旧选择。
- *  R5（主品口径跨国保持，2026-11-07 二审）：patch 显式携带 mains（Agent 跨国
- *  结果卡「回看价格走势」等跳转动作）且整组在目标口径有效时以 patch.mains 为准
- *  ——不恢复按国快照、不被 applyScopeDefaultsIterate(force=true) 重算成默认主品；
- *  无显式 mains 的普通国家切换行为保持原样（快照恢复 / 默认重算）。
- *  R2（本轮返修 M1b，同步稳定线 7edadc6）：explicitMains = 调用方补丁自身显式
- *  携带非空 mains（Agent 结果卡跨国回看/定位的 filterPatch、undo/redo 整态快照）；
- *  普通 UI 换国补丁不带 mains，next.mains 只是旧状态继承，不得按显式口径对待
- *  ——否则 RU→DE→RU 会把 DE 的默认主品当成 RU 的显式选择，丢掉 RU 快照。显式
- *  口径先经 remapMainsForScope 整组合法化（同型号换目标国首个合法配置）并更新
- *  目标国快照，型号整体缺席才回落快照恢复 / 默认重算。 */
-function switchScopeIterate(prev: FiltersState, next: FiltersState, explicitMains = false): FiltersState {
-  // 快照键含产业维度：纯产业切换同样要保住「回切后还原」，键只按国会把
-  // 当前产业的卡覆盖进该国快照，回切时校验不过即永久丢卡
-  const snapKeyOf = (cc: string, industry: string) => `${LPL.filters}.mainsOf.${cc}.${industry}`;
-  const writeSnapshot = (cc: string, industry: string, mains: MainProduct[]) => {
-    try {
-      sessionStorage.setItem(snapKeyOf(cc, industry), JSON.stringify({ mains }));
-    } catch {
-      /* 存储不可用时跳过快照，走默认重算 */
-    }
-  };
-  // 无条件落盘（含清空后的空数组）：空数组 = 用户显式清空的合法快照，不写
-  // 会让清空前的旧快照残留，来回切口径时复活、显式清空被静默撤销
-  writeSnapshot(prev.countryCode, prev.industry, prev.mains);
-  // 有效性按规范后的目标口径判定（applyScopeDefaultsIterate 内部同样先 normalize，
-  // 此处先取一次保证判定与落地口径一致）
-  const scope = normalizeDataScope({ countryCode: next.countryCode, industry: next.industry });
-  if (explicitMains) {
-    // R4-S3（同步稳定线 5f5898d）：显式空数组 = 清空态——落到空看板，不查目标国
-    // 快照（否则旧快照复活、显式清空被静默撤销）、不回填默认，并把目标国快照
-    // 同步为空（此后普通切走/切回都保持空态）
-    if (next.mains.length === 0) {
-      writeSnapshot(scope.countryCode, scope.industry, []);
-      return applyScopeDefaultsIterate({ ...next, ...scope, mains: [] }, false);
-    }
-    // R2 M1a：显式口径先整组合法化——精确合法配置原样保留，同型号配置/SKU 在
-    // 目标国不存在时映射到该国首个合法配置（RU Mate X6 12+512 → ID 16+512），
-    // 型号整体缺席的卡剔除；全部缺席回落默认/快照。合法化后的口径同时更新目标
-    // 国快照（其后普通切走/切回按这套口径还原）。
-    const remapped = remapMainsForScope(next.mains, scope.countryCode, scope.industry);
-    if (remapped) {
-      writeSnapshot(scope.countryCode, scope.industry, remapped);
-      return applyScopeDefaultsIterate({ ...next, ...scope, mains: remapped }, false);
-    }
-    // 型号整体缺席 → 下方快照恢复 / 默认重算路径安全回落
-  }
-  const applied = applyScopeDefaultsIterate(next, true);
-  try {
-    const raw = sessionStorage.getItem(snapKeyOf(applied.countryCode, applied.industry));
-    if (raw) {
-      const snap = JSON.parse(raw) as { mains: unknown };
-      const mains = isMainProductArray(snap.mains) ? snap.mains : null;
-      // 空数组也是合法快照：还原空态而非回落重算默认卡；非空快照仍须整组在新
-      // 口径有效。mainsValidFor 对空数组返回 false 的既有语义不动（读档重算
-      // 判定还依赖它），此处单独放行空快照
-      if (mains && (!mains.length || mainsValidFor(mains, applied.countryCode, applied.industry, applied.financingType, applied.financingTerms))) {
-        // R4-S2（同步稳定线 5f5898d）：快照还原同样过整组合法化——主品逐 SKU
-        // 过滤/同型号映射，手动对比区按目标口径校验/映射、selKey 去重、排除与
-        // 主品同组的条目、按单图折线上限收口；auto 标记保留，auto
-        // 卡对比区由 withAutoOn 按目标国矩阵重算。空快照 = 显式清空态原样还原。
-        if (!mains.length) return { ...applied, mains: [] };
-        const restored = remapMainsForScope(mains, applied.countryCode, applied.industry);
-        if (restored) {
-          return { ...applied, mains: restored.map((c) => (c.auto && c.main ? withAutoOn(c, applied.countryCode) : c)) };
-        }
-      }
-    }
-  } catch {
-    /* 坏 JSON / 类型不符：走默认重算 */
-  }
-  // R4-m1：无有效快照时，先尝试旧 mains 同型号重映射（remapMainsForScope 保
-  // 原型号换目标国合法配置：RU Mate X6 12+512 → ID Mate X6 16+512），映射结果
-  // 同步写入目标国快照；型号整体缺席才回落 applyScopeDefaultsIterate(force=true) 的
-  // 默认重算（RU Mate X6 → DE 无该型号 → nova 14 Pro）。显式 mains 口径已在
-  // 上方分支处理，不会走到这里重复映射。
-  const inheritedMains = Array.isArray(next.mains) ? next.mains : [];
-  if (inheritedMains.some((card) => card.main)) {
-    const remapped = remapMainsForScope(inheritedMains, applied.countryCode, applied.industry);
-    if (remapped) {
-      writeSnapshot(applied.countryCode, applied.industry, remapped);
-      return applyScopeDefaultsIterate({ ...applied, mains: remapped }, false);
-    }
-  }
-  return applied;
-}
-
-/* ---------- 稳定线实现（4966d02） ---------- */
+/* ---------- 口径整理实现（原稳定线 4966d02；2026-11-27 演进版退场后是唯一实现） ---------- */
 /** t428u R7-M1 · 归一说明（provenance）的统一收口：任何入口（load / actions.set /
  *  换国 applyScopeDefaults）过 normalizePlatformScope 后由此决定 state 上的说明——
  *  - 本次归一产生了说明（剔除/透明展开）→ 以本次结果为准（幂等：同输入同说明，
  *    单字段存续，不可能重复叠加）；
  *  - 归一幂等无说明（输入已是合法平台级）→ 沿用「仍能描述当前口径」的既有说明
  *    （补丁/快照随带的说明优先于继承值——undo 整态恢复），否则清空：换国、
- *    deliberate 换平台/重置后旧说明不再成立，绝不泄漏陈旧口径；
- *  - 迭代版恒 null（无稳定版能力归一，Agent 卡内说明照旧由计算侧现场产出）。
+ *    deliberate 换平台/重置后旧说明不再成立，绝不泄漏陈旧口径。
  *  t428u R8-M1 · 候选分两层：incoming（补丁/快照随带）之后还有 inherited（落地前
  *  state 上的既有说明）——Agent 结果卡 open/apply 补丁携带的是归一后的规范平台
  *  且不带说明键（validateFilterPatch 也不放行该键），幂等归一无新说明时按 R7 会
@@ -536,7 +404,6 @@ function resolveScopeNotice(
   incoming: PlatformScopeNotice | null | undefined,
   inherited?: PlatformScopeNotice | null,
 ): PlatformScopeNotice | null {
-  if (!STABLE) return null;
   if (scope.note) return { note: scope.note, countryCode, platform: scope.platform };
   if (incoming && incoming.countryCode === countryCode && platformQueryEquals(incoming.platform, scope.platform)) return incoming;
   if (inherited && inherited.countryCode === countryCode && platformQueryEquals(inherited.platform, scope.platform)) return inherited;
@@ -663,13 +530,12 @@ function scopeFallbackStable(
 }
 
 // ------------------------------------------------------------
-// 2026-11-07 整合（稳定线 4966d02 × 迭代线 e98d9b1）：口径整理两条线各自按产品
-// 验收（稳定 R3–R8 / 迭代 R2–R7），同名函数在两线实现不同——稳定版用稳定线原样
-// 实现（含 R6–R8 平台级透明归一 + 归一说明），迭代版用迭代线原样实现（R5-M1 共享
-// 落地规则 + 每线口径归一），按构建通道 STABLE 分发；两线各自的测试锁住各自行为。
+// 2026-11-27 演进版退场：口径整理收敛为单一实现（原稳定线 4966d02：含 R6–R8
+// 平台级透明归一 + 归一说明）。迭代线实现（R5-M1 共享落地规则 + 每线口径归一）
+// 与按构建通道 STABLE 分发的分支一并删除。
 // ------------------------------------------------------------
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
-  const scoped = STABLE ? applyScopeDefaultsStable(s, force) : applyScopeDefaultsIterate(s, force);
+  const scoped = applyScopeDefaultsStable(s, force);
   // 品牌全景草稿同口径收口：不在当前 国家×产业×付费口径 有数据的产品剔除、
   // 空品牌移除、失效基准清空（无默认主品 / 基准，不回填）
   const panorama = sanitizePanorama(scoped.panorama ?? EMPTY_PANORAMA, scoped.countryCode, scoped.industry, scoped.financingType, scoped.financingTerms);
@@ -677,7 +543,7 @@ function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
 }
 
 function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false, explicitTime = false): FiltersState {
-  const scoped = STABLE ? switchScopeStable(prev, next, explicitMains) : switchScopeIterate(prev, next, explicitMains);
+  const scoped = switchScopeStable(prev, next, explicitMains);
   return swapRangeSnapshot(prev, swapPanoramaSnapshot(prev, scoped), explicitTime);
 }
 
@@ -812,19 +678,13 @@ function loadBaseState(): FiltersState {
     // ≤v9 一律落默认（readPersistedState 只放行 v10/11/12）
     const { v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
     restored = { ...defaultFilters, ...rest } as FiltersState;
-    // 平台单选归一：旧持久化的多选形态（platforms 多值 / shopIds 渠道下钻）取第一个平台；
-    // 稳定版再降店铺级 → 平台级（2026-11-05 复检整改3，Eason：默认视图不再钉具体店铺，
-    // 平台级自动 = 平台内每周最低价店铺；迭代版原样）。
-    // R7-M1（第七轮评审）：稳定版撤掉这两道「有损前置归一」——多平台取一/店铺优先
-    // 会先把原始完整输入裁掉（DNS+AE:noon:3P 丢 DNS、DNS+RU:ozon:3P 丢 DNS），
+    // R7-M1（第七轮评审）：读档不做「多平台取一 / 店铺优先」的有损前置归一——
+    // 那会先把原始完整输入裁掉（DNS+AE:noon:3P 丢 DNS、DNS+RU:ozon:3P 丢 DNS），
     // 后置的 normalizePlatformScope 只能对着残缺输入归一。原始输入原样进
-    // applyScopeDefaults，由共享的「国家合法 + 稳定版能力」一体化归一处理：
+    // applyScopeDefaults，由共享的「国家合法 + 能力」一体化归一处理：
     // 非法店铺剔除、合法店铺透明展开所属平台、与显式平台并集去重，全部过程
-    // 进归一说明（platformScopeNotice，页内可见）。迭代版路径逐字节不变。
-    if (!STABLE) {
-      restored.platform = normalizePlatformSelection(restored.platform);
-      restored.platform = platformLevelForChannel(restored.platform);
-    }
+    // 进归一说明（platformScopeNotice，页内可见）。2026-11-27 演进版退场：原
+    // 迭代通道专属的「读档前置归一」分支随之删除。
     // 迁移里的矩阵查询（groupsFromBenchmark）按数据层缺省国家取分国对标，须先切到载荷国家，
     // 否则迁移产出的对比区会被别的国家矩阵固化写回
     syncScopeRegistries(restored.countryCode);
@@ -1069,7 +929,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           // 新查询/刷新全丢披露。缺说明键 = 继承落地前 state 上口径吻合的说明
           //（换国/换平台的旧说明经集合校验自然不成立）；补丁显式
           // platformScopeNotice:null = deliberate 清除，不继承。
-          if (STABLE && clean.platform !== undefined) {
+          if (clean.platform !== undefined) {
             const scope = normalizePlatformScope(next.countryCode, next.platform);
             const incomingNotice = isPlatformScopeNotice(clean.platformScopeNotice)
               ? clean.platformScopeNotice

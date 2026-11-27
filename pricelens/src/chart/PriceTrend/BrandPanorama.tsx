@@ -25,10 +25,10 @@ import { INDUSTRY_LABELS } from '../../dataModel/scope';
 import { EMPTY_PANORAMA, panoramaSelCount } from '../../state/panorama';
 import type { BrandPanorama as BrandPanoramaState } from '../../state/filtersTypes';
 import { selKey } from '../../state/mainSelection';
-import { buildSeries, effectiveLinePlatform, lifecycleDeltaOf } from '../../dataModel/aggregate';
+import { buildSeries, lifecycleDeltaOf } from '../../dataModel/aggregate';
 import { modelNameOf } from '../../components/ProductCascader/tree';
 import { configTextOf } from '../../components/ProductCascader';
-import { STABLE } from '../../appChannel';
+// 取数口径 = 顶部全局平台筛选器（与价格页同口径；2026-11-27 演进版退场后是唯一口径）
 import { platformLevelForChannel } from '../../state/urlSync';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimTime } from '../../data';
@@ -164,13 +164,13 @@ export default function BrandPanorama(props: {
 
   // ---- 取数：panorama 草稿 → SeriesQuery → buildSeries（与产品对标同口径）----
   const [dataStart, dataEnd] = useMemo(() => dataBucketRange(state.granularity), [state.granularity]);
-  const stablePlatform = useMemo(() => (STABLE ? platformLevelForChannel(state.platform) : null), [state.platform]);
+  const stablePlatform = useMemo(() => platformLevelForChannel(state.platform), [state.platform]);
   const query: SeriesQuery = useMemo(
     () => ({
       groups: sels.map((g) => ({
         ...g,
         isOwn: false,
-        platform: STABLE ? stablePlatform : effectiveLinePlatform(g, state.platform),
+        platform: stablePlatform,
       })),
       granularity: state.granularity,
       startBucket: dataStart,
@@ -344,7 +344,7 @@ export default function BrandPanorama(props: {
     state.priceTypes.discounted, state.priceTypes.rrp,
     state.currency, state.granularity, state.rangeStart, state.rangeEnd,
     yCompress,
-    STABLE ? stablePlatform : state.platform,
+    stablePlatform,
     panelViews.map((p) => p.win.join(':')).join('|'),
   ]);
   // 刻度基线（步长滞回 + 非触发时机冻结）按键存：共享 Y 轴全部图共用一个键，独立 Y 轴每品牌一键
@@ -405,7 +405,7 @@ export default function BrandPanorama(props: {
   }, [adaptKey, scales, adjusting, sharedY, panelViews]);
 
   const yAxisVisible = showYTicks || (state.currency === 'usd' && showTiers);
-  const panelGridTop = (yAxisVisible ? Y_AXIS_TOP_BAND : 8) + (STABLE ? PANE_HEAD_H : 0);
+  const panelGridTop = (yAxisVisible ? Y_AXIS_TOP_BAND : 8) + PANE_HEAD_H;
   // 名称带宽：合并 / 全部品牌图统一取全局最长名（各图等宽，名称完整不换行）
   const nameZoneW = useMemo(() => {
     const widthOf = (list: Series[], plotH: number): number => {

@@ -12,7 +12,7 @@
 // 335.98 → 336。
 // ============================================================
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { defaultFilters, FiltersProvider, useFilters } from '../FiltersContext';
@@ -21,13 +21,6 @@ import PlatformScopeNotice from '../../components/FilterBar/PlatformScopeNotice'
 import { buildAgentContext, runAgent } from '../../agent-stable/core';
 import type { AgentAlertRecord, AgentCardAction, ChartResultCard, PriceAdvantageResultCard, TableResultCard } from '../../agent-stable/contracts';
 import { platformUrlParamsOf, readUrlOverrides } from '../urlSync';
-
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-}));
 
 // 本仓库 vitest jsdom 不带 localStorage：装内存桩（同 FiltersContext.platform-scope 手法）
 beforeEach(() => {
@@ -426,7 +419,7 @@ describe('t428u R7-M1 · 稳定版 URL：多平台不取一、店铺级恢复后
     expect(pureShop.filters.platform).toEqual({ platforms: [], shopIds: ['RU:ozon:3P'], seller: null });
   });
 
-  it('platformUrlParamsOf：多平台全量序列化；店铺级写 plat+shop（迭代版路径不变）', () => {
+  it('platformUrlParamsOf：多平台全量序列化；店铺级写 plat+shop', () => {
     expect(platformUrlParamsOf({ platforms: ['DNS', 'OZON'], shopIds: [], seller: null }).plat).toBe('DNS,OZON');
     expect(platformUrlParamsOf(OZON_PLATFORM)).toEqual({ plat: 'OZON', shop: null, seller: null, ctype: null });
     expect(platformUrlParamsOf(OZON_3P_SHOP)).toEqual({ plat: 'OZON', shop: 'RU:ozon:3P', seller: null, ctype: null });
@@ -456,7 +449,7 @@ describe('t428u R7-M1 · 稳定版 URL：多平台不取一、店铺级恢复后
   });
 });
 
-describe('t428u R7-M1 · 回归钉：迭代版行为不变（同仓默认通道文件另行覆盖，此处钉稳定版默认视图）', () => {
+describe('t428u R7-M1 · 回归钉：默认视图', () => {
   it('默认视图（无存储无 URL）platform=null、无说明；合法 OZON 链接照旧', () => {
     window.history.replaceState(null, '', '/?p=dashboard');
     const handle = renderFilters();

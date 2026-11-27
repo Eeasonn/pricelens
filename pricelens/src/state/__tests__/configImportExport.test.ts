@@ -9,7 +9,6 @@
 // ============================================================
 // @vitest-environment jsdom
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { APP_CHANNEL } from '../../appChannel';
 import { setRole } from '../../access/role';
 import { addAnomalyMark, listAnomalyMarks, readAnomalyRule, saveAnomalyRule } from '../../dataModel/anomaly';
 import { getEffectiveBenchmark, getPrevGenOverrides, saveBenchmark, savePrevGenOverrides } from '../configStore';
@@ -83,12 +82,12 @@ function clearAllConfig(): void {
 }
 
 describe('exportConfigSnapshot · shape', () => {
-  it('schemaVersion=1、exportedAt ISO、appChannel 对齐通道判定、keys 配置齐全', () => {
+  it('schemaVersion=1、exportedAt ISO、appChannel 恒为 stable（2026-11-27 演进版退场后单一稳定版）、keys 配置齐全', () => {
     seedConfig();
     const snap = exportConfigSnapshot();
     expect(snap.schemaVersion).toBe(1);
     expect(snap.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-    expect(snap.appChannel).toBe(APP_CHANNEL);
+    expect(snap.appChannel).toBe('stable');
     expect(Object.keys(snap.keys).sort()).toEqual(
       ['anomalyMarks', 'anomalyRule', 'benchmark', 'benchmarkMatrix', 'countryAliases', 'defaultShop', 'fx', 'industryOfCat', 'marketRules', 'modelAliases', 'platformAliases', 'prevGen', 'promoRows', 'seriesRules', 'storeAliases', 'tierLadders'],
     );
@@ -133,6 +132,13 @@ describe('validateImportPayload · 坏文件一律拒绝（不半写入）', () 
     expect(validateImportPayload({ ...base(), schemaVersion: 2 }).error).toContain('schemaVersion');
     expect(validateImportPayload({ ...base(), keys: undefined }).error).toContain('keys');
     expect(validateImportPayload({ ...base(), appChannel: 'beta' }).error).toContain('appChannel');
+  });
+
+  it('appChannel=iterate 的老配置文件仍可导入（2026-11-27 演进版退场：导入兼容不破，来源通道原样透传）', () => {
+    const res = validateImportPayload({ ...base(), appChannel: 'iterate' });
+    expect(res.ok).toBe(true);
+    expect(res.payload?.appChannel).toBe('iterate');
+    if (res.payload) expect(summarizeImportPayload(res.payload).appChannel).toBe('iterate');
   });
 
   it('缺必含配置项 benchmark → 拒绝', () => {

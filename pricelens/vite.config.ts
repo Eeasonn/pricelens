@@ -15,32 +15,25 @@ const dataVersion = (kind: 'weekly' | 'monthly', files: string[]): string => {
 };
 const sharedDataFiles = ['dim_product.json', 'dim_channel.json', 'dim_default_channel.json', 'dim_benchmark.json'];
 
-// 版本通道构建期烙定（appChannel.ts 唯一判定源）：只有 npm run build:iterate 会设
-// VITE_APP_CHANNEL=iterate（在线演进版 /iterate/）；默认构建恒为 ''（稳定版）。
-const APP_CHANNEL_ENV = process.env.VITE_APP_CHANNEL ?? '';
-
 // 单文件离线交付：数据 JSON 构建时内嵌（§1 / §14.1）
 export default defineConfig({
   plugins: [
     react(),
     viteSingleFile(),
     {
-      // 演进版标签页标题带「演进版」：与稳定版区分，同时作为 CI 产物自检锚点
-      name: 'pricelens-iterate-title',
+      // 版本通道退场（2026-11-27）：应用只剩单一稳定版，原「演进版标题 + 通道 meta」
+      // 插件收敛为只写稳定版标记。该 <meta> 是 scripts/build_portable.mjs（便携版装配）
+      // 识别「稳定版单文件产物」的锚点，必须保留；产物与退场前的稳定版逐字节同口径。
+      name: 'pricelens-channel-marker',
       transformIndexHtml(html) {
-        const channel = APP_CHANNEL_ENV === 'iterate' ? 'iterate' : 'stable';
-        const marker = `<meta name="pricelens-channel" content="${channel}">`;
-        const marked = html.includes('name="pricelens-channel"')
+        const marker = '<meta name="pricelens-channel" content="stable">';
+        return html.includes('name="pricelens-channel"')
           ? html
           : html.replace('</head>', `${marker}</head>`);
-        return channel === 'iterate'
-          ? marked.replace('<title>PriceAgent</title>', '<title>PriceAgent · 演进版</title>')
-          : marked;
       },
     },
   ],
   define: {
-    'import.meta.env.VITE_APP_CHANNEL': JSON.stringify(APP_CHANNEL_ENV),
     __PRICE_WEEKLY_DATA_VERSION__: JSON.stringify(dataVersion('weekly', ['fact_pack_gzip.b64.txt', 'dim_time.json', ...sharedDataFiles])),
     __PRICE_MONTHLY_DATA_VERSION__: JSON.stringify(dataVersion('monthly', ['fact_price_monthly.json', ...sharedDataFiles])),
     // 构建墙钟时间（2026-11-17）：数据版本哈希只随数据变，代码变了哈希不变——

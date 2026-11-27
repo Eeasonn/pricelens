@@ -1,13 +1,12 @@
 // ============================================================
-// t428u Round 5 R5-M1 · 稳定版（生产构建）Agent 查询平台口径镜像。
-// 稳定版价格走势看板取数每组 platform = 全局平台（PriceTrend 第196轮整改3：
-// STABLE ? platformLevelForChannel(state.platform) : 每线覆写）。Agent 的
+// t428u Round 5 R5-M1 · Agent 查询平台口径镜像（2026-11-27 演进版退场后单一口径）。
+// 价格走势看板取数每组 platform = 全局平台（PriceTrend 第196轮整改3：
+// platformLevelForChannel(state.platform)，2026-11-14 起为透传）。Agent 的
 // 趋势/平台查询此前忽略全局平台（每组 platform=null → 自动口径；2026-11-17
 // 起自动口径 = 默认锚严格取价，不再每周跨平台漂移），导致
 // 「全局选 OZON 时卡按全渠道算、回看落地却是 OZON」的第二类口径分叉。
-// 本文件 vi.mock appChannel 钉在 stable（与 PriceTrend stableGlobalPlatform
-// 测试同手法），锁定：seriesQueryOf 在 stable 下每组 platform = 全局平台
-//（店铺级降平台级），iterate 行为见 agentux-r5-platform-scope.test.ts。
+// 与 PriceTrend stableGlobalPlatform 测试同口径，锁定：seriesQueryOf 每组
+// platform = 全局平台（原迭代线的每线覆写分支已随通道删除）。
 // R6-M1 修订：稳定版店铺级全局选择（RU:ozon:3P）此前「计算按平台级、补丁却
 // 原样保留 shopIds」——第六轮评审以 RU nova14 12+256 黑 W202619 真实数据
 // 复现（平台级 333 vs 严格 3P 395）。现在 stable 归一 = normalizePlatformScope
@@ -15,19 +14,12 @@
 // 透明说明「稳定版仅支持平台级 + 店铺展开为平台」。详细数值证人见
 // agentux-r6-stable-platform-normalization.test.ts。
 // ============================================================
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
 import type { FiltersState, ProductSelection } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';
 import { buildAgentContext, runAgent } from '../core';
 import type { AgentCardAction, ChartResultCard, TableResultCard } from '../contracts';
-
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-}));
 
 const NOVA: ProductSelection = { modelId: 'own-huawei-nova-14-pro', romram: '12+512 GB', skuIds: ['own-huawei-nova-14-pro__12-512gb__black'] };
 

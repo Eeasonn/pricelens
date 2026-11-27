@@ -6,7 +6,6 @@ import {
   buildAgentContext,
   contextFingerprint as agentContextFingerprint,
   defaultAgentClient,
-  finalizeStepsForTerminalRun,
   runAgent,
   validateFilterPatch,
   type AgentContextSnapshot,
@@ -15,18 +14,15 @@ import {
   type AgentRun,
   type AgentRunStatus,
   type AgentResponse,
+  type AgentEvent,
   type AgentResultCard,
-  type FilterPatch,
   type ForecastContextInput,
   type ForecastDraftInput,
   type FilterResultCard,
-} from '../agent';
+  type FilterPatch,
+} from '../agent-stable';
 import type { FiltersState } from './filtersTypes';
-import { tidyMains } from './mainSelection';
-import { STABLE } from '../appChannel';
-import { useAgent as useAgentStable } from './AgentContextStable';
-import { materializeAlertRecords, alertAgentContextOf, transitionAlertRecord } from '../dataModel/alertLifecycle';
-import type { AlertAction, AlertRecord } from '../dataModel/alertLifecycle';
+import { materializeAlertRecords, alertAgentContextOf } from '../dataModel/alertLifecycle';
 
 export interface AgentMessage {
   id: string;
@@ -38,16 +34,23 @@ export interface AgentMessage {
   kind?: 'conversation' | 'clarification' | 'system' | 'scenario' | 'proactive' | 'error';
   unread?: boolean;
   contextFingerprint?: string;
-  /** R8：响应 contextFingerprint 与请求不一致时锁定该消息的全部副作用动作
-   *  （卡片 apply/open/query、QuickPill、行级导航），仅只读证据展开豁免。 */
-  actionsLocked?: boolean;
   /** 原始请求，用于错误结果一键重试。 */
   prompt?: string;
   alert?: AgentAlertRecord;
-  /** A request keeps one assistant message through streaming and its terminal state. */
+  /**
+   * R8（二轮返修）：响应携带的 contextFingerprint 与请求不一致时置 true——
+   * 该消息结果保留可读，但所有副作用动作被隔离禁用（AgentPanel 渲染层消费）。
+   */
+  staleMismatch?: boolean;
+  /** Incomplete output stays readable but cannot mutate the dashboard. */
+  actionsLocked?: boolean;
   status?: AgentRunStatus;
+  /** Incremental assistant output is kept separate from the final response. */
   partialText?: string;
   partialCards?: AgentResultCard[];
+  provider?: AgentResponse['provider'];
+  fallbackReason?: string;
+  applyError?: string;
 }
 
 interface AgentContextValue {
@@ -57,56 +60,61 @@ interface AgentContextValue {
   runStatus: AgentRunStatus;
   activeRun: AgentRun | null;
   messages: AgentMessage[];
-  partialText: string;
-  partialCards: AgentResultCard[];
   draft: string;
   context: AgentContextSnapshot;
   appliedFilterIds: ReadonlySet<string>;
+  filterTransactions: ReadonlyMap<string, string>;
+  redoFilterIds: ReadonlySet<string>;
   canUndo: boolean;
   canRedo: boolean;
-  canUndoAlert: boolean;
   contextStale: boolean;
   unreadCount: number;
   setDraft: (value: string) => void;
   openAgent: (mode?: 'dock' | 'drawer' | 'full', prompt?: string | ({ text: string; intent?: AgentIntent; forecastDraft?: ForecastDraftInput } & ForecastContextInput)) => void;
   closeAgent: () => void;
   setMode: (mode: 'dock' | 'drawer' | 'full') => void;
-  send: (text?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, intent?: AgentIntent) => Promise<void>;
-  /** R4：显式「应用范围并重跑」——先落地 patch（与 applyFilter 同一可撤销通道），
-   *  再用合并 patch 后的 context 重跑指定意图，不能退化为纯筛选预览。 */
-  rerunWithPatch: (text: string, intent: AgentIntent, patch: FilterPatch) => void;
+  send: (text?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, intent?: AgentIntent, scope?: FilterPatch) => Promise<void>;
   stop: () => void;
   newConversation: () => void;
-  applyFilter: (card: FilterResultCard) => { ok: boolean; error?: string };
-  applyAlertAction: (alertId: string, action: AlertAction) => { ok: boolean; error?: string };
-  undoAlertAction: () => void;
-  undoFilter: () => void;
-  redoFilter: () => void;
+  applyFilter: (card: FilterResultCard) => { ok: true; transactionId: string } | { ok: false; error: string };
+  undoFilter: (expectedId?: string) => boolean;
+  redoFilter: (expectedId?: string) => boolean;
   markRead: () => void;
 }
 
 const Ctx = createContext<AgentContextValue | null>(null);
 
 const messageId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-const ALERT_RECORDS_STORAGE = 'LPL.alert.records.v1';
+type AgentEventLike = AgentEvent & { delta?: string; card?: Partial<AgentResultCard> };
+type FilterTransaction = { id: string; state: FiltersState };
 
-function readAlertOverrides(): Record<string, Partial<AlertRecord>> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = window.localStorage.getItem(ALERT_RECORDS_STORAGE);
-    if (!raw) return {};
-    const value: unknown = JSON.parse(raw);
-    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, Partial<AlertRecord>> : {};
-  } catch { return {}; }
-}
+/**
+ * R3：终态收敛工具活动卡。流事件创建的工具卡（id = tool-<toolName>）与
+ * 完成态步骤卡（id = tool-<stepId>）id 天然对不上——先用稳定 step id / 工具名
+ * 合并，再把仍处 queued/running 的残留卡标记完成/取消，任何终态都不再显示「运行中」。
+ */
+const mergeCompletedToolCards = (cards: AgentResultCard[], completed: AgentResultCard[]): AgentResultCard[] => {
+  const next = [...cards];
+  for (const toolCard of completed) {
+    if (toolCard.kind !== 'tool_call') continue;
+    const index = next.findIndex((card) => card.id === toolCard.id
+      || (card.kind === 'tool_call' && card.tool === toolCard.tool && card.status !== 'success' && card.status !== 'failed'));
+    if (index >= 0) next[index] = toolCard;
+    else next.push(toolCard);
+  }
+  return next;
+};
 
-function publishAlertOverrides(overrides: Record<string, Partial<AlertRecord>>): void {
-  if (typeof window === 'undefined') return;
-  try { window.localStorage.setItem(ALERT_RECORDS_STORAGE, JSON.stringify(overrides)); } catch { /* local-only fallback */ }
-  window.dispatchEvent(new CustomEvent('pricelens:alert-records-updated'));
-}
+const finalizeLiveToolCards = (cards: AgentResultCard[], outcome: 'success' | 'cancelled' | 'failed'): AgentResultCard[] =>
+  cards.map((card) => {
+    if (card.kind !== 'tool_call' || (card.status !== 'running' && card.status !== 'queued')) return card;
+    if (outcome === 'success') return { ...card, status: 'success' as const, outputSummary: card.outputSummary ?? '已随本次运行完成' };
+    // R3（二轮返修）：普通异常失败收敛为「失败」，只有用户取消才收敛为「已取消」。
+    if (outcome === 'failed') return { ...card, status: 'failed' as const, outputSummary: card.outputSummary ?? '已随本次运行失败', error: card.error ?? '本次运行未完成' };
+    return { ...card, status: 'cancelled' as const, outputSummary: card.outputSummary ?? '已随本次运行终止' };
+  });
 
-function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState, page: string, overrides: Readonly<Record<string, Partial<AlertRecord>>> = {}) {
+function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState, page: string) {
   const cfg = {
     subs: state.alertSubs,
     enabled: state.alertTypes,
@@ -117,7 +125,7 @@ function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState,
     platform: state.platform,
   };
   const fingerprint = agentContextFingerprint(state, page);
-  return materializeAlertRecords(alerts, cfg, overrides, { contextFingerprint: fingerprint }).map((record) => {
+  return materializeAlertRecords(alerts, cfg, {}, { contextFingerprint: fingerprint }).map((record) => {
     const structured = alertAgentContextOf(record);
     return {
       key: record.key,
@@ -138,6 +146,7 @@ function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState,
       gapHighPlatform: record.gapHighPlatform,
       gapLowPrice: record.gapLowPrice,
       gapHighPrice: record.gapHighPrice,
+      ownGapPct: record.ownGapPct,
       isOwn: record.isOwn,
       lifecycle: structured.lifecycle,
       priority: structured.priority,
@@ -147,9 +156,15 @@ function alertRecords(alerts: ReturnType<typeof useAlerts>, state: FiltersState,
       dataVersion: structured.dataVersion,
       contextFingerprint: structured.contextFingerprint,
       evidenceIds: structured.evidenceIds,
-      evidence: record.evidence.map((item) => ({ id: item.id, label: item.label, detail: item.detail, timestamp: item.capturedAt, source: item.kind })),
       evidenceStatus: record.evidenceStatus,
-      countryCode: state.countryCode,
+      evidence: record.evidence.map((item) => ({
+        id: item.id,
+        label: item.label,
+        detail: item.detail,
+        source: item.kind === 'source' ? '平台价格事实' : item.kind === 'product' ? '商品价格事实' : '预警规则快照',
+        href: item.href,
+        timestamp: item.capturedAt,
+      })),
     };
   });
 }
@@ -168,37 +183,29 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   const [runStatus, setRunStatus] = useState<AgentRunStatus>('idle');
   const [activeRun, setActiveRun] = useState<AgentRun | null>(null);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
-  const [partialText, setPartialText] = useState('');
-  const [partialCards, setPartialCards] = useState<AgentResultCard[]>([]);
   const [draft, setDraft] = useState('');
   const [appliedFilterIds, setAppliedFilterIds] = useState<ReadonlySet<string>>(new Set());
-  const [undoSnapshots, setUndoSnapshots] = useState<FiltersState[]>([]);
-  const [redoSnapshots, setRedoSnapshots] = useState<FiltersState[]>([]);
-  const [alertOverrides, setAlertOverrides] = useState<Record<string, Partial<AlertRecord>>>(() => readAlertOverrides());
-  const [alertUndoSnapshots, setAlertUndoSnapshots] = useState<Record<string, Partial<AlertRecord>>[]>([]);
+  const [filterTransactions, setFilterTransactions] = useState<ReadonlyMap<string, string>>(new Map());
+  const [undoSnapshots, setUndoSnapshots] = useState<FilterTransaction[]>([]);
+  const [redoSnapshots, setRedoSnapshots] = useState<FilterTransaction[]>([]);
   const controller = useRef<AbortController | null>(null);
   const contextRef = useRef<AgentContextSnapshot | null>(null);
   // 远端服务即使收到 abort 也可能晚到；序号让旧响应无法覆盖新会话。
   const runSequence = useRef(0);
   const streamSequence = useRef(0);
+  const pendingIntent = useRef<AgentIntent | undefined>(undefined);
+  const pendingForecastDraft = useRef<ForecastDraftInput | undefined>(undefined);
+  const pendingForecastContext = useRef<ForecastContextInput | undefined>(undefined);
   const activeMessageId = useRef<string | null>(null);
   useEffect(() => () => {
     runSequence.current += 1;
     controller.current?.abort();
     controller.current = null;
   }, []);
-  const pendingIntent = useRef<AgentIntent | undefined>(undefined);
-  const pendingForecastDraft = useRef<ForecastDraftInput | undefined>(undefined);
-  const pendingForecastContext = useRef<ForecastContextInput | undefined>(undefined);
   const seenProactiveAlerts = useRef<Set<string>>(new Set());
   const agentClient = useMemo(() => defaultAgentClient(), []);
-  const context = useMemo(() => buildAgentContext(page, state, alertRecords(alerts, state, page, alertOverrides)), [alertOverrides, alerts, page, state]);
+  const context = useMemo(() => buildAgentContext(page, state, alertRecords(alerts, state, page)), [alerts, page, state]);
   useEffect(() => { contextRef.current = context; }, [context]);
-  useEffect(() => {
-    const onExternalAlertUpdate = () => setAlertOverrides(readAlertOverrides());
-    window.addEventListener('pricelens:alert-records-updated', onExternalAlertUpdate);
-    return () => window.removeEventListener('pricelens:alert-records-updated', onExternalAlertUpdate);
-  }, []);
   const appendMessage = useCallback((message: AgentMessage) => {
     // 长时间使用面板时保留最近 100 条，避免对话和证据卡无限增长。
     setMessages((prev) => [...prev, message].slice(-100));
@@ -237,12 +244,17 @@ export function AgentProvider({ children }: { children: ReactNode }) {
   // 允许运行中折叠面板，查询继续在后台执行；launcher 会保留运行指示。
   const closeAgent = useCallback(() => { setOpen(false); }, []);
 
-  // runSend 允许携带合并 patch 后的 context（R4 重跑路径）；常规 send 仍用当前 context。
-  const runSend = useCallback(async (runContext: AgentContextSnapshot, value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent, originContextFingerprint?: string) => {
+  const send = useCallback(async (value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent, scope?: FilterPatch) => {
     const text = (value ?? draft).trim();
-    // React state updates are batched: the ref also rejects a second send in the same tick.
+    // Ref ownership rejects duplicate submissions before React commits running=true.
     if (!text || controller.current) return;
     setDraft('');
+    const scopeValidation = scope ? validateFilterPatch(scope) : { valid: true };
+    const scopedState = scope && scopeValidation.valid ? { ...context.state, ...scope } : context.state;
+    const runContext = scope && scopeValidation.valid
+      ? buildAgentContext(page, scopedState, alertRecords(alerts, scopedState, page))
+      : context;
+    const originContextFingerprint = context.fingerprint;
     const requestContextFingerprint = runContext.fingerprint;
     appendMessage({ id: messageId('user'), role: 'user', text, prompt: text, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, createdAt: new Date().toISOString() });
     const explicitIntent = requestedIntent ?? pendingIntent.current;
@@ -258,7 +270,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const assistantMessageId = messageId('assistant');
     activeMessageId.current = assistantMessageId;
     appendMessage({ id: assistantMessageId, role: 'assistant', text: '', partialText: '', partialCards: [], status: 'parsing', actionsLocked: true, kind: 'conversation', unread: false, contextFingerprint: requestContextFingerprint, prompt: text, createdAt: startedAt });
-    controller.current = run; streamSequence.current = 0; setRunning(true); setOpen(true); setRunStatus('parsing'); setPartialText(''); setPartialCards([]);
+    controller.current = run; streamSequence.current = 0; setRunning(true); setOpen(true); setRunStatus('parsing');
     setActiveRun({ id: agentRunId, requestId: messageId('request'), status: 'parsing', startedAt, updatedAt: startedAt, context: runContext, events: [{ id: messageId('event'), runId: agentRunId, sequence: 1, type: 'run.started', status: 'parsing', timestamp: startedAt, message: '已接收请求', provenance: runContext.provenance }] });
     try {
       setRunStatus('tool_running');
@@ -267,128 +279,105 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       if (runSequence.current !== runId) return;
       setRunStatus('planning');
       setActiveRun((prev) => prev ? { ...prev, status: 'planning', updatedAt: new Date().toISOString(), events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status', status: 'planning', timestamp: new Date().toISOString(), message: '正在编排确定性工具', provenance: runContext.provenance }] } : prev);
-      const raw = await agentClient.run({ text, context: runContext, clientRequestId: messageId('run'), runId: agentRunId, intent: explicitIntent, forecastDraft: explicitForecastDraft, forecastSnapshot: explicitForecastContext?.forecastSnapshot, forecastDataset: explicitForecastContext?.forecastDataset, baseline }, run.signal, (event) => {
+      const response = await agentClient.run({ text, context: runContext, clientRequestId: messageId('run'), runId: agentRunId, intent: explicitIntent, forecastDraft: explicitForecastDraft, forecastSnapshot: explicitForecastContext?.forecastSnapshot, forecastDataset: explicitForecastContext?.forecastDataset, baseline }, run.signal, (event) => {
         if (runSequence.current !== runId) return;
-        if (event.runId !== agentRunId) return;
-        if (event.sequence <= streamSequence.current) return;
+        if (event.runId !== agentRunId || event.sequence <= streamSequence.current) return;
         streamSequence.current = event.sequence;
-        setMessages((prev) => prev.map((message) => {
-          if (message.id !== assistantMessageId) return message;
-          const streamedText = event.type === 'text.delta' ? `${message.partialText ?? ''}${event.delta ?? event.text ?? ''}` : message.partialText;
-          const cardId = event.type === 'card.ready' ? event.card?.id : event.type === 'card.patch' ? event.cardId : undefined;
-          const trusted = cardId ? baseline.cards.find((card) => card.id === cardId) : undefined;
-          const cards = trusted ? [...(message.partialCards ?? []).filter((card) => card.id !== trusted.id), trusted] : message.partialCards;
-          return { ...message, text: streamedText ?? message.text, partialText: streamedText, partialCards: cards, status: event.status === 'completed' ? 'partial_result' : event.status ?? message.status };
-        }));
-        setPartialText((prev) => event.type === 'text.delta' ? `${prev}${event.delta ?? event.text ?? ''}` : prev);
-        setPartialCards((prev) => {
-          if (event.type === 'card.ready' && event.card) {
-            const trusted = baseline.cards.find((card) => card.id === event.card?.id);
-            return trusted ? [...prev.filter((card) => card.id !== trusted.id), trusted] : prev;
-          }
-          if (event.type === 'card.patch' && event.cardId) {
-            const trusted = baseline.cards.find((card) => card.id === event.cardId);
-            return trusted ? [...prev.filter((card) => card.id !== trusted.id), trusted] : prev;
-          }
-          return prev;
-        });
         setActiveRun((prev) => prev ? { ...prev, status: event.status ?? prev.status, updatedAt: event.timestamp, events: [...prev.events, event] } : prev);
+        setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, status: event.status === 'completed' ? 'partial_result' : event.status ?? message.status } : message));
         if (event.status && event.status !== 'completed') setRunStatus(event.status);
+        const candidate = event as AgentEventLike;
+        if (candidate.type === 'text.delta' && typeof candidate.delta === 'string') {
+          setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, partialText: `${message.partialText ?? ''}${candidate.delta}`, text: `${message.partialText ?? ''}${candidate.delta}` } : message));
+        }
+        if (candidate.type === 'card.patch' && candidate.card && typeof candidate.card === 'object') {
+          setMessages((prev) => prev.map((message) => {
+            if (message.id !== assistantMessageId) return message;
+            const cards = [...(message.partialCards ?? [])];
+            const patch = candidate.card as AgentResultCard;
+            const index = cards.findIndex((card) => card.id === patch.id);
+            if (index >= 0) cards[index] = { ...cards[index], ...patch } as AgentResultCard;
+            else cards.push(patch);
+            return { ...message, partialCards: cards };
+          }));
+        }
+        const toolName = candidate.tool ?? (candidate.message?.includes('远端 Agent 服务不可达') ? 'remote.agent' : undefined);
+        if (toolName && (candidate.type === 'step.started' || candidate.type === 'step.updated' || candidate.type === 'run.failed')) {
+          setMessages((prev) => prev.map((message) => {
+            if (message.id !== assistantMessageId) return message;
+            const cards = [...(message.partialCards ?? [])];
+            const id = `tool-${candidate.stepId ?? toolName}`;
+            const status: import('../agent-stable').ToolCallStatus = candidate.message?.includes('远端 Agent 服务不可达') || candidate.type === 'run.failed' || candidate.status === 'failed' ? 'failed' : candidate.status === 'completed' ? 'success' : candidate.type === 'step.updated' ? 'running' : 'queued';
+            const inputSummary = candidate.message?.includes('远端 Agent 服务不可达') ? (message.prompt ?? '价格优势') : (candidate.message ?? message.prompt ?? '当前筛选范围');
+            const toolCard = { kind: 'tool_call' as const, id, tool: toolName, status, inputSummary, outputSummary: candidate.status === 'completed' ? '已返回结构化结果' : undefined, error: status === 'failed' ? candidate.message : undefined };
+            const index = cards.findIndex((card) => card.id === id);
+            if (index >= 0) cards[index] = { ...cards[index], ...toolCard } as AgentResultCard;
+            else cards.push(toolCard);
+            return { ...message, partialCards: cards };
+          }));
+        }
+        if (candidate.provenance?.provider || candidate.message?.includes('回退')) {
+          setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, provider: candidate.provenance?.provider ? { name: candidate.provenance.provider, model: candidate.provenance.model ?? 'unknown' } : message.provider, fallbackReason: candidate.message?.includes('回退') ? candidate.message : message.fallbackReason } : message));
+        }
       });
       if (runSequence.current !== runId) return;
-      const responseFingerprintStale = raw.contextFingerprint !== requestContextFingerprint;
-      // 重跑结果卡时，runContext 是用户明确选择的旧口径；state 更新到该
-      // 口径属于有意动作，不应被自己的写回判成 stale。仍以点击前的页面指纹
-      // 作为起点，若用户在运行期间再次改变页面，结果照常锁定。
-      const requestFingerprintStale = Boolean(contextRef.current && contextRef.current.fingerprint !== (originContextFingerprint ?? requestContextFingerprint));
-      const stale = responseFingerprintStale || requestFingerprintStale || raw.factGuard?.status === 'stale_context';
-      // 运行成功但零结果卡 → empty：不是失败，也不是口径澄清，UI 提供「调整范围」动作。
-      const nextStatus: AgentRunStatus = stale ? 'stale_context' : raw.intent === 'clarify' ? 'clarification_required' : raw.cards.length ? 'completed' : 'empty';
-      // R3 终态收敛：远端流式响应可能残留 running/queued/waiting_for_approval 的
-      // 工具步骤；进入终态后历史消息里的工具卡必须全部呈现终态，不留「运行中」。
-      // R8：响应指纹与请求不一致时 factGuard 强制标 stale_context，结果可查看但动作锁定。
-      const response: AgentResponse = {
-        ...raw,
-        steps: finalizeStepsForTerminalRun(raw.steps, nextStatus),
-        ...(responseFingerprintStale ? { factGuard: { status: 'stale_context' as const, message: raw.factGuard?.message ?? '响应的筛选上下文与请求不一致，结果仅供参考，动作已锁定。' } } : {}),
-      };
+      const stale = contextRef.current ? contextRef.current.fingerprint !== (scope && scopeValidation.valid ? originContextFingerprint : requestContextFingerprint) : false;
+      const responseFingerprintMismatch = response.contextFingerprint !== requestContextFingerprint;
+      const nextStatus: AgentRunStatus = stale || responseFingerprintMismatch ? 'stale_context' : response.intent === 'clarify' ? 'clarification_required' : 'completed';
       setRunStatus(nextStatus);
       setActiveRun((prev) => {
         if (!prev) return prev;
-        const suppressCompletion = stale || response.intent === 'clarify';
-        // R8：指纹不一致 / 需澄清的运行绝不以 run.completed 收尾——远端流里先到的
-        // run.completed 事件一并剔除，时间线只保留 run.status(stale_context) 收尾。
-        const baseEvents = suppressCompletion ? prev.events.filter((event) => event.type !== 'run.completed') : prev.events;
-        const completionEvent = suppressCompletion ? null : { id: messageId('event'), runId: prev.id, sequence: baseEvents.length + 1, type: 'run.completed' as const, status: nextStatus, timestamp: new Date().toISOString(), message: '运行完成', provenance: response.provenance ?? runContext.provenance };
-        const events = completionEvent ? (baseEvents.some((event) => event.type === 'run.completed') ? baseEvents : [...baseEvents, completionEvent]) : [...baseEvents, { id: messageId('event'), runId: prev.id, sequence: baseEvents.length + 1, type: 'run.status' as const, status: nextStatus, timestamp: new Date().toISOString(), message: stale ? '筛选上下文已变化，结果可查看但需要重新确认口径' : '需要补充查询口径', provenance: response.provenance ?? runContext.provenance }];
+        // R8（二轮返修）：响应指纹与请求不一致 = 不可采信的完成——不派发正常
+        // run.completed，只落 run.status 说明结果动作已锁定；stale 与 clarify
+        // 维持原有不派发完成事件的语义。
+        const completionEvent = stale || responseFingerprintMismatch || response.intent === 'clarify' ? null : { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.completed' as const, status: nextStatus, timestamp: new Date().toISOString(), message: '运行完成', provenance: response.provenance ?? runContext.provenance };
+        const events = completionEvent && prev.events.some((event) => event.type === 'run.completed') ? prev.events : completionEvent ? [...prev.events, completionEvent] : [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: 'run.status' as const, status: nextStatus, timestamp: new Date().toISOString(), message: stale ? '筛选上下文已变化，结果可查看但需要重新确认口径' : responseFingerprintMismatch ? '响应口径与请求上下文不一致，结果动作已锁定' : '需要补充查询口径', provenance: response.provenance ?? runContext.provenance }];
         return { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), response, events };
       });
       const messageKind: AgentMessage['kind'] = response.intent === 'clarify' ? 'clarification' : /量价预测|预测|情景/.test(text) ? 'scenario' : 'conversation';
-      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: response.summary, response, partialText: undefined, partialCards: undefined, status: nextStatus, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, actionsLocked: responseFingerprintStale } : message));
+      setMessages((prev) => prev.map((message) => {
+        if (message.id !== assistantMessageId) return message;
+        const completedTools: AgentResultCard[] = response.steps.map((step) => ({ kind: 'tool_call' as const, id: `tool-${step.id}`, tool: step.tool, status: step.status === 'failed' ? 'failed' as const : 'success' as const, inputSummary: step.label, outputSummary: step.detail, durationMs: step.durationMs, error: step.status === 'failed' ? step.detail : undefined }));
+        // R3：响应路径到达即终态——先按稳定 id/工具名合并完成态，再收敛残留
+        // running/queued 工具卡，消息里不允许再出现「运行中」的工具活动卡。
+        const partialCards = finalizeLiveToolCards(mergeCompletedToolCards(message.partialCards ?? [], completedTools), 'success');
+        return { ...message, text: response.summary, response, partialText: undefined, partialCards, status: nextStatus, actionsLocked: responseFingerprintMismatch, provider: response.provider, fallbackReason: response.fallbackReason ?? message.fallbackReason, kind: messageKind, unread: true, contextFingerprint: requestContextFingerprint, staleMismatch: responseFingerprintMismatch || undefined };
+      }));
     } catch (error) {
       if (runSequence.current !== runId) return;
-      // R3（二审）：只有用户主动 stop（controller.abort / runAgent 对 abort 的
-      // 取消）才落 cancelled；普通异常一律 failed——上一轮 stop 残留的标记不再
-      // 参与判定，避免把服务故障误标成「已取消」。取消异常在浏览器里是
-      // DOMException（不是 Error 子类），必须按 error.name 判定，不能用 instanceof。
-      const cancelled = typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
+      const aborted = typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
       const rawMessage = typeof error === 'object' && error !== null ? (error as { message?: unknown }).message : undefined;
       const messageText = typeof rawMessage === 'string' && rawMessage ? rawMessage : 'Agent 服务暂时不可用。';
-      const nextStatus: AgentRunStatus = cancelled ? 'cancelled' : 'failed';
+      // R3（二轮返修）：只有取消异常才是 cancelled（stop 已同步更新并隔离旧 run）；
+      // 普通异常失败收敛为 failed，残留 running 工具卡标「失败」而非「已取消」。
+      const userCancelled = aborted;
+      const nextStatus: AgentRunStatus = userCancelled ? 'cancelled' : 'failed';
       setRunStatus(nextStatus);
-      // Interrupted output remains readable on its original message, without a completed
-      // response or enabled dashboard mutations.
-      setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: cancelled ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: runContext.provenance }] } : prev);
-      const notice = cancelled ? '已取消这次查询。' : `这次运行没有完成：${messageText}`;
-      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: message.partialText ? `${message.partialText}\n\n${notice}` : notice, partialText: undefined, status: nextStatus, actionsLocked: true, kind: cancelled ? 'system' : 'error', unread: true } : message));
+      setActiveRun((prev) => prev ? { ...prev, status: nextStatus, updatedAt: new Date().toISOString(), completedAt: new Date().toISOString(), error: { message: messageText }, events: [...prev.events, { id: messageId('event'), runId: prev.id, sequence: prev.events.length + 1, type: userCancelled ? 'run.cancelled' : 'run.failed', status: nextStatus, timestamp: new Date().toISOString(), message: messageText, provenance: runContext.provenance }] } : prev);
+      const notice = userCancelled ? '已取消这次查询。' : `这次运行没有完成：${messageText}`;
+      setMessages((prev) => prev.map((message) => message.id === assistantMessageId ? { ...message, text: message.partialText ? `${message.partialText}\n\n${notice}` : notice, partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], userCancelled ? 'cancelled' : 'failed'), status: nextStatus, actionsLocked: true, prompt: text, kind: userCancelled ? 'system' : 'error', unread: true } : message));
     } finally {
-      // Only the owner may clear the compatibility stream buffers; an obsolete request
-      // can settle after a replacement request has already started streaming.
-      if (runSequence.current === runId) {
-        setPartialText('');
-        setPartialCards([]);
-        controller.current = null;
-        activeMessageId.current = null;
-        setRunning(false);
-      }
+      if (runSequence.current === runId) { controller.current = null; activeMessageId.current = null; setRunning(false); }
     }
-  }, [agentClient, appendMessage, draft, running]);
-
-  const send = useCallback((value?: string, forecastDraft?: ForecastDraftInput, forecastContext?: ForecastContextInput, requestedIntent?: AgentIntent) => runSend(context, value, forecastDraft, forecastContext, requestedIntent), [context, runSend]);
-
-  /** R4：显式「应用范围并重跑」入口。空结果卡的「调整范围 · 最近 12 周」等动作
-   *  必须真正落地新范围并按指定意图重跑（如 price_advantage），不能被误路由成
-   *  只生成预览的纯 filter；重跑使用合并 patch 后的 context，既不读旧 state，
-   *  也不会因 fingerprint 变化把新结果误标为过期口径。 */
-  const rerunWithPatch = useCallback((text: string, intent: AgentIntent, patch: FilterPatch) => {
-    if (controller.current) return;
-    const validation = validateFilterPatch(patch);
-    if (!validation.valid) return;
-    const nextPatch = patch.mains ? { ...patch, mains: tidyMains(patch.mains) } : patch;
-    const mergedState: FiltersState = { ...state, ...nextPatch };
-    const mergedContext = buildAgentContext(page, mergedState, alertRecords(alerts, mergedState, page, alertOverrides));
-    // 与 applyFilter 同一写入通道：留撤销快照，用户可一键回退。
-    setUndoSnapshots((prev) => [...prev, state].slice(-5));
-    setRedoSnapshots([]);
-    actions.set(nextPatch);
-    void runSend(mergedContext, text, undefined, undefined, intent, context.fingerprint);
-  }, [actions, alertOverrides, alerts, context.fingerprint, page, runSend, running, state]);
+  }, [agentClient, alerts, appendMessage, context, draft, page, running]);
 
   const stop = useCallback(() => {
     if (!controller.current) return;
     runSequence.current += 1;
     controller.current?.abort();
     controller.current = null;
+    // 取消后在途占位消息落成显式「已取消」状态（保留 prompt 供一键重试）；
+    // runSequence 已自增，catch 分支不会再覆盖这条消息。
     const cancelledMessageId = activeMessageId.current;
-    setMessages((prev) => prev.map((message) => message.id === cancelledMessageId && !message.response
-      ? { ...message, text: message.partialText ? `${message.partialText}\n\n已取消这次查询。` : '已取消这次查询。', partialText: undefined, status: 'cancelled', actionsLocked: true, kind: 'system', unread: true }
-      : message));
-    activeMessageId.current = null;
-    setPartialText('');
-    setPartialCards([]);
+    if (cancelledMessageId) {
+      setMessages((prev) => prev.map((message) => message.id === cancelledMessageId && !message.response
+        ? { ...message, text: message.partialText ? `${message.partialText}\n\n已取消这次查询。` : '已取消这次查询。', partialText: undefined, partialCards: finalizeLiveToolCards(message.partialCards ?? [], 'cancelled'), status: 'cancelled', actionsLocked: true, kind: 'system', unread: true }
+        : message));
+    }
     // 立刻允许下一次提问；被取消的旧响应由 runSequence 丢弃。
     setRunning(false);
     setRunStatus('cancelled');
+    activeMessageId.current = null;
     setActiveRun((prev) => prev ? {
       ...prev,
       status: 'cancelled',
@@ -406,62 +395,38 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       }],
     } : prev);
   }, []);
-  const newConversation = useCallback(() => { if (!controller.current) { setMessages([]); setDraft(''); setPartialText(''); setPartialCards([]); setUndoSnapshots([]); setRedoSnapshots([]); setAlertUndoSnapshots([]); setAppliedFilterIds(new Set()); setActiveRun(null); setRunStatus('idle'); } }, []);
+  const newConversation = useCallback(() => { if (!controller.current) { setMessages([]); setDraft(''); setUndoSnapshots([]); setRedoSnapshots([]); setAppliedFilterIds(new Set()); setFilterTransactions(new Map()); setActiveRun(null); setRunStatus('idle'); } }, []);
 
-  const applyFilter = useCallback((card: FilterResultCard) => {
+  const applyFilter = useCallback((card: FilterResultCard): { ok: true; transactionId: string } | { ok: false; error: string } => {
     const validation = validateFilterPatch(card.patch);
     if (!validation.valid) return { ok: false, error: validation.errors.join('；') };
-    if (card.contextFingerprint && card.contextFingerprint !== context.fingerprint) return { ok: false, error: '当前筛选口径已变化，请重新生成预览。' };
-    setUndoSnapshots((prev) => [...prev, state].slice(-5));
+    const transactionId = messageId('filter');
+    setUndoSnapshots((prev) => [...prev, { id: transactionId, state }].slice(-5));
     setRedoSnapshots([]);
-    actions.set(card.patch.mains ? { ...card.patch, mains: tidyMains(card.patch.mains) } : card.patch);
-    setAppliedFilterIds((prev) => new Set([...prev, card.id]));
-    return { ok: true };
-  }, [actions, context.fingerprint, state]);
+    setFilterTransactions((prev) => new Map(prev).set(card.id, transactionId));
+    actions.set(card.patch);
+    setAppliedFilterIds((prev) => new Set([...prev, transactionId]));
+    return { ok: true, transactionId };
+  }, [actions, state]);
 
-  const applyAlertAction = useCallback((alertId: string, action: AlertAction) => {
-    const cfg = {
-      subs: state.alertSubs,
-      enabled: state.alertTypes,
-      thresholds: state.alertThresholds,
-      products: state.alertProducts,
-      currency: state.currency,
-      scope: { countryCode: state.countryCode, industry: state.industry },
-      platform: state.platform,
-    };
-    const record = materializeAlertRecords(alerts, cfg, alertOverrides, { contextFingerprint: context.fingerprint }).find((item) => item.alertId === alertId);
-    if (!record) return { ok: false, error: '当前预警已不在此口径，请重新读取。' };
-    const next = transitionAlertRecord(record, action);
-    if (!next) return { ok: false, error: '当前预警状态已变化，请重新读取后再操作。' };
-    const merged = { ...alertOverrides, [alertId]: next };
-    setAlertUndoSnapshots((prev) => [...prev, alertOverrides].slice(-5));
-    setAlertOverrides(merged);
-    publishAlertOverrides(merged);
-    return { ok: true };
-  }, [alertOverrides, alerts, context.fingerprint, state]);
-
-  const undoAlertAction = useCallback(() => {
-    const snapshot = alertUndoSnapshots[alertUndoSnapshots.length - 1];
-    if (!snapshot) return;
-    setAlertOverrides(snapshot);
-    setAlertUndoSnapshots(alertUndoSnapshots.slice(0, -1));
-    publishAlertOverrides(snapshot);
-  }, [alertUndoSnapshots]);
-
-  const undoFilter = useCallback(() => {
+  const undoFilter = useCallback((expectedId?: string): boolean => {
     const snapshot = undoSnapshots[undoSnapshots.length - 1];
-    if (!snapshot) return;
-    actions.set(snapshot);
-    setUndoSnapshots(undoSnapshots.slice(0, -1));
-    setRedoSnapshots((prev) => [...prev, state].slice(-5));
+    if (!snapshot || (expectedId && snapshot.id !== expectedId)) return false;
+    actions.set(snapshot.state);
+    setUndoSnapshots((prev) => prev.slice(0, -1));
+    setRedoSnapshots((prev) => [...prev, { id: snapshot.id, state }].slice(-5));
+    setAppliedFilterIds((prev) => { const next = new Set(prev); next.delete(snapshot.id); return next; });
+    return true;
   }, [actions, state, undoSnapshots]);
 
-  const redoFilter = useCallback(() => {
+  const redoFilter = useCallback((expectedId?: string): boolean => {
     const snapshot = redoSnapshots[redoSnapshots.length - 1];
-    if (!snapshot) return;
-    setUndoSnapshots((prev) => [...prev, state].slice(-5));
-    actions.set(snapshot);
-    setRedoSnapshots(redoSnapshots.slice(0, -1));
+    if (!snapshot || (expectedId && snapshot.id !== expectedId)) return false;
+    actions.set(snapshot.state);
+    setRedoSnapshots((prev) => prev.slice(0, -1));
+    setUndoSnapshots((prev) => [...prev, { id: snapshot.id, state }].slice(-5));
+    setAppliedFilterIds((prev) => new Set([...prev, snapshot.id]));
+    return true;
   }, [actions, redoSnapshots, state]);
 
   const markRead = useCallback(() => {
@@ -477,40 +442,19 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, running, openAgent]);
 
+  const redoFilterIds = useMemo(() => new Set(redoSnapshots.map((snapshot) => snapshot.id)), [redoSnapshots]);
   const value: AgentContextValue = {
-    open, mode, running, runStatus, activeRun, messages, partialText, partialCards, draft, context, appliedFilterIds, canUndo: undoSnapshots.length > 0, canRedo: redoSnapshots.length > 0, canUndoAlert: alertUndoSnapshots.length > 0,
+    open, mode, running, runStatus, activeRun, messages, draft, context, appliedFilterIds, filterTransactions, redoFilterIds, canUndo: undoSnapshots.length > 0, canRedo: redoSnapshots.length > 0,
     contextStale: messages.some((message) => Boolean(message.contextFingerprint && message.contextFingerprint !== context.fingerprint)),
     unreadCount: messages.filter((message) => message.unread).length,
-    setDraft, openAgent, closeAgent, setMode, send, rerunWithPatch, stop, newConversation, applyFilter, applyAlertAction, undoAlertAction, undoFilter, redoFilter, markRead,
+    setDraft, openAgent, closeAgent, setMode, send, stop, newConversation, applyFilter, undoFilter, redoFilter, markRead,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
-/**
- * 门面公共视图（2026-11-07 整合）：两线 context 值的结构化并集——公共字段取
- * 迭代线形状（本文件 AgentContextValue），迭代线多出的流式呈现/预警撤销/重跑
- * 字段标可选（稳定栈 useAgent 不含这些键，而消费它们的只有迭代 AgentPanel，
- * 稳定构建不渲染）；两线同名方法的参数类型来自各自的 contracts（结构相近但
- * 不是同一类型），门面按「参数取交集语义、返回取并集」以本文件形状声明，
- * TS 结构化兼容各自实现。
- */
-export type AgentContextFacade = AgentContextValue & {
-  partialText?: AgentContextValue['partialText'];
-  partialCards?: AgentContextValue['partialCards'];
-  canUndoAlert?: AgentContextValue['canUndoAlert'];
-  applyAlertAction?: AgentContextValue['applyAlertAction'];
-  undoAlertAction?: AgentContextValue['undoAlertAction'];
-  rerunWithPatch?: AgentContextValue['rerunWithPatch'];
-};
-
-export function useAgent(): AgentContextFacade {
-  // 2026-11-07 整合：稳定构建下 Agent 栈 = 稳定线实现（AgentProviderStable +
-  // CopilotStable），页面消费者（ForecastPage / AlertsPage / IntelligenceCenter /
-  // 稳定栈自身）统一经本门面取值——转发到稳定栈的 useAgent（同一 context），
-  // 页面代码不分通道；迭代构建走本文件自己的 Provider/context。
-  if (STABLE) return useAgentStable() as unknown as AgentContextFacade;
+export function useAgent(): AgentContextValue {
   const value = useContext(Ctx);
   if (!value) throw new Error('useAgent must be used inside AgentProvider');
-  return value as AgentContextFacade;
+  return value;
 }
 
 export type { AgentResultCard };

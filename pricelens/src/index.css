@@ -702,12 +702,6 @@ button.lpl-map-card:hover {
   .lpl-agent-panel { top: 0 !important; width: 100vw !important; border-left: none !important; }
 }
 
-/* 新增情报与预测页的两栏内容在窄屏自动改为单列。 */
-@media (max-width: 760px) {
-  [data-lpl-forecast-grid] { grid-template-columns: 1fr !important; }
-  [data-lpl-intelligence-grid] { grid-template-columns: 1fr !important; }
-}
-
 /* ============================================================
    量价走势面板（视觉 demo：pricelens-volume-spread-layout-demo）。
    面板自身是容器查询的容器：同一页面里主产品视图宽、组内对比窄，

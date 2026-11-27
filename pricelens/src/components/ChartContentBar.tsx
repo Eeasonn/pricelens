@@ -1,23 +1,16 @@
-// 图表卡片上沿的导航行：价格走势 / 量价走势 / 大盘走势 / 量价预测 四个平级页签。
+// 图表卡片上沿的导航行：价格走势 / 量价走势 两个平级页签。
 // 第一百八十九轮定版（Eason，收敛此前双层页签讨论）：价格走势默认承载多产品
 // 对比，常驻「多产品对比」子页签退役；多平台对比降为图表工具行右端的轻量文字
 // 入口（ChartToolbar.compareEntry），进入后原位变「← 返回多产品对比」——主导航
 // 任意时刻只有一处选中（墨色 + 600 字重 + 墨色下划线），不再有父子双高亮。
 // 点「价格走势」永远落回多产品对比；在多平台对比中主导航仍只有「价格走势」选中。
-// 量价预测沿用独立页面承载，保留在图表导航中作为快捷入口。
-// 2026-11-03：新增「大盘走势」（GFK 看板复刻三图，页 id marketboard），排在
-// 量价走势之后、量价预测之前。
-// 2026-11-05（稳定版 / 迭代版双通道，Eason）：「大盘走势」「量价预测」不在
-// 稳定版（生产构建）上架——页签不渲染（DOM 中不存在，非视觉隐藏）；其余页签
-// 语义、顺序与 aria-current 规则不变。迭代版（本地 dev）照常显示。
-import { hiddenInStable } from '../appChannel';
+// 2026-11-27（演进版退场）：「大盘走势」「量价预测」两页下线，对应页签随之删除
+// （稳定版此前即不渲染这两枚页签，DOM 不变）。
 import { usePage } from '../state/PageContext';
 import { useChartContent } from '../state/chartContent';
 import { color, space } from '../theme/tokens';
 
-/** 导航页签：文字 + 墨色下划线表达当前项（aria-current，不依赖颜色单一表达）。
- *  2026-11-04（WP6 集成）：页头管理页签组的「量价预测」已退役（PageHeader），
- *  预测项恢复常态 aria-current="page"——同一页面只有这一处预测 current。 */
+/** 导航页签：文字 + 墨色下划线表达当前项（aria-current，不依赖颜色单一表达）。 */
 function Tab({
   active,
   disabled,
@@ -65,8 +58,6 @@ export default function ChartContentBar() {
   const { setPriceSubview } = useChartContent();
   const priceOn = page === 'dashboard';
   const volumeOn = page === 'volume';
-  const marketOn = page === 'marketboard';
-  const forecastOn = page === 'forecast';
 
   const openPrice = (): void => {
     // 恒落回多产品对比（189 定版状态规则）：从量价走势返回、在多平台对比中点
@@ -76,14 +67,6 @@ export default function ChartContentBar() {
   };
   const openVolume = (): void => {
     if (page !== 'volume') go('volume');
-  };
-
-  const openMarket = (): void => {
-    if (page !== 'marketboard') go('marketboard');
-  };
-
-  const openForecast = (): void => {
-    if (page !== 'forecast') go('forecast');
   };
 
   return (
@@ -99,12 +82,6 @@ export default function ChartContentBar() {
     >
       <Tab active={priceOn} onClick={openPrice}>价格走势</Tab>
       <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
-      {/* 稳定版不上架：两页签不渲染（入口不存在），页 id 直达已在 PageContext
-          统一落回 dashboard；迭代版保持原顺序与 aria-current 规则 */}
-      {!hiddenInStable('marketboard') && <Tab active={marketOn} onClick={openMarket}>大盘走势</Tab>}
-      {/* 2026-11-04（WP6）：预测页头页签退役，本处恢复 aria-current="page"，
-          全页唯一预测 current（与 PageHeader 页签组不再并存） */}
-      {!hiddenInStable('forecast') && <Tab active={forecastOn} onClick={openForecast}>量价预测</Tab>}
     </nav>
   );
 }

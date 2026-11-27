@@ -1,7 +1,7 @@
 import type { FiltersState } from '../state/filtersTypes';
 import type { AlertEvidenceStatus, AlertLifecycle, AlertPriority } from '../dataModel/alertLifecycle';
-import type { ForecastDataset } from '../pages/forecast/forecastModel';
-import type { ForecastSnapshot } from '../pages/forecast/forecastSnapshot';
+import type { ForecastDataset } from './forecast/forecastModel';
+import type { ForecastSnapshot } from './forecast/forecastSnapshot';
 
 export type AgentIntent = 'filter' | 'query' | 'forecast_explain' | 'alert' | 'clarify';
 /** Local What-if inputs that must travel with a forecast explanation request. */

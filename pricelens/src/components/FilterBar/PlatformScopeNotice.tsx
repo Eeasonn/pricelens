@@ -8,17 +8,17 @@
 // warning 语义（用户输入被调整，需要关注；文字本身承载全部事实，颜色只作
 // 提示）；口径再变化（deliberate 换平台/换国/重置）后 notice 失效即整条
 // 消失，不残留陈旧说明。挂载点：共享 FilterBar（价格走势/量价）与总览页
-// 筛选卡两处（有平台筛选入口的页面）；迭代版恒不渲染（无此归一）。
+// 筛选卡两处（有平台筛选入口的页面）。2026-11-27 演进版退场：原「迭代版恒不
+// 渲染」的通道分支删除，只按 state 上是否有仍成立的说明决定渲染。
 // ============================================================
 import { useFilters } from '../../state/FiltersContext';
 import { platformQueryEquals } from '../../dataModel/platformScope';
-import { STABLE } from '../../appChannel';
 import { color, fontSize, radius, space } from '../../theme/tokens';
 
 export default function PlatformScopeNotice() {
   const { state } = useFilters();
   const notice = state.platformScopeNotice ?? null;
-  if (!STABLE || !notice) return null;
+  if (!notice) return null;
   // 适用条件与 state 同步校验：换国/口径再变化后说明不再描述当前选择
   if (notice.countryCode !== state.countryCode) return null;
   if (!platformQueryEquals(notice.platform, state.platform)) return null;

@@ -14,7 +14,6 @@
 // - 权限：导出 GTM/查阅者皆可（只读备份）；导入仅 GTM——applyImportPayload
 //   校验 canEditConfig()，与 UI 门控构成纵深防御。
 // ============================================================
-import { APP_CHANNEL, type AppChannel } from '../appChannel';
 import { canEditConfig } from '../access/role';
 import { ANOMALY_CUSTOM_MAX, ANOMALY_CUSTOM_MIN, type AnomalyMark } from '../dataModel/anomaly';
 import type { DimBenchmark, DimPromo } from '../dataModel/types';
@@ -24,6 +23,11 @@ import type { OfferAliasRow } from '../dataModel/offerIngest';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 
 export const CONFIG_SNAPSHOT_SCHEMA_VERSION = 1;
+
+/** 配置快照里的「来源通道」字段（schemaVersion 1 的格式字段，不能删——否则老配置文件
+ *  导入会被拒）。2026-11-27 演进版退场后只对稳定版持续迭代：导出恒为 'stable'；
+ *  导入校验仍接受 'iterate'，保证退场前导出的老配置文件可继续导入。 */
+type AppChannel = 'stable' | 'iterate';
 
 export interface MarketDataRuleConfig {
   countryCode: string;
@@ -140,7 +144,7 @@ export function exportConfigSnapshot(): ConfigSnapshotV1 {
   return {
     schemaVersion: CONFIG_SNAPSHOT_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
-    appChannel: APP_CHANNEL,
+    appChannel: 'stable',
     keys: {
       benchmark: (readRaw(LPL.cfgBenchmark) as DimBenchmark[] | null) ?? null,
       prevGen: (readRaw(LPL.cfgPrevGen) as Record<string, string | null> | null) ?? null,

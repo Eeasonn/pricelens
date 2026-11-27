@@ -1,6 +1,6 @@
 // ============================================================
-// 第196轮复检整改3（2026-11-05，Eason）：稳定版价格走势页全局平台化。
-// vi.mock 把 appChannel 钉在 stable（vitest 本体 = dev 形态 = iterate）——
+// 第196轮复检整改3（2026-11-05，Eason）：价格走势页全局平台化（2026-11-27 演进版
+// 退场后是唯一口径；原 iterate 回归文件 iterateGlobalPlatformRegression 随通道删除）——
 // ①每线渠道选择 chip（取价平台小药丸弹层）不渲染；
 // ②店铺同步按钮不渲染；每线渠道小药丸（平台名）不渲染；
 // ③「多平台对比」入口渲染（2026-11-12 Eason：功能进稳定版；第196轮曾隐藏）；
@@ -9,21 +9,12 @@
 // ⑤URL：shop=/seller= 在 stable 忽略（readUrlOverrides 不再吃进 state.platform），
 //   plat= 继续驱动；platformLevelForChannel 把店铺级降级为平台级
 //   （platformUrlParamsOf 产出的 shop=/seller= 为空 → 写侧剥键）。
-// iterate 回归另见 iterateGlobalPlatformRegression.test.tsx（无 mock，锁现状）。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { MainProduct, PlatformSelection } from '../../../state/filtersTypes';
 import PriceTrend from '../index';
-
-vi.mock('../../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-}));
 
 // ---- 受控桩（hoisted：mock 工厂与用例共享） ----
 const harness = vi.hoisted(() => ({
@@ -141,12 +132,12 @@ describe('稳定版价格页：每线渠道/店铺 UI 不渲染', () => {
     expect(screen.queryByLabelText(/点击筛选平台-店铺/)).toBeNull();
   });
 
-  it('店铺同步按钮不存在（iterate 版有，见回归测试）', async () => {
+  it('店铺同步按钮不存在（每线店铺同步仅迭代版有，已随 2026-11-27 演进版退场删除）', async () => {
     render(<PriceTrend />);
     expect(screen.queryByRole('button', { name: /^(取消)?店铺同步$/ })).toBeNull();
   });
 
-  it('「多平台对比」入口渲染（2026-11-12 Eason：功能进稳定版；iterate 同款见回归测试）', async () => {
+  it('「多平台对比」入口渲染（2026-11-12 Eason：功能进稳定版）', async () => {
     render(<PriceTrend />);
     expect(screen.getByText('多平台对比 →')).toBeTruthy();
   });
@@ -160,7 +151,7 @@ describe('稳定版价格页：每线渠道/店铺 UI 不渲染', () => {
 describe('稳定版价格页：顶排药丸带整体移除（2026-11-07 Eason 采纳 A）', () => {
   it('顶部产品药丸带不渲染（品牌由名称带悬停展开 + 悬停卡前缀承接）', () => {
     render(<PriceTrend />);
-    // 药丸带唯一交互痕迹 = 「点击隐藏该产品」药丸按钮；iterate 版必有
+    // 药丸带唯一交互痕迹 = 「点击隐藏该产品」药丸按钮（迭代版才有，已随通道删除）
     expect(screen.queryByTitle('点击隐藏该产品')).toBeNull();
   });
 

@@ -1,13 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-// 2026-11-07 整合：稳定栈只在稳定构建启用，其测试按出货通道（STABLE）运行
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
 import { AGENT_REMOTE_BASE_URL_KEY, describeAgentEngine, resolveAgentEngine } from '../remoteConfig';
 
 const env = (value?: string): Record<string, string | undefined> => ({ VITE_AGENT_API_BASE_URL: value });

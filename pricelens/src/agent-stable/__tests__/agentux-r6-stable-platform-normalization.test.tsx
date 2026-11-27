@@ -11,7 +11,7 @@
 // 必须是严格 3P 的 395（口径即用户所选店铺，不做平台内最低价替换）。
 // ============================================================
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { defaultFilters, FiltersProvider, useFilters } from '../../state/FiltersContext';
@@ -22,13 +22,6 @@ import { lawfulPlatformScope, normalizePlatformScope } from '../../dataModel/pla
 import type { PlatformQuery } from '../../dataModel/types';
 import { buildAgentContext, runAgent } from '../core';
 import type { AgentAlertRecord, AgentCardAction, ChartResultCard, PriceAdvantageResultCard, TableResultCard } from '../contracts';
-
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-}));
 
 // 本仓库 vitest jsdom 不带 localStorage：装内存桩（同 FiltersContext.platform-scope 手法）
 beforeEach(() => {

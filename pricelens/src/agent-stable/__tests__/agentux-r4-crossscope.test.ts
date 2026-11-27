@@ -9,16 +9,7 @@
 // 契约：所有跨口径结果卡的 open 动作携带完整计算口径 filterPatch（国家、
 // mains、平台、粒度、范围、币种、价格类型、agg），点击精确落回计算口径。
 // ============================================================
-import { vi, describe, expect, it } from 'vitest';
-// 2026-11-07 整合：稳定栈只在稳定构建启用，其测试按出货通道（STABLE）运行
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
+import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
 import type { FiltersState, ProductSelection } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';

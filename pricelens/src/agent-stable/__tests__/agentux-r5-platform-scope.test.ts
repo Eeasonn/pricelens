@@ -15,16 +15,7 @@
 // 稳定版（生产构建）趋势查询每组 platform = 全局平台（PriceTrend 第196轮
 // 整改3 口径）的镜像测试另见 agentux-r5-stable-platform-mirror.test.ts。
 // ============================================================
-import { vi, describe, expect, it } from 'vitest';
-// 2026-11-07 整合：稳定栈只在稳定构建启用，其测试按出货通道（STABLE）运行
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
+import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
 import type { FiltersState, ProductSelection } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';
@@ -100,12 +91,10 @@ describe('t428u R5-M1 · lawfulPlatformScope 共享政策（纯函数）', () =>
     expect(scope.note).toBeNull();
   });
 
-  // R6-M1：normalizePlatformScope 在迭代版（本仓库 vitest 默认 DEV → iterate）
-  // 必须与 lawfulPlatformScope 完全同行为——合法店铺级选择原样保留（不展开、
-  // 无能力说明）。稳定版的透明平台级展开见
-  // agentux-r6-stable-platform-normalization.test.ts（vi.mock appChannel）。
-  // 2026-11-07 整合：本条断言迭代模式行为（店铺级原样保留）——稳定栈只在稳定构建出货，迭代行为由迭代栈测试承担
-  it.skip('iterate：normalizePlatformScope 恒等于 lawfulPlatformScope（店铺级原样保留）', () => {
+  // R6-M1：合法店铺级选择原样保留（2026-11-14 店铺级恢复后的单一口径）。
+  // 透明平台级展开的说明产出见 agentux-r6-stable-platform-normalization.test.ts。
+  // 2026-11-27 演进版退场：本条原按「迭代模式行为」跳过，单一实现下成立，恢复执行
+  it('normalizePlatformScope 对合法店铺级恒等于 lawfulPlatformScope（店铺级原样保留）', () => {
     const shop = { platforms: [], shopIds: ['RU:ozon:3P'], seller: null };
     const scoped = normalizePlatformScope('RU', shop);
     expect(scoped.platform).toBe(shop);
@@ -192,8 +181,9 @@ describe('t428u R5-M1 · 合法口径绝不放大清空（同国 OZON / 店铺�
     expect(card.boundaries?.every((line) => !line.includes('没有渠道'))).toBe(true);
   });
 
-  // 2026-11-07 整合：本条断言迭代模式行为（店铺级原样保留）——稳定栈只在稳定构建出货，迭代行为由迭代栈测试承担
-  it.skip('合法店铺级选择（RU:ozon:3P）：计算与补丁都保留 shopIds', async () => {
+  // 2026-11-27 演进版退场：本条原按「迭代模式行为（店铺级原样保留）」跳过，
+  // 2026-11-14 店铺级恢复后单一实现下成立，恢复执行
+  it('合法店铺级选择（RU:ozon:3P）：计算与补丁都保留 shopIds', async () => {
     const state: FiltersState = {
       ...defaultFilters,
       countryCode: 'RU',

@@ -251,13 +251,13 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     expect(pricesUrl).toEqual(pricesUi);
   });
 
-  it('价格走势页不渲染全局平台筛选器（主线收口门控：该页各线自带平台口径，全局 Select 不消费 = 死控件）', () => {
+  it('价格走势页同样渲染全局平台筛选器（2026-11-27 演进版退场：各页恒渲染，原「仅量价页渲染」的通道门控删除）', () => {
     window.history.replaceState(null, '', '/?p=dashboard');
     render(<App />);
     const bar = document.querySelector('.lpl-fb');
     expect(bar).not.toBeNull();
-    expect(document.querySelector('[data-testid="channel-scope-trigger"]')).toBeNull();
-    // 量价走势页仍渲染（对照，防门控误杀）
+    expect(document.querySelector('[data-testid="channel-scope-trigger"]')).not.toBeNull();
+    // 量价走势页仍渲染（对照）
     cleanup();
     window.history.replaceState(null, '', '/?p=volume');
     render(<App />);

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type CSSPropert
 import { CheckOutlined, RedoOutlined, UndoOutlined } from '@ant-design/icons';
 import { Button } from 'antd';
 import { AgentContextDisclosure, AgentThread } from '../Assistant/AgentThread';
-import { useAgent } from '../../state/AgentContextStable';
+import { useAgent } from '../../state/AgentContext';
 import { INDUSTRY_LABELS } from '../../dataModel/scope';
 import { modelNameOf } from '../ProductCascader/tree';
 import { usePage } from '../../state/PageContext';
@@ -162,9 +162,11 @@ function CardActions({ actions, onEvidence }: { actions?: AgentCardAction[]; onE
     }
     if (target?.page === 'dashboard' && target.weekId) navBus.dashboardFocusWeekId = target.weekId;
     const targetPage = target?.page;
-    if (targetPage === 'alerts' || targetPage === 'forecast' || targetPage === 'dashboard' || targetPage === 'volume' || targetPage === 'marketboard' || targetPage === 'overview' || targetPage === 'pricing' || targetPage === 'intelligence' || targetPage === 'config') go(targetPage);
+    if (targetPage === 'alerts' || targetPage === 'dashboard' || targetPage === 'volume' || targetPage === 'overview' || targetPage === 'pricing' || targetPage === 'config') go(targetPage);
+    // 已下线页（forecast / marketboard / intelligence）的动作目标：2026-11-27 演进版退场
+    // 后页类型收敛，一律落回价格走势（与退场前 PageContext 对这三页的落回一致）
+    else if (targetPage === 'forecast' || targetPage === 'marketboard' || targetPage === 'intelligence') go('dashboard');
     else if (/预警/.test(action.prompt ?? '')) go('alerts');
-    else if (/预测/.test(action.prompt ?? '')) go('forecast');
     else go('dashboard');
   };
   return <>

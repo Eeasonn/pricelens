@@ -1,13 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
 import { defaultFilters } from '../../state/FiltersContext';
 import { buildAgentContext, resolveAgentEntities, runAgent } from '../core';
 

@@ -1,13 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-// 2026-11-07 整合：稳定栈只在稳定构建启用，其测试按出货通道（STABLE）运行
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
 import { createSseAgentClient, defaultAgentClient, localAgentClient, parseSseFrames, withLocalFallback, type AgentClient } from '../client';
 import { isAgentEvent, type AgentEvent, type AgentResponse } from '../contracts';
 

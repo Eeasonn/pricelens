@@ -4,16 +4,7 @@
 // （open=导航、evidence=卡内展开、followup=带上下文重跑）、空态给调整范围
 // 动作、上下文不足给可操作补齐建议；无证据不虚构（时间未知=待确认）。
 // ============================================================
-import { vi, describe, expect, it } from 'vitest';
-// 2026-11-07 整合：稳定栈只在稳定构建启用，其测试按出货通道（STABLE）运行
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
+import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
 import { dimProduct, dimTime } from '../../data';
 import { buildCards } from '../../state/mainSelection';

@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { gsap } from 'gsap';
-import { dimProduct, dimRegion } from '../data';
+import { dimProduct } from '../data';
+import { buildFilterPatch } from '../agent-stable/core';
+import type { AgentSuggestion } from '../agent-stable';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { usePage } from '../state/PageContext';
 import { newCardId, withAutoOn } from '../state/mainSelection';
 import type { MainProduct, ProductSelection } from '../state/filtersTypes';
 import { brandLabelOf } from './BrandMark';
-import { AGENT_STATUS_LABELS, platformShortcutLabel, PRICE_TREND_AI_SUGGESTIONS } from './Copilot/agentCopy';
+import { AGENT_STATUS_LABELS, platformShortcutLabel, PRICE_TREND_AI_SUGGESTIONS } from './CopilotStable/agentCopy';
 import { PriceSearchSurface } from './Search/PriceSearchSurface';
-import { motion } from '../theme/tokens';
 
 type SearchMode = 'products' | 'ai';
 
@@ -21,71 +21,65 @@ interface ProductHit {
   romram: string;
   skuId: string;
   isOwn: boolean;
-  variants: Array<{ romram: string; skuId: string; color: string }>;
+  /** All country-valid configurations for this model, kept together so a
+   * search result never silently chooses the first SKU. */
+  configOptions: Array<{ romram: string; skuId: string; color: string }>;
 }
 
 const normalize = (value: string): string => value.trim().toLocaleLowerCase();
-const compact = (value: string): string => normalize(value).replace(/[\s\-_./]+/g, '');
+const compactSearch = (value: string): string => normalize(value).replace(/[\s_\-]+/g, '');
 
-interface ParsedSearch {
-  countryCode: string;
-  productQuery: string;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function countryPattern(value: string): string {
-  return [...value.trim()].map((char) => escapeRegExp(char)).join('\\s*');
-}
-
-/** Parse the compact country prefix people use in the header search (for example `R 国 pura90spro`). */
-export function parsePriceTrendSearch(value: string, fallbackCountry: string): ParsedSearch {
-  const raw = value.trim();
-  if (!raw) return { countryCode: fallbackCountry, productQuery: '' };
-  // Codes must be explicit prefixes: Pro/RO, Samsung/SA and the GB capacity
-  // unit are product text. Remove only the same match that resolved the country.
-  const country = dimRegion.flatMap((region) => [region.country_code, region.country_name].filter(Boolean).flatMap((alias) => {
-    const pattern = alias === region.country_code ? `^${escapeRegExp(alias)}\\b` : countryPattern(alias);
-    const match = new RegExp(pattern, 'i').exec(raw);
-    return match ? [{ region, index: match.index, length: match[0].length }] : [];
-  })).sort((a, b) => a.index - b.index)[0];
-  if (!country) return { countryCode: fallbackCountry, productQuery: raw };
-  const productQuery = `${raw.slice(0, country.index)} ${raw.slice(country.index + country.length)}`
-    .replace(/\s+/g, ' ').replace(/^[\s:：,，、/]+|[\s:：,，、/]+$/g, '');
-  return { countryCode: country.region.country_code, productQuery };
-}
+const COUNTRY_QUERY_WORDS = ['r国', '俄罗斯', '俄国', '中国', '巴西', '法国', '德国', '英国', '美国', '日本'];
 
 export function productHits(query: string, countryCode: string, industry: string): ProductHit[] {
-  const q = compact(query);
+  const q = compactSearch(query);
+  const queryTokens = normalize(query).split(/[^a-z0-9\u4e00-\u9fff]+/i).map(compactSearch).filter((token) => token.length > 1 && !COUNTRY_QUERY_WORDS.includes(token));
   const grouped = new Map<string, ProductHit>();
+  const hits: ProductHit[] = [];
   for (const product of dimProduct) {
     if (product.industry !== industry || !product.countries.includes(countryCode)) continue;
-    const haystack = compact(`${product.brand} ${brandLabelOf(product.brand)} ${product.model_name} ${product.series} ${product.romram}`);
-    if (q && !haystack.includes(q)) continue;
+    const haystack = compactSearch(`${product.brand} ${brandLabelOf(product.brand)} ${product.model_name} ${product.series} ${product.romram}`);
+    if (q && !haystack.includes(q) && !queryTokens.every((token) => haystack.includes(token))) continue;
     const existing = grouped.get(product.model_id);
     if (existing) {
-      if (!existing.variants.some((variant) => variant.romram === product.romram && variant.skuId === product.sku_id)) existing.variants.push({ romram: product.romram, skuId: product.sku_id, color: product.color });
+      if (!existing.configOptions.some((option) => option.romram === product.romram && option.skuId === product.sku_id)) {
+        existing.configOptions.push({ romram: product.romram, skuId: product.sku_id, color: product.color });
+      }
       continue;
     }
-    grouped.set(product.model_id, { modelId: product.model_id, brand: product.brand, modelName: product.model_name, series: product.series, romram: product.romram, skuId: product.sku_id, isOwn: product.is_own, variants: [{ romram: product.romram, skuId: product.sku_id, color: product.color }] });
+    grouped.set(product.model_id, {
+      modelId: product.model_id,
+      brand: product.brand,
+      modelName: product.model_name,
+      series: product.series,
+      romram: product.romram,
+      skuId: product.sku_id,
+      isOwn: product.is_own,
+      configOptions: [{ romram: product.romram, skuId: product.sku_id, color: product.color }],
+    });
   }
-  // Huawei is the decision subject. Keep own products at the top without
-  // changing the stable order within either group.
-  return [...grouped.values()].sort((a, b) => Number(b.isOwn) - Number(a.isOwn)).slice(0, 6);
+  hits.push(...grouped.values());
+  hits.forEach((hit) => {
+    hit.configOptions.sort((a, b) => a.romram.localeCompare(b.romram) || a.skuId.localeCompare(b.skuId));
+    // The first option is deterministic and visible in the result row; the
+    // user can choose another config before applying it to the dashboard.
+    const defaultOption = hit.configOptions[0];
+    if (defaultOption) {
+      hit.romram = defaultOption.romram;
+      hit.skuId = defaultOption.skuId;
+    }
+  });
+  return hits
+    .sort((a, b) => Number(b.isOwn) - Number(a.isOwn) || Number(compactSearch(b.modelName) === q) - Number(compactSearch(a.modelName) === q) || a.modelName.localeCompare(b.modelName));
 }
 
-function selectionOf(hit: ProductHit): ProductSelection {
-  return { modelId: hit.modelId, romram: hit.romram, skuIds: [hit.skuId] };
+export function selectionOf(hit: ProductHit, skuId = hit.skuId): ProductSelection {
+  const config = hit.configOptions.find((option) => option.skuId === skuId) ?? hit.configOptions[0];
+  return { modelId: hit.modelId, romram: config?.romram ?? hit.romram, skuIds: [config?.skuId ?? skuId] };
 }
 
-function selectionOfVariant(hit: ProductHit, variant: { romram: string; skuId: string }): ProductSelection {
-  return { modelId: hit.modelId, romram: variant.romram, skuIds: [variant.skuId] };
-}
-
-function cardOf(hit: ProductHit, variant?: { romram: string; skuId: string }): MainProduct {
-  const card: MainProduct = { id: newCardId(), main: variant ? selectionOfVariant(hit, variant) : selectionOf(hit), compares: [] };
+export function cardOf(hit: ProductHit, skuId = hit.skuId): MainProduct {
+  const card: MainProduct = { id: newCardId(), main: selectionOf(hit, skuId), compares: [] };
   return hit.isOwn ? withAutoOn(card) : card;
 }
 
@@ -93,11 +87,15 @@ export default function PriceTrendSearch() {
   const { page } = usePage();
   const { state, actions } = useFilters();
   const { open: agentOpen, openAgent, send, running, runStatus, activeRun } = useAgent();
+  // latest-ref：NL 补丁先经 actions.set 提交（国家/产品/时间词换算），Provider 随即
+  // 重渲染出携带新 context 的 send。下方 setTimeout 闭包捕获的是点击那一刻的旧
+  // send——用它会把答案按旧国家/旧主品计算，且结束时指纹比对整体判 stale_context
+  // （回看/追问按钮全禁用）。走 ref 取提交后的新 send。
+  const sendRef = useRef(send);
+  sendRef.current = send;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const resultsRef = useRef<HTMLDivElement | null>(null);
-  const closeTimerRef = useRef<number | null>(null);
   const [open, setOpen] = useState(false);
   const [renderedOpen, setRenderedOpen] = useState(false);
   const [mode, setMode] = useState<SearchMode>('products');
@@ -105,8 +103,7 @@ export default function PriceTrendSearch() {
   const [activeIndex, setActiveIndex] = useState(0);
   const submittedPromptRef = useRef('');
 
-  const parsed = useMemo(() => parsePriceTrendSearch(query, state.countryCode), [query, state.countryCode]);
-  const hits = useMemo(() => productHits(parsed.productQuery, parsed.countryCode, state.industry).slice(0, parsed.productQuery.trim() ? 6 : 4), [parsed.countryCode, parsed.productQuery, state.industry]);
+  const hits = useMemo(() => productHits(query, state.countryCode, state.industry).slice(0, query.trim() ? 6 : 4), [query, state.countryCode, state.industry]);
   const trimmed = query.trim();
   const isDashboard = page === 'dashboard';
   const shortcutLabel = platformShortcutLabel();
@@ -122,12 +119,12 @@ export default function PriceTrendSearch() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         if (agentOpen) return;
         event.preventDefault();
-        setOpen(true);
+        openSearch();
         window.setTimeout(() => inputRef.current?.focus(), 0);
       }
       if (event.key === 'Escape' && open) {
+        setOpen(false);
         closeSearch();
-        inputRef.current?.blur();
       }
     };
     // Capture this shortcut before the Agent provider's global handler so the
@@ -146,103 +143,68 @@ export default function PriceTrendSearch() {
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
-  useEffect(() => {
-    if (open) {
-      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-      setRenderedOpen(true);
-    }
-  }, [open]);
-  useEffect(() => () => {
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-  }, []);
-
-  // The panel lifecycle is separate from its result content. This keeps a
-  // keystroke from replaying the entrance scene and leaves a real 140ms exit
-  // window for pointer/keyboard dismissal.
-  useEffect(() => {
-    const panel = panelRef.current;
-    if (!isDashboard || !renderedOpen || !panel) return undefined;
-    const mm = gsap.matchMedia();
-    let cancelled = false;
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
-      const reduceMotion = Boolean(context.conditions?.reduceMotion);
-      gsap.killTweensOf(panel);
-      if (open) {
-        gsap.fromTo(panel, { autoAlpha: 0, y: reduceMotion ? 0 : -6 }, { autoAlpha: 1, y: 0, duration: reduceMotion ? 0 : motion.searchEntrance / 1000, ease: motion.enter });
-      } else {
-        gsap.to(panel, {
-          autoAlpha: 0,
-          y: reduceMotion ? 0 : -4,
-          duration: reduceMotion ? 0 : motion.searchExit / 1000,
-          ease: motion.exit,
-          onComplete: () => { if (!cancelled) setRenderedOpen(false); },
-        });
-      }
-    });
-    return () => { cancelled = true; mm.revert(); };
-  }, [isDashboard, open, renderedOpen]);
-
-  const resultSignature = `${mode}|${parsed.countryCode}|${parsed.productQuery}|${hits.map((hit) => hit.modelId).join(',')}|${runStatus}`;
-  useEffect(() => {
-    const results = resultsRef.current;
-    if (!isDashboard || !open || !renderedOpen || !results) return undefined;
-    const mm = gsap.matchMedia();
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
-      const reduceMotion = Boolean(context.conditions?.reduceMotion);
-      gsap.fromTo(results, { autoAlpha: 0.45 }, { autoAlpha: 1, duration: reduceMotion ? 0 : motion.searchResult / 1000, ease: 'power1.out' });
-    });
-    return () => mm.revert();
-  }, [isDashboard, open, renderedOpen, resultSignature]);
-
   if (!isDashboard) return null;
 
-  function closeSearch() {
+  const closeSearch = () => {
     setOpen(false);
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-    closeTimerRef.current = window.setTimeout(() => setRenderedOpen(false), motion.searchExit);
-  }
+    setRenderedOpen(false);
+    inputRef.current?.blur();
+  };
+
+  const openSearch = () => {
+    setRenderedOpen(true);
+    setOpen(true);
+  };
+
+  const handoffToFilters = () => {
+    // Stable line keeps the handoff static; the filters state itself is the
+    // visible confirmation and remains accessible without motion.
+  };
 
   const close = (preserveQuery = false) => {
     closeSearch();
+    setOpen(false);
     if (!preserveQuery) {
       setQuery('');
       setMode('products');
     }
     setActiveIndex(0);
-    inputRef.current?.blur();
   };
 
-  const animateFilterHandoff = () => {
-    const filter = document.querySelector<HTMLElement>('.lpl-fb');
-    if (!filter) return;
-    const mm = gsap.matchMedia();
-    mm.add({ reduceMotion: '(prefers-reduced-motion: reduce)' }, (context) => {
-      if (context.conditions?.reduceMotion) return;
-      gsap.fromTo(filter, { y: 2, opacity: 0.76 }, { y: 0, opacity: 1, duration: 0.32, ease: 'power2.out' });
-    });
-    window.setTimeout(() => mm.revert(), 380);
-  };
-
-  const useSuggestion = (suggestion: string) => {
+  const useSuggestion = (suggestion: AgentSuggestion) => {
     setMode('ai');
-    setQuery(suggestion);
+    setQuery(suggestion.prompt);
     setActiveIndex(0);
-    setOpen(true);
+    openSearch();
     window.setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const searchWithAgent = () => {
     if (!trimmed || running) return;
     submittedPromptRef.current = trimmed;
+    const patch = buildFilterPatch(trimmed, state);
+    if (Object.keys(patch).length) {
+      actions.set(patch);
+      handoffToFilters();
+    }
     close(true);
     openAgent('dock', trimmed);
-    void send(trimmed);
+    // Let the filter context commit the NL country/product handoff before the
+    // Agent snapshots its context. The response still comes from the local
+    // deterministic engine or configured remote-with-fallback client.
+    // （sendRef：见上方 latest-ref 注释——必须用提交后的新 send 快照新 context）
+    window.setTimeout(() => void sendRef.current(trimmed), 0);
   };
 
-  const selectProduct = (hit: ProductHit, variant?: { romram: string; skuId: string }) => {
-    if (parsed.countryCode !== state.countryCode) actions.set({ countryCode: parsed.countryCode });
-    actions.setMains([cardOf(hit, variant)]);
-    animateFilterHandoff();
+  const selectProduct = (hit: ProductHit, skuId = hit.skuId) => {
+    const patch = buildFilterPatch(trimmed, state);
+    const selectedCard = cardOf(hit, skuId);
+    if (patch.countryCode) {
+      actions.set({ ...patch, mains: [selectedCard] });
+      handoffToFilters();
+    } else {
+      actions.setMains([selectedCard]);
+    }
     close();
   };
 
@@ -256,14 +218,14 @@ export default function PriceTrendSearch() {
       ? (AGENT_STATUS_LABELS[runStatus] ?? AGENT_STATUS_LABELS.idle)
       : AGENT_STATUS_LABELS.idle;
 
-  return <PriceSearchSurface rootRef={rootRef} inputRef={inputRef} panelRef={panelRef} resultsRef={resultsRef}
-    open={open} renderedOpen={renderedOpen} mode={mode} query={query} countryCode={parsed.countryCode}
-    products={hits.map((hit) => ({ ...hit, brand: brandLabelOf(hit.brand), configurations: hit.variants }))}
+  return <PriceSearchSurface rootRef={rootRef} inputRef={inputRef} panelRef={panelRef}
+    open={open} renderedOpen={renderedOpen} mode={mode} query={query} countryCode={state.countryCode}
+    products={hits.map((hit) => ({ ...hit, brand: brandLabelOf(hit.brand), configurations: hit.configOptions }))}
     activeIndex={activeIndex} shortcut={shortcutLabel} running={running} failure={aiFailureMessage} status={aiStatusMessage}
-    completed={sameAsSubmitted && runStatus === 'completed'} suggestions={[...PRICE_TREND_AI_SUGGESTIONS]}
-    onOpen={() => setOpen(true)} onQuery={(value) => { setQuery(value); setOpen(true); }}
+    completed={sameAsSubmitted && runStatus === 'completed'} suggestions={PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => suggestion.label)}
+    onOpen={() => openSearch()} onQuery={(value) => { setQuery(value); openSearch(); }}
     onMode={setMode} onActive={setActiveIndex}
-    onSelect={(index, skuId) => selectProduct(hits[index], skuId ? hits[index].variants.find((variant) => variant.skuId === skuId) : undefined)}
+    onSelect={(index, skuId) => selectProduct(hits[index], skuId)}
     onSuggestion={(index) => useSuggestion(PRICE_TREND_AI_SUGGESTIONS[index])} onSubmit={searchWithAgent}
     onOpenAgent={() => openAgent('dock', submittedPromptRef.current)}
     onKeyDown={(event) => {
@@ -277,6 +239,14 @@ export default function PriceTrendSearch() {
         event.preventDefault(); searchWithAgent();
       } else if (event.key === 'Enter' && mode === 'products' && hits.length) {
         event.preventDefault(); selectProduct(hits[activeIndex] ?? hits[0]);
+      } else if (event.key === 'Enter' && mode === 'products' && trimmed) {
+        event.preventDefault();
+        const patch = buildFilterPatch(trimmed, state);
+        if (Object.keys(patch).length) {
+          actions.set(patch); handoffToFilters(); close();
+        } else {
+          setMode('ai');
+        }
       }
     }}
   />;

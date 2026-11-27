@@ -215,9 +215,12 @@ describe('range / priceTypes / agg url params', () => {
   });
 });
 
-describe('new product tabs url entry', () => {
-  it('restores intelligence and forecast tabs from shared links', () => {
-    expect(withWindowSearch('?p=intelligence', () => readUrlOverrides()).page).toBe('intelligence');
-    expect(withWindowSearch('?p=forecast', () => readUrlOverrides()).page).toBe('forecast');
+describe('retired pages url entry', () => {
+  // 2026-11-27 演进版退场：情报中心 / 量价预测 / 大盘走势三页下线——老分享链接的
+  // ?p= 静默忽略（不解析 page，回退默认页）；其余页照常解析（见 retiredPages.test）
+  it('ignores retired intelligence / forecast / marketboard page ids from old shared links', () => {
+    expect(withWindowSearch('?p=intelligence', () => readUrlOverrides()).page).toBeUndefined();
+    expect(withWindowSearch('?p=forecast', () => readUrlOverrides()).page).toBeUndefined();
+    expect(withWindowSearch('?p=marketboard', () => readUrlOverrides()).page).toBeUndefined();
   });
 });

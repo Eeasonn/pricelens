@@ -20,8 +20,7 @@ export type { MainProduct, ProductSelection };
 import { groupsFromBenchmark } from './configStore';
 import { getCurrentCountry } from './currentScope';
 import { defaultColorSkuIds, modelIdOf, type RomramNode } from '../components/ProductCascader/tree';
-import { lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformSelectionForCountry } from '../dataModel/aggregate';
-import { STABLE } from '../appChannel';
+import { lowestPriceColorSku } from '../dataModel/aggregate';
 
 /** 空对（main=null）在入口 chip / 浮窗卡标 / 宽表组头的统一叫法；面板头作为图标题另用「对比产品」 */
 export const EMPTY_MAIN_LABEL = '未选主分析产品';
@@ -171,85 +170,15 @@ export function filterMainsByFinancingTerm(
   return mains;
 }
 
-/* ---------- 迭代线实现（e98d9b1） ---------- */
-/** 型号在目标国的首个合法配置：配置名升序遍历，取该国「最新有价周最低折后价
- *  颜色」的 SKU（与 computeDataDefaults 默认卡同口径）。型号在该国无任何
- *  有价配置 = null。R2（M1a）：URL 链接携带的配置在目标国不存在（RU 12+512
- *  链接进 ID）时按此落到同型号该国首个合法配置（ID 16+512GB）。
- *  R3（M2，型号在架 ≠ 默认电渠有价）：有价判定先按默认电渠（lowestPriceColorSku），
- *  默认电渠全程无价时回退全部在架渠道（lowestPriceColorSkuAnyChannel）——
- *  FR Mate X6 12+512 仅 Amazon 3P 有真实事实，不能因默认 Amazon 1P 无价就
- *  误判「型号在该国无在架配置」返回 null（会让 URL/跨国重映射丢主品）。 */
-function firstLegalSelectionOfModelIterate(modelId: string, countryCode: string): ProductSelection | null {
-  const rows = dimProduct.filter((p) => modelIdOf(p) === modelId && p.countries.includes(countryCode));
-  if (!rows.length) return null;
-  const romrams = [...new Set(rows.map((p) => p.romram))].sort();
-  for (const romram of romrams) {
-    const skuId = lowestPriceColorSku(modelId, romram, countryCode) ?? lowestPriceColorSkuAnyChannel(modelId, romram, countryCode);
-    if (skuId) return { modelId, romram, skuIds: [skuId] };
-  }
-  return null;
-}
-
-/** R3（M3 · 逐线取价口径归一化）：勾选组自己的 platform（每线取价口径）按目标国
- *  共享规则归一——同国完全可落地返回原引用（不克隆不动状态）；部分可落地保留
- *  有效子集；全部不可落地 = null（该线回自动口径：目标国全部渠道最低价，不是
- *  源国渠道）。未带每线口径的选择原样返回。全局 state.platform 的同款归一在
- *  platformSelectionForCountry 本体（R5-M1）；此处补齐「每线」漏网路径。 */
-export function normalizeSelectionForCountry(sel: ProductSelection, countryCode: string): ProductSelection {
-  if (!sel.platform) return sel;
-  const platform = platformSelectionForCountry(sel.platform, countryCode);
-  return platform === sel.platform ? sel : { ...sel, platform };
-}
-
-/** 勾选组跨口径映射（R2 M1a，显式口径切换专用；R4-m1 细化 SKU 过滤）：精确合法
- *  配置原样保留（多 SKU 时只过滤出目标国仍有效的 SKU 子集，不能任一命中就整组
- *  保留、把目标国不存在的 SKU 一并带过去）；配置/SKU 在目标国不存在但型号仍在
- *  → 同型号该国首个合法配置（颜色尽量沿用同色名，缺失回落最低价色）；型号整体
- *  缺席 = null（调用方回落默认）。
- *  R3（M2）：配置「有价」判定补全部在架渠道回退——型号在目标国仅 3P 有真实
- *  事实（FR Mate X6）时精确配置/首配映射照常成立，不再误判型号缺席。
- *  R3（M3）：取价口径 platform 字段除「随选择保留」外，跨国时逐线归一化到目标
- *  国可落地范围（源国渠道在目标国不存在 → 该线回自动口径），与全局平台归一
- *  同一共享规则——否则跨国防型号重映射 spread 残留源国每线 shop，计算落地
- *  两个口径。 */
-function remapSelectionForCountryIterate(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): ProductSelection | null {
-  if (!selectionHasMonthlyPrice(sel, countryCode)) return null;
-  const modelInCountry = dimProduct.some(
-    (p) => p.model_id === sel.modelId && p.industry === industry && p.countries.includes(countryCode),
-  );
-  if (!modelInCountry) return null;
-  // 精确配置优先：原配置在目标国有价（默认电渠无价时按全部在架渠道回退）则只换/滤 SKU，配置名不漂移
-  const exactPriced = lowestPriceColorSku(sel.modelId, sel.romram, countryCode)
-    ?? lowestPriceColorSkuAnyChannel(sel.modelId, sel.romram, countryCode);
-  if (exactPriced != null) {
-    // 整配置口径（skuIds 空 = 该配置全部颜色行）在该国有效，原样保留（仅归一每线口径）
-    if (!sel.skuIds.length) return normalizeSelectionForCountry(sel, countryCode);
-    // 多 SKU：只保留目标国真实存在的 SKU；全无效才落到下方同色/最低价色重选
-    const validSkuIds = sel.skuIds.filter((sku) =>
-      dimProduct.some((p) => modelIdOf(p) === sel.modelId && norm(p.romram) === norm(sel.romram) && p.countries.includes(countryCode) && p.sku_id === sku),
-    );
-    if (validSkuIds.length) return normalizeSelectionForCountry({ ...sel, skuIds: validSkuIds }, countryCode);
-  }
-  const romram = exactPriced != null ? sel.romram : firstLegalSelectionOfModelIterate(sel.modelId, countryCode)?.romram;
-  if (romram == null) return null;
-  const oldColors = new Set(
-    dimProduct.filter((p) => sel.skuIds.includes(p.sku_id) && p.color && p.color !== '—')
-      .map((p) => p.color.toLowerCase()),
-  );
-  const sameColor = dimProduct.find(
-    (p) => modelIdOf(p) === sel.modelId && norm(p.romram) === norm(romram)
-      && p.countries.includes(countryCode) && p.color && p.color !== '—' && oldColors.has(p.color.toLowerCase()),
-  );
-  const skuId = sameColor?.sku_id ?? lowestPriceColorSku(sel.modelId, romram, countryCode) ?? lowestPriceColorSkuAnyChannel(sel.modelId, romram, countryCode);
-  return skuId ? normalizeSelectionForCountry({ ...sel, romram, skuIds: [skuId] }, countryCode) : null;
-}
-
+/* ---------- 跨口径映射 ----------
+ * 2026-11-27 演进版退场：原「稳定线 / 迭代线各自实现 + 按构建通道分发」收敛为
+ * 单一实现（保留稳定线口径）。迭代线独有的 R3 M2（默认电渠无价时回退全部在架
+ * 渠道判有价）与 R3 M3（勾选组每线口径逐线归一）随迭代通道一并删除。 */
 /** 型号在目标国的首个合法配置：配置名升序遍历，取该国「最新有价周最低折后价
  *  颜色」的 SKU（与 computeDataDefaults 默认卡同口径）。型号在该国无任何
  *  有价配置 = null。R3（M1a）：URL 链接携带的配置在目标国不存在（RU 12+512
  *  链接进 ID）时按此落到同型号该国首个合法配置（ID 16+512GB）。 */
-function firstLegalSelectionOfModelStable(modelId: string, countryCode: string): ProductSelection | null {
+export function firstLegalSelectionOfModel(modelId: string, countryCode: string): ProductSelection | null {
   const rows = dimProduct.filter((p) => modelIdOf(p) === modelId && p.countries.includes(countryCode));
   if (!rows.length) return null;
   const romrams = [...new Set(rows.map((p) => p.romram))].sort();
@@ -268,7 +197,7 @@ function firstLegalSelectionOfModelStable(modelId: string, countryCode: string):
  *    在该国真实存在 → 配置内换合法 SKU（同色优先，缺失回落最低价色/首行）；
  *  - 配置整体不在目标国但型号仍在 → 同型号该国首个合法配置（颜色尽量沿用
  *    同色名，缺失回落最低价色）；型号整体缺席 = null（调用方回落默认）。 */
-function remapSelectionForCountryStable(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): ProductSelection | null {
+export function remapSelectionForCountry(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): ProductSelection | null {
   if (!selectionHasMonthlyPrice(sel, countryCode)) return null;
   const configRows = dimProduct.filter(
     (p) => p.model_id === sel.modelId
@@ -295,7 +224,7 @@ function remapSelectionForCountryStable(sel: ProductSelection, countryCode: stri
     (p) => p.model_id === sel.modelId && p.industry === industry && p.countries.includes(countryCode),
   );
   if (!modelInCountry) return null;
-  const romram = firstLegalSelectionOfModelStable(sel.modelId, countryCode)?.romram;
+  const romram = firstLegalSelectionOfModel(sel.modelId, countryCode)?.romram;
   if (romram == null) return null;
   const oldColors = new Set(
     dimProduct.filter((p) => sel.skuIds.includes(p.sku_id) && p.color && p.color !== '—')
@@ -309,7 +238,7 @@ function remapSelectionForCountryStable(sel: ProductSelection, countryCode: stri
   return skuId ? { modelId: sel.modelId, romram, skuIds: [skuId] } : null;
 }
 
-/** 主分析卡整组合法化（R2/R3 M1a + R4-m1/S1，稳定 / 迭代共用外层流程）：
+/** 主分析卡整组合法化（R2/R3 M1a + R4-m1/S1）：
  *  主品逐卡按 remapSel 映射（同型号保留 / 换目标国合法配置），型号整体缺席的卡剔除；
  *  映射后按 selKey 去重（两张卡重映射到同型号同配置时合并为一卡）；空对卡原样保留。
  *  R4-S1：对比区同样逐条合法化，按 selKey 去重并排除与所在卡主品同组的条目
@@ -374,35 +303,10 @@ function remapMainsWith(
   return out.length ? out : null;
 }
 
-/** 显式携带的主分析卡整组合法化（迭代线：R3 M2 默认电渠无价回退全部在架渠道 +
- *  R3 M3 每线口径逐线归一，见 remapSelectionForCountryIterate） */
-function remapMainsForScopeIterate(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): MainProduct[] | null {
-  return remapMainsWith(mains, remapSelectionForCountryIterate, countryCode, industry);
-}
-
-/** 显式携带的主分析卡整组合法化（稳定线：R3 M1a 逐 SKU 过滤 / 同配置内换合法 SKU /
- *  R4 S1 对比区校验剥离，见 remapSelectionForCountryStable） */
-function remapMainsForScopeStable(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): MainProduct[] | null {
-  return remapMainsWith(mains, remapSelectionForCountryStable, countryCode, industry);
-}
-
-// 2026-11-07 整合（稳定线 4966d02 × 迭代线 e98d9b1）：跨口径映射两线各自验收——
-// 稳定线 R3/R4 以「目标国目录行」判配置存在（同配置内换合法 SKU）；迭代线同步了
-// 稳定线 R3 M1a/R4-S1 后再加 R3 M2（默认电渠无价回退全部在架渠道）与 R3 M3（每线
-// 口径逐线归一）。导出名按构建通道分发，各自测试锁各自行为。
-/** 型号在目标国的首个合法配置（稳定 / 迭代按通道分发，见上） */
-export function firstLegalSelectionOfModel(modelId: string, countryCode: string): ProductSelection | null {
-  return STABLE ? firstLegalSelectionOfModelStable(modelId, countryCode) : firstLegalSelectionOfModelIterate(modelId, countryCode);
-}
-
-/** 勾选组跨口径映射（稳定 / 迭代按通道分发，见上） */
-export function remapSelectionForCountry(sel: ProductSelection, countryCode: string, industry: DimProduct['industry']): ProductSelection | null {
-  return STABLE ? remapSelectionForCountryStable(sel, countryCode, industry) : remapSelectionForCountryIterate(sel, countryCode, industry);
-}
-
-/** 显式携带的主分析卡整组合法化（稳定 / 迭代按通道分发，见上） */
+/** 显式携带的主分析卡整组合法化（R3 M1a 逐 SKU 过滤 / 同配置内换合法 SKU /
+ *  R4 S1 对比区校验剥离，见 remapSelectionForCountry） */
 export function remapMainsForScope(mains: MainProduct[], countryCode: string, industry: DimProduct['industry']): MainProduct[] | null {
-  return STABLE ? remapMainsForScopeStable(mains, countryCode, industry) : remapMainsForScopeIterate(mains, countryCode, industry);
+  return remapMainsWith(mains, remapSelectionForCountry, countryCode, industry);
 }
 
 /** 主品卡的自动匹配对比区：对标矩阵（主竞品在前）→ 剔除与主品同型号同配置。

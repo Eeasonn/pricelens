@@ -12,7 +12,7 @@
 
 PriceLens 是华为海外终端品牌方使用的多国、多产业价格情报与量价分析工作台。它帮助用户看清“我司产品现在卖多少钱、相对 RRP 打了多少折、相对主要竞品处于什么水位、价格变化为什么发生，以及下一步应该核对什么”。
 
-PriceLens 是一个统一产品版本：价格看板、量价分析、预测、情报中心、预警中心、配置和 PriceLens Agent 都在同一应用中。Agent 嵌入分析现场，负责自然语言查询、解释和编排；它不替代看板筛选、预警规则或人工判断。
+PriceLens 是一个统一产品版本：价格看板、量价分析、预警中心、配置和 PriceLens Agent 都在同一应用中。Agent 嵌入分析现场，负责自然语言查询、解释和编排；它不替代看板筛选、预警规则或人工判断。
 
 产品气质是**克制、高密度、可扫描、证据优先的企业级价格决策工作台**。我司产品是视觉和叙事主角；竞品是参照系；每个数字都应能回答“所以该怎么办”，并能回到事实、规则或来源。
 
@@ -47,7 +47,7 @@ PriceLens 的核心任务包括：
 
 - 查看价格走势：折后价为主、RRP 为参照，支持周 / 月 / 季和 USD / 本币。
 - 比较我司与主要竞品：我司产品保持主视角，竞品按配置矩阵自动匹配并作为对照。
-- 分析量价关系：并排查看价格与周销量；量价预测只展示可追溯的演示模型假设和区间。
+- 分析量价关系：并排查看价格与周销量；Agent 内的量价预测（情景与解释）只展示可追溯的演示模型假设和区间。
 - 解释价格变化：结合促销日历、促销深度、生命周期调价和市场情报。
 - 处理预警：调价、折扣、平台价差、档位间距四类规则可订阅、查看和回到触发周。
 - 获取证据：从摘要、图表、明细或商品现页链接定位到可复核的事实。
@@ -55,15 +55,15 @@ PriceLens 的核心任务包括：
 
 ## 产品范围与入口
 
+> **2026-11-27 负责人决策：只对稳定版持续迭代，演进版整体退场**——量价预测 / 大盘走势 / 情报中心三页、迭代版 Agent 与 `/iterate/` 在线版均不再维护，不属于正式模块。下线页面的老分享链接（`?p=forecast`、`?p=marketboard`、`?p=intelligence`）静默落回价格走势。
+
 当前正式模块：
 
 1. **价格走势**：多产品与多平台视图、折后价 / RRP、促销带、时间刷选、时点摘要和取证外链。
 2. **量价走势**：价格与周销量联动，支持取价平台选择。
-3. **量价预测**：价格情景、历史需求基准、供给上限和下一周可售销量区间；假设必须可追溯。
-4. **情报中心**：汇率、新品、市场事件和可跟进的价格线索；演示数据必须显式标识。
-5. **预警中心**：四类预警规则、阈值和订阅状态。
-6. **配置**：竞品对标矩阵、上一代关系、参考汇率和默认店铺。
-7. **PriceLens Agent**：页头「问 PriceLens」或 `⌘/Ctrl+K` 进入；默认只读，结果可追溯。
+3. **预警中心**：四类预警规则、阈值和订阅状态。
+4. **配置**：竞品对标矩阵、上一代关系、参考汇率和默认店铺。
+5. **PriceLens Agent**：页头「问 PriceLens」或 `⌘/Ctrl+K` 进入；默认只读，结果可追溯。
 
 正式交付有三个入口，但共享同一源码和产品口径：
 
@@ -98,7 +98,7 @@ PriceLens 面向品牌方内部的价格操盘和经营分析，不是面向公�
 - The repository contains the current React and TypeScript implementation, shared runtime tokens, chart models, tests, and the generated offline single-file build.
 - The current data batch contains 29 countries in the dimension table, 25 enabled countries, 1,253 SKUs, and 95,946 weekly platform-price facts spanning 2026-W19 to 2026-W45.
 - Existing product, UX, roadshow, and research documents are available as historical decision records. Roadshow and recording assets are evidence of exploration, not formal product entry points or visual authority.
-- Evidence quality is incomplete by design: some intelligence and forecast surfaces are simulated or mixed and must carry an explicit status label. There are no approved customer testimonials or public consumer research materials in the current product evidence set.
+- Evidence quality is incomplete by design: the Agent's demonstration forecast is simulated and must carry an explicit status label. There are no approved customer testimonials or public consumer research materials in the current product evidence set.
 
 ### 价格口径
 

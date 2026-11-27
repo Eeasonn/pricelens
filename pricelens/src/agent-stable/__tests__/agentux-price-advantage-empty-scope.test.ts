@@ -6,16 +6,7 @@
 // 契约：粒度与范围桶必须同形——空结果保持原粒度+原桶；非空结果按实际参与
 // 对比的周给真实周桶+周粒度（R5 既有行为不回归）。
 // ============================================================
-import { vi, describe, expect, it } from 'vitest';
-// 2026-11-07 整合：稳定栈只在稳定构建启用，其测试按出货通道（STABLE）运行
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
+import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
 import type { FiltersState } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';

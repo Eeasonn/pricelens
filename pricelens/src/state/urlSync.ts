@@ -16,20 +16,17 @@ import { dimChannel, dimProduct } from '../data';
 import type { FiltersState, PlatformSelection, ProductSelection } from './filtersTypes';
 import type { StoreType } from '../dataModel/types';
 import type { Page } from './PageContext';
-import { hiddenInStable } from '../appChannel';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import { cardsFromSelections, firstLegalSelectionOfModel, tidyMains } from './mainSelection';
 import { getCurrentCountry } from './currentScope';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
 
-const PAGES: Page[] = ['overview', 'dashboard', 'volume', 'marketboard', 'pricing', 'intelligence', 'forecast', 'config', 'alerts'];
-
-// 稳定版通道收敛（Eason 2026-11-05）：大盘走势 / 量价预测 / 情报中心不在稳定版
-// 上架，?p= 页参数白名单随之收敛——稳定版分享链接直达三页时静默忽略（回退
-// 默认页）；页路由的统一落回在 PageContext（resolveChannelPage），此处保证
-// readUrlOverrides 的 page 解析与之一致。迭代版白名单不变。
-const URL_PAGES: Page[] = PAGES.filter((p) => !hiddenInStable(p));
+// ?p= 页参数白名单（与 PageContext 的页清单一致）。2026-11-27 演进版退场：
+// 大盘走势 / 量价预测 / 情报中心三页下线——老分享链接直达三页时静默忽略
+// （不解析 page，回退默认页）；运行期页 id 的统一落回在 PageContext（resolvePage），
+// 此处保证 readUrlOverrides 的 page 解析与之一致。
+const PAGES: readonly Page[] = ['overview', 'dashboard', 'volume', 'pricing', 'config', 'alerts'];
 
 /** 逗号列表参数 → 去空白、去空项 */
 const listParam = (q: URLSearchParams, name: string): string[] =>
@@ -108,7 +105,7 @@ export function platformUrlParamsOf(
 
 /**
  * 退役透传（2026-11-14 Eason「平台还是能选到店铺」）：稳定版店铺级降级闸退役
- * ——店铺级（shopIds 单渠道）选择在两通道同政策原样保留（数据层
+ * ——店铺级（shopIds 单渠道）选择原样保留（数据层
  * effectiveChannelIds 店铺级 = 严格单渠道取价；平台级/自动 = 平台内每周最低价
  * 店铺 = 每周折扣率最大店铺口径，不变）。函数保留壳以稳住看板/持久化/URL 写侧/
  * Agent 四处调用点签名，不再改写任何输入。
@@ -144,7 +141,7 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
   try {
     const q = new URLSearchParams(window.location.search);
     const p = q.get('p');
-    if (p && (URL_PAGES as string[]).includes(p)) out.page = p as Page;
+    if (p && (PAGES as readonly string[]).includes(p)) out.page = p as Page;
     const g = q.get('g');
     if (g === 'week' || g === 'month' || g === 'quarter') out.filters.granularity = g;
     const cur = q.get('cur');
@@ -159,7 +156,7 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     // 是否属于链接国家由 applyScopeDefaults 校验（越界回落默认口径）。
     // 2026-11-14（Eason「平台还是能选到店铺」）：稳定版恢复读 shop=/seller=
     //（2026-11-05 复检整改3 的「stable 静默忽略店铺级」随店铺级恢复一并退役），
-    // 两通道同一 normalizePlatformSelection 归一路径；是否钉到具体店铺由
+    // 统一经 normalizePlatformSelection 归一路径；是否钉到具体店铺由
     // ChannelScopeBox 的店铺行表达（2026-11-17 三级级联替换 PlatformSelectBox），
     // 自动口径 = 默认平台池内每周最低价店铺。
     const platforms = listParam(q, 'plat');

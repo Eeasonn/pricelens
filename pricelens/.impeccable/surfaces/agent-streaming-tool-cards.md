@@ -2,7 +2,7 @@
 
 ## Goal
 
-Keep the stable PriceLens Agent shell evidence first while making long or remote runs visibly progressive. The surface covers the existing dock, drawer, and full modes; it does not expose stable hidden pages or change `appChannel`.
+Keep the stable PriceLens Agent shell evidence first while making long or remote runs visibly progressive. The surface covers the existing dock, drawer, and full modes; it does not change page routing.
 
 ## Information hierarchy
 

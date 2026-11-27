@@ -130,9 +130,10 @@ describe('量价页 · 量价同骨架接线（2026-11-06）', () => {
     expect((panel.volumeOwner as { key: string }).key).toContain('own-huawei-mate-80-pro');
     // 图层标注 + 名称带
     expect(panel.paneLabels).toBe(true);
-    // 演进版（vitest = dev 形态）标题版式不变：pill，gridTop 不含标题行（稳定版见 volumeStablePaneHead）
-    expect(panel.paneLabelLayout).toBe('pill');
-    expect(panel.gridTop).toBe(16);
+    // 图层标题 head 版式（2026-11-07 稳定版三轮；2026-11-27 演进版退场后是唯一口径）：
+    // gridTop = 刻度顶带 16 + 标题行 20（专项锁定见 volumeStablePaneHead）
+    expect(panel.paneLabelLayout).toBe('head');
+    expect(panel.gridTop).toBe(36);
     expect(typeof panel.nameZoneWidth).toBe('number');
     expect(panel.nameZoneWidth as number).toBeGreaterThan(0);
     // 区间量尺入参：读数方式 + 清除回调 + 价格量尺量本面板产品线；初始无选区

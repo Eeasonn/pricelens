@@ -7,16 +7,7 @@
 // 合并、Filters 收到周级 recentRange）时同步设 granularity='week'；
 // 覆盖 month / quarter → 最近 8 周、空优势「调整范围 · 最近 12 周」全部路径。
 // ============================================================
-import { vi, describe, expect, it } from 'vitest';
-// 2026-11-07 整合：稳定栈只在稳定构建启用，其测试按出货通道（STABLE）运行
-vi.mock('../../appChannel', () => ({
-  APP_CHANNEL: 'stable' as const,
-  STABLE: true,
-  ONLINE_ITERATE: false,
-  STABLE_HIDDEN_PAGES: ['marketboard', 'forecast', 'intelligence'],
-  hiddenInStable: (page: string): boolean => ['marketboard', 'forecast', 'intelligence'].includes(page),
-  resolveAppChannel: (): 'stable' => 'stable',
-}));
+import { describe, expect, it } from 'vitest';
 import { defaultFilters } from '../../state/FiltersContext';
 import type { FiltersState } from '../../state/filtersTypes';
 import { buildCards } from '../../state/mainSelection';

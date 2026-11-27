@@ -1,6 +1,6 @@
 # PriceLens · 统一版开发说明
 
-PriceLens 只有一个统一产品版本：价格看板、量价走势、量价预测、情报中心、预警中心与 PriceLens Agent 同在 `src/App.tsx` 一个应用内，不维护「Copilot 版 / 非 Copilot 版」两套前端或两个站点。产品口径基线：`../PriceLens-产品说明.md`（v0.4 统一版）；`../PriceLens-单国打样-自包含落地方案.md` 为单国打样期历史稿。
+PriceLens 只有一个统一产品版本：价格看板、量价走势、预警中心与 PriceLens Agent 同在 `src/App.tsx` 一个应用内，不维护「Copilot 版 / 非 Copilot 版」两套前端或两个站点。产品口径基线：`../PriceLens-产品说明.md`（v0.4 统一版）；`../PriceLens-单国打样-自包含落地方案.md` 为单国打样期历史稿。
 
 本轮 Agent、预警、UI/UX 与缺陷优化的规划、验收口径和已落地项见：[`../docs/PriceLens-platform-optimization-roadmap-2026-11.md`](../docs/PriceLens-platform-optimization-roadmap-2026-11.md)。
 
@@ -26,7 +26,6 @@ npm run ingest     # 真实数据接入：scripts/ingest_real.py（数据再生�
 python3 scripts/reemit_benchmark.py   # 只重生对标行：改竞品配对规则（ingest_real.pair_configs）后用，不重跑全链；读最终维表重发手机/平板对标，其余行原样保留（幂等；--dry-run 只看差异），随后重跑 build_handoff_config.py
 npm run dev        # 本地开发
 npm run build      # 产出单文件 dist/index.html 并同步覆盖仓库根 PriceLens.html（铁律：单文件版永远最新）
-npm run build:iterate # 演进版单文件 dist/index.html（三页齐全、标题带「演进版」；不同步 PriceLens.html）
 npm run typecheck  # tsc --noEmit
 npm run verify     # 聚合契约断言 + 单文件一致性（scripts/verify.mjs，58 项，含竞品配对五条规则守卫）
 npm run test       # vitest 金测（快照钉住图表行为）
@@ -36,16 +35,15 @@ npm run design:detect # Impeccable detector（未安装时安全跳过）
 npm run check      # design + typecheck + verify + test + build 全链路
 ```
 
-## 在线版双网址（稳定版 / 演进版）
+## 在线版（单一稳定版）
 
-push main 后 GitHub Actions 在同一次 Pages 部署里构建两份单文件（`.github/workflows/deploy.yml`）：
+push main 后 GitHub Actions 构建一份单文件并部署到 GitHub Pages（`.github/workflows/deploy.yml`）：
 
 | 网址 | 构建 | 内容 |
 | --- | --- | --- |
-| `https://eeasonn.github.io/pricelens/` | `npm run build` | 稳定版：大盘走势 / 量价预测 / 情报中心三页入口不存在 |
-| `https://eeasonn.github.io/pricelens/iterate/` | `npm run build:iterate` | 演进版：与本地 dev 同为迭代版，三页齐全，标签页标题「PriceLens · 演进版」 |
+| `https://eeasonn.github.io/pricelens/` | `npm run build` | 稳定版：与离线单文件、本地 dev 同一份源码 |
 
-通道只由构建形态决定、产物内恒定，判定源唯一在 `src/appChannel.ts`；稳定版没有任何 URL 参数 / localStorage / feature flag 逃逸口，`VITE_APP_CHANNEL` 只由 `build:iterate` 脚本在构建期烙定。
+2026-11-27 负责人决策：只对稳定版持续迭代，演进版（大盘走势 / 量价预测 / 情报中心三页、迭代版 Agent 与 `/iterate/` 在线版）退场，不再有第二通道。
 
 ## 设计执行
 
