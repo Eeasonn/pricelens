@@ -2,10 +2,12 @@
 // 双引擎金标（2026-11-18 前后端分离）：服务器 Python 引擎（server/ingest_pack.py）
 // 与前端引擎（dataModel/offerIngest.ts）对同一 v3 原表包的派生结果必须一致。
 //
-// fixture = fixtures/py-engine-v2-pack.json（Python 引擎产物）。
+// fixture = fixtures/py-engine-v2-pack.json（Python 引擎产物）；原表输入 =
+// fixtures/raw-sample.json（2026-11-27 从 public/ 挪来：它只是本测试的输入，
+// 放 public/ 会随每次构建进 dist，白带 15MB）。
 // 再生成：cd pricelens && python3 -X utf8 -c "
 //   import json,sys; sys.path.insert(0,'server'); import ingest_pack
-//   pack=json.load(open('public/raw-sample.json'))
+//   pack=json.load(open('src/data/__tests__/fixtures/raw-sample.json'))
 //   v2,_,_=ingest_pack.ingest_v3_pack(pack,{},'src/data/dim_region.json','server/data/pricelens.db')
 //   json.dump(v2,open('src/data/__tests__/fixtures/py-engine-v2-pack.json','w'),ensure_ascii=False)"
 // 派生输入 = 无配置（零内置语义），与下方前端引擎 ctx 一致。
@@ -47,7 +49,7 @@ describe('双引擎金标：Python ingest_pack ≡ 前端 offerIngest（raw-samp
     dims: { product: { sku_id: string; model_id: string; industry: string; series: string; romram: string; color: string }[]; channel: { channel_id: string }[]; time: unknown[]; fx: unknown[] };
     factPackB64: string;
   };
-  const raw = JSON.parse(readFileSync(new URL('../../../public/raw-sample.json', import.meta.url), 'utf8')) as { offers: OfferSourceRow[] };
+  const raw = JSON.parse(readFileSync(new URL('./fixtures/raw-sample.json', import.meta.url), 'utf8')) as { offers: OfferSourceRow[] };
   const ctx: OfferIngestCtx = {
     seriesRules: null, modelAliasRows: null, tierLadders: null, promoRows: null,
     benchmarkRows: null, regionBase: REGION_BASE,

@@ -77,11 +77,21 @@ pricelens/server/data/
 # oil-ui 设计审计工作区 + cook 截图活动产物（工具产物/素材不入库，2026-11-26 Eason 拍板清洗）
 /.oil-ui/
 /cook/
-# Office 锁文件
-docs/.~*
+# Office 锁文件（任意层级）
+**/.~*
 # 内部交接包：数据包导出（105M CSV/JSON 大资产）与服务器 web 构建产物不入库
 /docs/内部交接包/02-数据包/
 /docs/内部交接包/00-服务器版/PriceLens-Server-20261123/web/
+
+# 2026-11-27 大资产停止跟踪（Eason 拍板清洁）：以下文件留在本机，仅不再入库；历史不改写
+#  - 交接包的交付 zip、单文件副本、服务器包旧副本（小文档继续跟踪）
+#  - 底表样例的数据包产物（约 50MB；样例脚本注释原本就写明不入库）
+/docs/内部交接包/*.zip
+/docs/内部交接包/01-应用/
+/docs/内部交接包/00-服务器版/
+/docs/底表样例/*.json
+# pricelens/public/raw-sample.json 已挪到 src/data/__tests__/fixtures/（只是测试输入），
+# public/ 整体本就在上面的忽略范围内，不必再单列
 
 # 视频封面等素材散落根目录（不入库）
 /title-v5.png
