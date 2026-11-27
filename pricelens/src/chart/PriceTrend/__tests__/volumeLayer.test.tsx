@@ -302,8 +302,10 @@ describe('量层五件套（归属药丸 / 悬停小卡 / 三点标注 / 联动�
     expect(text.style.lineHeight).toBe(nameText.style.lineHeight);
     expect(text.style.whiteSpace).toBe('nowrap');
     expect(pill.style.maxWidth).toBe('');
-    expect(text.style.textOverflow).toBe('');
-    expect(text.style.overflow).toBe('');
+    // 2026-11-28 代际返修②：名称药丸文本在药丸盒 maxWidth 内截断（共享 NAME_PILL_TEXT
+    // 样式常量）——归属药丸同语言，全名留 title/悬停卡
+    expect(text.style.textOverflow).toBe('ellipsis');
+    expect(text.style.overflow).toBe('hidden');
     cleanup();
     const { container: c2 } = render(<Chart {...props} volumes={[null, null, null, null, null]} /> as ReactElement);
     await waitForGeom(c2);

@@ -16,7 +16,7 @@ import type {
   AlertProductRule,
   AlertThresholds,
   AlertTypeSwitches,
-  BrandPanorama,
+  ColumnsView,
   CompareSource,
   FiltersActions,
   FiltersState,
@@ -37,9 +37,8 @@ import type { Industry } from '../dataModel/types';
 import { marketDataProfileOf, type FinancingPlan, type FinancingTerm, type FinancingType } from '../dataModel/marketProfile';
 import { publishedMonthlyRangeOf } from '../dataModel/monthlyFacts';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
-import { modelIdOf, invalidateLatestPriceCache, productHasDataInCountry } from '../components/ProductCascader/tree';
+import { modelIdOf, invalidateLatestPriceCache, productHasDataInCountry, brandOfModel, ownBrand } from '../components/ProductCascader/tree';
 import { autoComparesFor, expandV11Cards, filterMainsByFinancingTerm, migrateV10, mainsValidFor, newCardId, remapMainsForScope, restoreAutoOn, selKey, tidyMains, toggleAllAuto, toggleCardAuto, withAutoOn, withCompares, withComparesAdded } from './mainSelection';
-import { EMPTY_PANORAMA, isPanorama, sanitizePanorama } from './panorama';
 import { readUrlOverrides, writeUrlPatch, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -75,8 +74,8 @@ export const defaultFilters: FiltersState = {
   countryCode: 'RU',
   industry: 'phone',
   mains: [],
-  analysisMode: 'compare', // 分析结构默认 = 产品对标；品牌全景草稿与 mains 分别保存
-  panorama: EMPTY_PANORAMA, // 品牌全景：无默认品牌 / 主品 / 基准
+  viewMode: 'compare', // 视图默认 = 对标；选择草稿恒为 mains，视图只决定怎么摆
+  columns: { groupBy: 'brand', sharedY: true, baselineKey: null }, // 分列：默认按品牌、Y 轴共享、无默认基准
   platform: DEFAULT_PLATFORM_SELECTION, // null = 该国默认电渠
   granularity: 'week', // 第四十二轮：默认周（迪总「时间默认取周」）
   adaptive: true, // 2026-11-13 时间筛选单值化：true = 默认近段窗口（周12/月6/季4）跟产品；手动改时间置 false 固定。「自动时间」按钮已退役，字段仅作状态壳（旧持久化/Agent 补丁兼容）
@@ -245,12 +244,45 @@ function isAlertProducts(value: unknown): value is FiltersState['alertProducts']
   });
 }
 
-/** 读出的持久化载荷：v12 载 mains；v11 载旧卡形（随后展开）；v10 载旧 own/competitors */
+/** 读出的持久化载荷：v12 载 mains；v11 载旧卡形（随后展开）；v10 载旧 own/competitors；
+ *  旧载荷的 analysisMode / panorama（2026-11-27 一轮的分析结构）在 loadBaseState 迁移
+ *  到视图字段（viewMode / columns）后丢弃 */
 interface PersistedPayload extends Partial<FiltersState> {
   v?: number;
   legacyOwn?: ProductSelection[];
   legacyCompetitors?: ProductSelection[];
   legacyV11Mains?: { modelId: string; configs: ProductSelection[]; compares: ProductSelection[] }[];
+  legacyAnalysisMode?: 'compare' | 'panorama';
+  legacyPanorama?: LegacyPanorama;
+}
+
+/** 旧品牌全景草稿形状（迁移专用）：brands[].sels 逐条按选择形状校验 */
+interface LegacyPanorama {
+  brands: { brand: string; sels: ProductSelection[] }[];
+  sharedY?: boolean;
+  baselineKey?: string | null;
+}
+
+function isProductSelectionLike(value: unknown): value is ProductSelection {
+  if (!isRecord(value)) return false;
+  return typeof value.modelId === 'string' && typeof value.romram === 'string'
+    && Array.isArray(value.skuIds) && value.skuIds.every((id) => typeof id === 'string');
+}
+
+function isLegacyPanorama(value: unknown): value is LegacyPanorama {
+  if (!isRecord(value) || !Array.isArray(value.brands)) return false;
+  if (value.sharedY !== undefined && typeof value.sharedY !== 'boolean') return false;
+  if (value.baselineKey !== undefined && value.baselineKey !== null && typeof value.baselineKey !== 'string') return false;
+  return value.brands.every((b) => isRecord(b) && typeof b.brand === 'string' && Array.isArray(b.sels) && b.sels.every(isProductSelectionLike));
+}
+
+/** 分列视图设置的形状校验（坏形状跳过字段，不作废整包） */
+export function isColumnsView(value: unknown): value is ColumnsView {
+  if (!isRecord(value)) return false;
+  if (value.groupBy !== undefined && value.groupBy !== 'brand' && value.groupBy !== 'series' && value.groupBy !== 'tier') return false;
+  if (value.sharedY !== undefined && typeof value.sharedY !== 'boolean') return false;
+  if (value.baselineKey !== undefined && value.baselineKey !== null && typeof value.baselineKey !== 'string') return false;
+  return true;
 }
 
 /**
@@ -307,10 +339,11 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       ['alertTypes', isAlertTypes(parsed.alertTypes)],
       ['alertThresholds', isAlertThresholds(parsed.alertThresholds)],
       ['alertProducts', isAlertProducts(parsed.alertProducts)],
-      // 2026-11-27 分析结构 + 品牌全景草稿：可缺省（旧载荷无此键 = 产品对标 + 空草稿）；
-      // 坏形状跳过该字段（不入 required，不作废整包）
-      ['analysisMode', parsed.analysisMode === 'compare' || parsed.analysisMode === 'panorama'],
-      ['panorama', isPanorama(parsed.panorama)],
+      // 2026-11-27 二轮「视图：对标 / 分列」：viewMode / columns 可缺省（旧载荷无此键
+      // = 对标 + 默认分列设置）；坏形状跳过该字段（不入 required，不作废整包）。
+      // 旧载荷的 analysisMode / panorama 不进 rest——在 loadBaseState 迁移后丢弃
+      ['viewMode', parsed.viewMode == null || parsed.viewMode === 'compare' || parsed.viewMode === 'columns' || parsed.viewMode === 'lineage'],
+      ['columns', parsed.columns == null || isColumnsView(parsed.columns)],
     ];
     const required = checks.filter(([key]) =>
       key !== 'alertTypes' && key !== 'alertThresholds' && key !== 'alertProducts'
@@ -318,7 +351,7 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       // R7-M1：归一说明是可再生物质（口径本身可重新归一），坏形状/缺失只跳过字段
       && key !== 'platformScopeNotice'
       && key !== 'financingType' && key !== 'financingTerms'
-      && key !== 'analysisMode' && key !== 'panorama'
+      && key !== 'viewMode' && key !== 'columns'
       // v10/v11 复用的 platform 键形随数据换代漂移（渠道 id 空间两度更换）：
       // 不再因它作废整包——无效时跳过该字段回落默认电渠（与 countryCode 同等
       // 宽限，可迁移的用户选择不陪葬）；v12 载荷 platform 仍在 required
@@ -339,6 +372,10 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
         if (value !== undefined) (rest as UnknownRecord)[key] = value;
       }
     }
+    // 旧分析结构载荷（2026-11-27 一轮）：analysisMode / panorama 只作迁移输入带出，
+    // 不进 rest（rest 直接 spread 进 FiltersState，旧字段必须留在状态之外）
+    if (parsed.analysisMode === 'compare' || parsed.analysisMode === 'panorama') rest.legacyAnalysisMode = parsed.analysisMode;
+    if (isLegacyPanorama(parsed.panorama)) rest.legacyPanorama = parsed.panorama;
     return rest;
   } catch {
     return null;
@@ -535,39 +572,15 @@ function scopeFallbackStable(
 // 与按构建通道 STABLE 分发的分支一并删除。
 // ------------------------------------------------------------
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
-  const scoped = applyScopeDefaultsStable(s, force);
-  // 品牌全景草稿同口径收口：不在当前 国家×产业×付费口径 有数据的产品剔除、
-  // 空品牌移除、失效基准清空（无默认主品 / 基准，不回填）
-  const panorama = sanitizePanorama(scoped.panorama ?? EMPTY_PANORAMA, scoped.countryCode, scoped.industry, scoped.financingType, scoped.financingTerms);
-  return applyMarketDataProfile(panorama === scoped.panorama ? scoped : { ...scoped, panorama });
+  // 2026-11-27 二轮：品牌全景草稿退场——选择恒为 mains（其自有按口径快照与收口
+  // 在 stable 实现内），分列视图设置（分组/共享/基准）不随口径切换重置；
+  // 基准失效的清空在 mains 写入路径统一收口（sanitizeBaseline）
+  return sanitizeBaseline(applyMarketDataProfile(applyScopeDefaultsStable(s, force)));
 }
 
 function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false, explicitTime = false): FiltersState {
   const scoped = switchScopeStable(prev, next, explicitMains);
-  return swapRangeSnapshot(prev, swapPanoramaSnapshot(prev, scoped), explicitTime);
-}
-
-// 品牌全景草稿按 国家×产业 会话快照隔离（与 mainsOf 同思路，2026-11-27）：切走前把
-// 当前草稿存该口径快照；目标口径有本会话快照 → 还原（按目标口径收口），否则沿用
-// 当前草稿里在目标口径仍有效的产品（同型号同配置有数据的留下，其余剔除、空品牌移除）。
-// 与 mains 快照同一存储级别：会话级（关页即清），不跨会话复活旧选择。
-const panoramaSnapKeyOf = (cc: string, industry: string) => `${LPL.filters}.panoramaOf.${cc}.${industry}`;
-function swapPanoramaSnapshot(prev: FiltersState, scoped: FiltersState): FiltersState {
-  let snap: BrandPanorama | null = null;
-  try {
-    // 无条件落盘（含空草稿：空 = 该口径尚未选择，回切时不该复活别的口径的选择）
-    sessionStorage.setItem(panoramaSnapKeyOf(prev.countryCode, prev.industry), JSON.stringify({ panorama: prev.panorama ?? EMPTY_PANORAMA }));
-    const raw = sessionStorage.getItem(panoramaSnapKeyOf(scoped.countryCode, scoped.industry));
-    if (raw) {
-      const parsed = JSON.parse(raw) as { panorama?: unknown };
-      if (isPanorama(parsed.panorama)) snap = parsed.panorama;
-    }
-  } catch {
-    /* 存储不可用 / 坏 JSON：跳过快照，走沿用 + 收口 */
-  }
-  const inherited = scoped.panorama ?? prev.panorama ?? EMPTY_PANORAMA;
-  const panorama = snap ?? sanitizePanorama(inherited, scoped.countryCode, scoped.industry, scoped.financingType, scoped.financingTerms);
-  return { ...scoped, panorama };
+  return swapRangeSnapshot(prev, scoped, explicitTime);
 }
 
 // 2026-11-09 用户反馈「自动时间不按逻辑来」根因②：手动范围/自动态此前是全局
@@ -665,6 +678,57 @@ function applyMarketDataProfile(state: FiltersState): FiltersState {
  * 对比区由 applyScopeDefaults 末尾 withAutoOn 按当前口径矩阵重算——刷新/重开一律
  * 默认开自动匹配；「关」只在单次界面交互内有效，不跨刷新存活。
  */
+
+/** 分列基准随 mains 收口：基准（selKey）不再指向 mains 里任何主品/对比条目即清空。
+ *  所有写 mains 的路径（setMains / setCardCompares / addCardCompares / autoMatch 开关 /
+ *  set / 迁移 / scope 收口）统一过这里——基准只认「在册的选择」，不猜用户意图。 */
+function sanitizeBaseline(s: FiltersState): FiltersState {
+  const key = s.columns?.baselineKey;
+  if (key == null) return s;
+  const present = s.mains.some((c) => (c.main != null && selKey(c.main) === key) || c.compares.some((sel) => selKey(sel) === key));
+  return present ? s : { ...s, columns: { ...s.columns, baselineKey: null } };
+}
+
+/**
+ * 旧分析结构迁移（2026-11-27 二轮「视图：对标 / 分列」；品牌全景草稿与
+ * analysisMode 退场）：持久化 / URL 读入后统一调用。
+ * - analysisMode === 'panorama' 且旧全景有选择：
+ *   mains 空 → 全景选择折成一张卡（主品 = 首个我司品牌选择、其余 = 对比、来源
+ *   manual、auto:false；无我司选择 = 无主的空对）；
+ *   mains 非空 → mains 为准（全景选择是同一批产品的另一种摆法，不重复并入）。
+ *   两路都 viewMode = 'columns'、groupBy = brand，沿用 sharedY / baselineKey
+ *   （基准不在迁移后选择中由随后的 mains 收口清空）。
+ * - analysisMode === 'compare' / 缺省 → 视图字段原样（新载荷已带则尊重）。
+ * 迁移后 legacyAnalysisMode / legacyPanorama 不再存在。
+ */
+function migrateLegacyView(base: FiltersState, legacy: { mode?: 'compare' | 'panorama'; panorama?: LegacyPanorama }): FiltersState {
+  if (legacy.mode !== 'panorama') return base;
+  const pano = legacy.panorama;
+  const sels = pano ? pano.brands.flatMap((b) => b.sels) : [];
+  const columns: ColumnsView = {
+    groupBy: 'brand',
+    sharedY: pano?.sharedY !== false,
+    baselineKey: pano?.baselineKey ?? null,
+  };
+  let mains = base.mains;
+  const noSel = !mains.some((c) => c.main != null) && !mains.some((c) => c.compares.length > 0);
+  if (sels.length > 0 && noSel) {
+    const own = sels.find((s) => brandOfModel(s.modelId) === ownBrand()) ?? null;
+    const seen = new Set<string>(own ? [selKey(own)] : []);
+    const compares: ProductSelection[] = [];
+    const compareSources: Record<string, CompareSource> = {};
+    for (const s of sels) {
+      const k = selKey(s);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      compares.push(s);
+      compareSources[k] = 'manual';
+    }
+    mains = [{ id: newCardId(), main: own, compares, auto: false, compareSources }];
+  }
+  return { ...base, mains, viewMode: 'columns', columns };
+}
+
 function loadBaseState(): FiltersState {
   let restored: FiltersState | null = null;
   let raw: string | null = null;
@@ -676,8 +740,10 @@ function loadBaseState(): FiltersState {
   const parsed = readPersistedState(raw);
   if (parsed) {
     // ≤v9 一律落默认（readPersistedState 只放行 v10/11/12）
-    const { v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, ...rest } = parsed;
+    const { v: _v, legacyOwn, legacyCompetitors, legacyV11Mains, legacyAnalysisMode, legacyPanorama, ...rest } = parsed;
     restored = { ...defaultFilters, ...rest } as FiltersState;
+    // 2026-11-27 二轮：旧「分析结构」载荷迁移到视图字段（品牌全景 → 分列视图；
+    // 先于 v10/v11 卡迁移——迁移产卡只发生在 mains 无任何选择时，次序不影响）
     // R7-M1（第七轮评审）：读档不做「多平台取一 / 店铺优先」的有损前置归一——
     // 那会先把原始完整输入裁掉（DNS+AE:noon:3P 丢 DNS、DNS+RU:ozon:3P 丢 DNS），
     // 后置的 normalizePlatformScope 只能对着残缺输入归一。原始输入原样进
@@ -706,6 +772,9 @@ function loadBaseState(): FiltersState {
     // 强制回 auto=true（对比区由随后 applyScopeDefaults 末尾的 withAutoOn 按当前
     // 口径矩阵统一重算）；「关」只在单次界面交互内有效，不跨刷新存活。
     restored.mains = restoreAutoOn(Array.isArray(restored.mains) ? restored.mains : []);
+    // 2026-11-27 二轮：旧「分析结构」载荷迁移到视图字段（品牌全景 → 分列视图）。
+    // 放在卡迁移之后：「mains 是否有选择」按迁移后的最终 mains 判定
+    restored = migrateLegacyView(restored, { mode: legacyAnalysisMode, panorama: legacyPanorama });
   }
   // 无持久化 = 首次打开：强制重算默认卡（默认视图 = 默认卡 + 匹配竞品）。
   // 只在「确有持久化载荷」时才尊重空 mains（用户显式清空态，刷新不回填）——
@@ -755,12 +824,12 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
       ...restored,
       ...url.filters,
       mains: merged,
-      // 链接显式声明了产品对标的主分析结构 = 以产品对标呈现（品牌全景草稿原样保留）
-      analysisMode: 'compare',
     };
   } else if (Object.keys(url.filters).length > 0) {
     restored = { ...restored, ...url.filters };
   }
+  // 2026-11-27 二轮：品牌全景从未进过 URL（视图无 legacy URL 参数可映射；
+  // view / by 键由 readUrlOverrides 读入 url.filters）
   const withDefaults = applyScopeDefaults(restored, false);
   // 2026-11-16 审视修复：URL 直链跨口径（?c=/ind= 目标口径 ≠ 持久化口径）此前
   // 只走 applyScopeDefaults，绕过 switchScope 的范围快照交换——持久化口径的手动
@@ -783,7 +852,7 @@ interface FiltersCtx {
 
 const Ctx = createContext<FiltersCtx>({
   state: defaultFilters,
-  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, addCardCompares: () => {}, autoMatchCard: () => {}, autoMatchAll: () => {}, setAnalysisMode: () => {}, setPanorama: () => {}, setSelectionPlatform: () => {}, setGranularity: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
+  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, addCardCompares: () => {}, autoMatchCard: () => {}, autoMatchAll: () => {}, setViewMode: () => {}, setColumns: () => {}, setSelectionPlatform: () => {}, setGranularity: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
 });
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
@@ -835,6 +904,10 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       re: state.rangeEnd || null,
       pt: ptCode,
       agg: state.agg,
+      // 2026-11-27 二轮「视图：对标 / 分列」：视图与分列依据入链——view 缺省不写
+      //（= 对标），by 缺省不写（= 品牌），链接保持干净
+      view: state.viewMode === 'compare' ? null : state.viewMode,
+      by: state.viewMode !== 'compare' && state.columns.groupBy !== 'brand' ? state.columns.groupBy : null,
     });
   }, [
     state.countryCode,
@@ -847,6 +920,8 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
     state.rangeEnd,
     state.priceTypes,
     state.agg,
+    state.viewMode,
+    state.columns,
   ]);
 
   // §13：对标配置保存（CONFIG_CHANGED_EVENT，入口 = 总览「＋添加竞品」浮窗 / 配置页）。
@@ -889,13 +964,8 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           // 非 mains 数组的坏值整体忽略（防御 Agent/undo 之外的 JS 调用方）
           if (clean.mains !== undefined && !Array.isArray(clean.mains)) delete clean.mains;
           let next: FiltersState = { ...s, ...clean };
-          // 2026-11-27：补丁显式携带 mains（Agent 结果卡回看 / 页头快搜 / 预警与总览
-          // 下钻等「产品对标」选择写入）= 明确要看产品对标结构——当前若停在品牌全景
-          // 则切回产品对标，屏上所见即补丁所写（两套草稿各自保留，不丢）。
-          // 同补丁显式给了 analysisMode 时以补丁为准。
-          if (clean.mains !== undefined && clean.analysisMode === undefined && next.analysisMode === 'panorama') {
-            next = { ...next, analysisMode: 'compare' };
-          }
+          // 2026-11-27 二轮：「补丁带 mains 回落产品对标」规则随品牌全景退场——
+          // 视图共享同一草稿（mains），写选择不再隐含换视图；视图由用户/补丁显式切换
           if (clean.countryCode != null && clean.countryCode !== s.countryCode) {
             const profile = marketDataProfileOf(next.countryCode);
             const publishedRange = profile.granularityLocked
@@ -955,7 +1025,7 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
             // R4-S4：同口径显式 mains 规范到当前口径——逐 SKU 过滤 / 同型号首个
             // 合法配置映射 / selKey 去重 / 对比区排重主品；显式空 = 清空态原样落地；
             // 型号在当前国全缺席 → 默认安全回落（与跨国显式缺型号一致）
-            if (next.mains.length === 0) return next;
+            if (next.mains.length === 0) return sanitizeBaseline(next);
             const normalized = remapMainsForScope(next.mains, s.countryCode, s.industry);
             if (normalized) return applyScopeDefaults({ ...next, mains: normalized }, false);
             return applyScopeDefaults(next, true);
@@ -972,42 +1042,46 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
 
       /** 主分析卡结构变化（增删卡/换主品/换序）：照原样写入 */
       setMains: (list) =>
-        setState((s) => ({ ...s, mains: list })),
+        setState((s) => sanitizeBaseline({ ...s, mains: list })),
 
       /** 手动改某卡对比区（增删 / 调色 / 换条目 / 换序）。2026-11-27 起不再关闭
        *  「自动匹配竞品」：与矩阵产出按新旧键集对账（withCompares）——新增项登记为
        *  手动补充、移除的矩阵项记入 excluded、保留项来源不变。 */
       setCardCompares: (cardId, compares) =>
-        setState((s) => ({
+        setState((s) => sanitizeBaseline({
           ...s,
           mains: s.mains.map((c) => (c.id === cardId ? withCompares(c, compares) : c)),
         })),
 
       /** 加入对比（用户补充：手动 / 同档推荐）：与矩阵产出并存为并集、去重、不改开关 */
       addCardCompares: (cardId, sels, source) =>
-        setState((s) => ({
+        setState((s) => sanitizeBaseline({
           ...s,
           mains: s.mains.map((c) => (c.id === cardId ? withComparesAdded(c, sels, source) : c)),
         })),
 
-      /** 切换分析结构：只换「看哪一套草稿」，产品对标与品牌全景两套选择各自保留 */
-      setAnalysisMode: (mode) =>
-        setState((s) => (s.analysisMode === mode ? s : { ...s, analysisMode: mode })),
+      /** 切换视图（对标 / 分列）：只换怎么摆，选择草稿（mains）不动 */
+      setViewMode: (mode) =>
+        setState((s) => (s.viewMode === mode ? s : { ...s, viewMode: mode })),
 
-      /** 写入品牌全景草稿（选择 / Y 轴共享 / 临时基准），产品对标草稿（mains）不动 */
-      setPanorama: (next) =>
-        setState((s) => ({ ...s, panorama: next })),
+      /** 分列视图设置（分组依据 / Y 轴共享 / 临时基准，部分补丁）。显式写
+       *  baselineKey 时同样收口——基准须指向在册选择，否则不落 */
+      setColumns: (patch) =>
+        setState((s) => {
+          const next = { ...s, columns: { ...s.columns, ...patch } };
+          return patch.baselineKey !== undefined ? sanitizeBaseline(next) : next;
+        }),
 
       /** 单卡「自动匹配竞品」开关：开 = 按矩阵重算并保持驱动；关 = 保留转手动 */
       autoMatchCard: (cardId) =>
-        setState((s) => ({
+        setState((s) => sanitizeBaseline({
           ...s,
           mains: s.mains.map((c) => (c.id === cardId ? toggleCardAuto(c) : c)),
         })),
 
       /** 全局「全部自动匹配」开关：全部华为主品卡都在开 → 全部关；否则全部开 */
       autoMatchAll: () =>
-        setState((s) => ({ ...s, mains: toggleAllAuto(s.mains) })),
+        setState((s) => sanitizeBaseline({ ...s, mains: toggleAllAuto(s.mains) })),
 
       /** 单个产品的取价口径（第一百六十轮）：selKey 命中的主品/对比条目全部改写
        *  （同组多处出现保持一致）；platform = null 恢复自动（日常价最低渠道） */

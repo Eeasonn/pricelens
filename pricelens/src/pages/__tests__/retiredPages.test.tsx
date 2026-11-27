@@ -86,7 +86,13 @@ describe('下线三页：入口不存在', () => {
     expect(buttons).toContain('配置');
     expect(buttons).toContain('预警');
     expect(buttons).toContain('价格走势');
-    expect(buttons).toContain('量价走势');
+    expect(buttons).toContain('量价走势施工中'); // 量价走势 2026-11-27 标「施工中」：文字 + 尾随小药丸
+    // 施工中页签：仍可点（非禁用）、可访问名带「（施工中）」、中性小药丸在位
+    const volumeTab = Array.from(document.querySelectorAll('button.lpl-chart-tab')).find((b) => (b.textContent ?? '').includes('量价走势'));
+    expect(volumeTab).toBeDefined();
+    expect(volumeTab!.getAttribute('aria-label')).toBe('量价走势（施工中）');
+    expect(volumeTab!.getAttribute('aria-disabled')).toBeNull();
+    expect(volumeTab!.getAttribute('title')).toBe('讨论稿：竞品销量与成本口径未定，暂不作为正式结论');
   });
 });
 
@@ -121,7 +127,16 @@ describe('下线三页：老分享链接 ?p= 静默落回价格走势（dashboar
     expectNoErrorBoundary();
     expect(document.title).toContain('量价走势');
     const currents = Array.from(document.querySelectorAll('[aria-current="page"]')).map((el) => (el.textContent ?? '').trim());
-    expect(currents).toContain('量价走势');
+    expect(currents).toContain('量价走势施工中');
+    // 激活态 aria-current 不丢（施工中仅视觉降级 ≠ 禁用）
+    const activeTab = Array.from(document.querySelectorAll('.lpl-chart-tab[aria-current="page"]')).find((el) => (el.textContent ?? '').includes('量价走势'));
+    expect(activeTab).toBeDefined();
+    // 常驻施工中说明条（data-testid + 口径文案）
+    const note = document.querySelector('[data-testid="volume-wip-note"]');
+    expect(note).not.toBeNull();
+    expect(note!.getAttribute('role')).toBe('note');
+    expect(note!.textContent).toContain('施工中 · 讨论稿');
+    expect(note!.textContent).toContain('不作为正式结论');
   });
 });
 

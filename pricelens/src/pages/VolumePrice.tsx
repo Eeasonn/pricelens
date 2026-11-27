@@ -1427,17 +1427,15 @@ export default function VolumePrice() {
         }}
       >
         <ChartContentBar />
-        {/* 2026-11-27（两种分析结构）：品牌全景只在价格走势呈现——分析结构停在「品牌全景」
-            时量价走势如实说明自己按「产品对标」选择取数，不让两套草稿的选择看起来互相串改 */}
-        {state.analysisMode === 'panorama' && (
-          <div
-            role="note"
-            data-testid="volume-panorama-note"
-            style={{ margin: `${space.sm}px ${space.lg}px 0`, padding: '6px 12px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, fontSize: 12, color: color.body }}
-          >
-            当前分析结构为「品牌全景」：量价走势按「产品对标」的选择展示；品牌全景的价格分图在「价格走势」页查看。
-          </div>
-        )}
+        {/* 施工中常驻说明（2026-11-27）：与页签「施工中」小药丸同一决策——页面可点可看，
+            但口径未定稿，内容不作为正式结论 */}
+        <div
+          role="note"
+          data-testid="volume-wip-note"
+          style={{ margin: `${space.sm}px ${space.lg}px 0`, padding: '6px 12px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, background: color.canvasSoft, fontSize: 12, color: color.body }}
+        >
+          施工中 · 讨论稿：量价走势用于讨论竞品销量与成本的对比方式，口径尚未确定，页面内容不作为正式结论。
+        </div>
         <div style={{ padding: `${space.sm}px ${space.lg}px ${space.md}px` }}>
             {/* 已隐藏托盘（2026-11-02 反馈④）：置顶于齿轮行上方——组视图仍走「明细卡
                 药丸点击隐藏 → 暂存条恢复」的焦点承接链路；主品视图（2026-11-03 改版）

@@ -1,5 +1,6 @@
 // ============================================================
-// category1 快切状态契约：主品 / 对比品 / 品牌全景分别更新。
+// category1 快切状态契约：主品 / 对比品更新；分列视图基准键随切换改写
+//（2026-11-27 二轮：品牌全景草稿退场，选择恒为 mains）。
 // ============================================================
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
@@ -40,15 +41,20 @@ describe('applyCategory1Selection（category1 快切状态）', () => {
     expect(next.mains[0].excluded).toContain(selKey(compareSel));
   });
 
-  it('品牌全景：只换所属品牌目标项，临时基准同步到新配置键', () => {
-    const next = applyCategory1Selection({
+  it('分列视图：被切换的选择是临时基准时，基准键同步到新配置键；非基准不动基准', () => {
+    const base = {
       ...defaultFilters,
-      analysisMode: 'panorama',
-      panorama: { brands: [{ brand: 'APPLE', sels: [compareSel] }], sharedY: true, baselineKey: selKey(compareSel) },
-    }, compareSel, { ...compareSel, romram: '12+512 GB' });
-    expect(next.panorama.brands[0].sels[0].romram).toBe('12+512 GB');
-    expect(next.panorama.baselineKey).toBe(selKey(next.panorama.brands[0].sels[0]));
-    expect(next.panorama.sharedY).toBe(true);
+      viewMode: 'columns' as const,
+      columns: { groupBy: 'brand' as const, sharedY: true, baselineKey: selKey(compareSel) },
+    };
+    const next = applyCategory1Selection({ ...base, mains: [card] }, compareSel, { ...compareSel, romram: '12+512 GB' });
+    const switched = next.mains[0].compares[0];
+    expect(switched.romram).toBe('12+512 GB');
+    expect(next.columns.baselineKey).toBe(selKey(switched));
+    expect(next.columns.sharedY).toBe(true);
+    // 切的不是基准（主品）→ 基准键原样
+    const next2 = applyCategory1Selection({ ...base, mains: [card] }, mainSel, { ...mainSel, romram: '12+512 GB' });
+    expect(next2.columns.baselineKey).toBe(selKey(compareSel));
   });
 });
 

@@ -12,6 +12,13 @@ export interface SearchProduct {
   configurations: Array<{ skuId: string; romram: string; color?: string }>;
 }
 
+/** 快速筛选预览（parseFilterIntent 结果的展示形态）：确认前不写状态 */
+export interface SearchFilterPreview {
+  changes: Array<{ label: string; before: string; after: string }>;
+  notes: string[];
+  isQuestion: boolean;
+}
+
 interface Props {
   rootRef: RefObject<HTMLDivElement>;
   inputRef: RefObject<HTMLInputElement>;
@@ -39,6 +46,38 @@ interface Props {
   onSuggestion: (index: number) => void;
   onSubmit: () => void;
   onOpenAgent: () => void;
+  /** 有值 = 在下拉顶部显示筛选预览（两种模式都显示） */
+  preview?: SearchFilterPreview | null;
+  onApplyPreview?: () => void;
+  /** 把当前输入交给 Agent 对话深度分析 */
+  onPreviewToAgent?: () => void;
+}
+
+function FilterPreviewBlock({ preview, running, onApply, onToAgent }: {
+  preview: SearchFilterPreview; running: boolean; onApply?: () => void; onToAgent?: () => void;
+}) {
+  return <section className="lpl-quick-search-preview" role="region" aria-label="筛选预览">
+    <p className="lpl-quick-search-preview-title">筛选预览</p>
+    <dl className="lpl-quick-search-preview-rows">
+      {preview.changes.map((change) => <div key={change.label}>
+        <dt>{change.label}</dt>
+        <dd title={`${change.before} → ${change.after}`}>
+          <span className="lpl-quick-search-preview-before">{change.before}</span>
+          <span aria-hidden> → </span><span className="lpl-quick-search-sr">改为</span>
+          <span className="lpl-quick-search-preview-after">{change.after}</span>
+        </dd>
+      </div>)}
+    </dl>
+    {preview.notes.length > 0 && <ul className="lpl-quick-search-preview-notes" aria-label="口径说明">
+      {preview.notes.map((note) => <li key={note}>{note}</li>)}
+    </ul>}
+    <div className="lpl-quick-search-preview-actions">
+      <button type="button" className="lpl-quick-search-preview-apply" onClick={onApply} aria-label="应用筛选（Enter）">应用 <kbd aria-hidden>⏎</kbd></button>
+      {preview.isQuestion
+        ? <button type="button" className="lpl-quick-search-preview-agent" disabled={running} onClick={onToAgent}>转到对话深度分析</button>
+        : <button type="button" className="lpl-quick-search-preview-link" disabled={running} onClick={onToAgent}>在对话中分析</button>}
+    </div>
+  </section>;
 }
 
 const tokens = {
@@ -116,6 +155,8 @@ export function PriceSearchSurface(props: Props) {
         <span>当前国家 · {props.countryCode}</span>
       </div>
       <div ref={resultsRef} data-search-results className="lpl-quick-search-scroll">
+        {props.preview && <FilterPreviewBlock preview={props.preview} running={props.running}
+          onApply={props.onApplyPreview} onToAgent={props.onPreviewToAgent} />}
         {mode === 'products' ? <>
           <p className="lpl-quick-search-help">{products.length ? (trimmed ? '选择产品，切换看板主产品' : '输入型号、品牌或系列，快速定位产品') : (trimmed ? '暂无本地产品命中' : '当前国家与产业暂无可选产品')}</p>
           {products.length > 0 && <ul className="lpl-quick-search-products" aria-label="产品命中结果">
@@ -161,7 +202,9 @@ export function PriceSearchSurface(props: Props) {
           {props.failure && <p role="alert" className="lpl-quick-search-error">{props.failure}</p>}
         </section>}
       </div>
-      <div className="lpl-quick-search-footer">{mode === 'products' ? '↑ ↓ 选择 · Enter 切换产品' : 'Enter 开始分析'}<span>Esc 关闭</span></div>
+      <div className="lpl-quick-search-footer">{props.preview
+        ? (mode === 'products' && products.length ? 'Enter 应用筛选 · ↑ ↓ 选择产品' : 'Enter 应用筛选')
+        : mode === 'products' ? '↑ ↓ 选择 · Enter 切换产品' : 'Enter 开始分析'}<span>Esc 关闭</span></div>
     </div>}
   </div>;
 }

@@ -257,6 +257,11 @@ function formatPatchValue(value: unknown, key?: keyof FilterPatch): string {
   }
   if (key === 'industry') return INDUSTRY_LABELS[value as FiltersState['industry']] ?? String(value);
   if (key === 'agg') return value === 'avg' ? '平均价' : String(value);
+  if (key === 'viewMode') return ({ compare: '对标', columns: '分列', lineage: '代际' } as Record<string, string>)[String(value)] ?? String(value);
+  if (key === 'columns' && typeof value === 'object') {
+    const groupBy = (value as { groupBy?: string }).groupBy ?? '';
+    return ({ brand: '品牌', series: '系列', tier: '档位' } as Record<string, string>)[groupBy] ?? groupBy;
+  }
   if (key === 'platform' && typeof value === 'object') {
     const selection = value as NonNullable<FiltersState['platform']>;
     const shopLabel = (shopId: string): string => dimChannel.find((channel) => channel.channel_id === shopId)?.display_name ?? shopId;
@@ -297,7 +302,9 @@ function filterLabelOf(key: keyof FilterPatch): string {
                 : key === 'granularity' ? '时间粒度'
                   : key === 'platform' ? '平台 / 店铺'
                     : key === 'industry' ? '产业'
-                      : key === 'agg' ? '汇总方式' : key;
+                      : key === 'agg' ? '汇总方式'
+                        : key === 'viewMode' ? '视图'
+                          : key === 'columns' ? '分列依据' : key;
 }
 
 function canonicalPlatform(value: ProductSelection['platform']): unknown {

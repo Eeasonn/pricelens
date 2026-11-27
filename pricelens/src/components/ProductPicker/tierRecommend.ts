@@ -1,13 +1,14 @@
 // ============================================================
-// 「同档位推荐」纯模型（2026-11-27）：按主品配置在当前国家的分国档位
-// （tier_by_country，缺省回落型号级 tier_code）取同档、同国家、同产业的全部
-// 「型号 × 配置」候选，按品牌分组，并给出可追溯的现价 / 价差 / 数据覆盖 / 来源状态。
+// 「同档位推荐」纯模型（2026-11-27 二轮改版 · 现价落档口径）：候选 = 与主品
+// 配置按现价落入同一档位的「型号 × 配置」组（同国家、同产业、当前国家有数据），
+// 按品牌分组，并给出可追溯的现价 / 价差 / 数据覆盖 / 来源状态。
 // 口径（全部确定性、可解释——不做 AI 打分、不虚构数据）：
-// · 候选 = configsInTier（同产业同档位、当前国家有数据）去掉主品自身组与已在
-//   对比区的组；
-// · 当前参考价 = 该配置默认（最低价）颜色 SKU 在当前国家默认电渠口径下「最新有价
-//   周 / 期」的折后价（与选择产品树行尾「现价」同源：tree.latestPrices），币种随
-//   筛选；默认电渠无价 = null，界面显示「—」并标「暂无价格」；
+// · 主品档位 = 主品现价落档（dataModel/tierPrice.currentTierOfSelection）——
+//   不再是 tier_by_country 声明档：现价 = 最新有价期全渠道价格点剔除
+//   低于均值 30% 的异常低价后取最低（USD 口径）；主品无现价 = 无法推荐；
+// · 候选 = 同国同产业有数据的全部组里现价落档与主品同档者（批量裁定
+//   currentPricesByGroup，事实表只扫一遍）；去掉主品自身组与已在对比区的组；
+// · 当前参考价 = 该组现价（同一 tierPrice 口径），币种随筛选；
 // · 相对主品价差 = (候选现价 − 主品现价) / 主品现价；任一缺失 = null；
 // · 数据覆盖 = 当前国家该配置有价的周数 / 全量周数（ZA = 有价月数 / 已发布月数）；
 //   任意渠道有价即计入——只表达「有没有采到」，不代表取价口径；
@@ -16,29 +17,16 @@
 //   「每品牌选 1 款」即取组内首位，规则在弹窗内明示。
 // 无副作用、无 React；事实表在数据包置换时原位替换，索引一律按调用现算（不缓存）。
 // ============================================================
-import { dimProduct, dimTime, factPriceMonthly, factPriceWeekly } from '../../data';
+import { dimTime, factPriceMonthly, factPriceWeekly } from '../../data';
 import type { Industry } from '../../dataModel/types';
 import type { FinancingTerm, FinancingType } from '../../dataModel/marketProfile';
-import { tierOf } from '../../dataModel/aggregate';
 import type { ProductSelection } from '../../state/filtersTypes';
 import { selKey } from '../../state/mainSelection';
-import { configsInTier } from '../../state/tierSelection';
 import { brandOfModel, defaultColorSkuIds, modelNameOf, type RomramNode } from '../ProductCascader/tree';
+import type { CurrentPrice, GroupPriceEntry } from '../../dataModel/tierPrice';
 
-const norm = (s: string): string => s.replace(/\s+/g, '');
-
-/** 主品配置在当前国家的档位代码；型号 / 配置不在维表或维表无档位 = null */
-export function tierOfSelection(sel: ProductSelection, countryCode: string): string | null {
-  const row = dimProduct.find(
-    (p) => p.model_id === sel.modelId && p.countries.includes(countryCode) && norm(p.romram) === norm(sel.romram),
-  ) ?? dimProduct.find((p) => p.model_id === sel.modelId && norm(p.romram) === norm(sel.romram));
-  if (!row) return null;
-  const tier = tierOf(row, countryCode);
-  return tier || null;
-}
-
-/** 配置当前参考价（显示币种）：默认最低价色 SKU 的最新价；默认色无价时回落该配置
- *  有价颜色里的最低价；全无价 = null */
+/** 配置节点默认（最低价）颜色的最新折后价（币种随筛选）——树行尾「档位 · 现价」
+ *  与 category1 快速切换的通用读数（树口径，与现价落档口径无关） */
 export function referencePriceOf(node: RomramNode | undefined, currency: 'usd' | 'local'): number | null {
   if (!node) return null;
   const valueOf = (skuId: string): number | null => {
@@ -93,11 +81,17 @@ export interface TierCandidate {
   brand: string;
   modelName: string;
   romram: string;
-  /** 当前参考价（显示币种）；null = 默认电渠无价 */
-  price: number | null;
-  coverage: CoverageInfo;
+  /** 现价（USD，tierPrice 口径）；null = 该组最新期无价格点 */
+  usd: number | null;
+  /** 现价（本币，同一行）；null 同上 */
+  local: number | null;
+  /** 取价期（周 id / ZA 月 id）；无价 = null */
+  period: string | null;
+  /** 被剔除的异常低价点数（0 = 无剔除） */
+  droppedCount: number;
   /** 相对主品价差（小数；正 = 比主品贵）；任一现价缺失 = null */
   diffPct: number | null;
+  coverage: CoverageInfo;
 }
 
 export interface TierCandidateGroup {
@@ -107,17 +101,22 @@ export interface TierCandidateGroup {
 
 export interface TierRecommendInput {
   industry: Industry;
-  tier: string;
+  /** 主品现价落档（band code）；null = 主品无现价、不出候选 */
+  band: string;
   countryCode: string;
-  currency: 'usd' | 'local';
   financingType: FinancingType | null;
   financingTerms: FinancingTerm[];
-  /** 主品现价（同 referencePriceOf 口径）；null = 无法算价差 */
-  mainPrice: number | null;
+  /** 主品现价 USD（同 currentTierOfSelection 口径）；null = 无法算价差 */
+  mainUsd: number | null;
   /** 主品自身组 + 已在对比区的组（selKey）——不进候选 */
   excludeKeys: ReadonlySet<string>;
-  /** 配置节点索引（useTreeData().romramByKey） */
-  romramByKey: ReadonlyMap<string, RomramNode>;
+  /** 批量现价裁定（currentPricesByGroup 结果，调用方 useMemo 一次） */
+  byGroup: ReadonlyMap<string, GroupPriceEntry>;
+  /** 该国有数据的组键集（productHasDataInCountry 口径，financing-aware，调用方先算）。
+   *  键可用 dimProduct 原值或归一键——内部统一归一后比对（2026-11-28 键归一修复） */
+  dataKeys: ReadonlySet<string>;
+  /** 组键 → 该组在当前国家覆盖的全部颜色 SKU（覆盖统计用） */
+  groupSkus: ReadonlyMap<string, readonly string[]>;
   /** 品牌展示顺序（选择产品树的品牌序：我司置顶 → 矩阵列序 → 型号数） */
   brandOrder: readonly string[];
 }
@@ -129,25 +128,36 @@ const byCloseness = (a: TierCandidate, b: TierCandidate): number => {
   return da - db || a.modelName.localeCompare(b.modelName, undefined, { numeric: true }) || a.romram.localeCompare(b.romram, undefined, { numeric: true });
 };
 
-/** 构建同档位候选（按品牌分组；组序 = brandOrder，未登记品牌按字母序殿后） */
+/** 构建同档候选（按品牌分组；组序 = brandOrder，未登记品牌按字母序殿后）：
+ *  候选 = byGroup 里现价落档 == 主品档位、且该国有数据（dataKeys）的组 */
 export function buildTierCandidates(input: TierRecommendInput): TierCandidateGroup[] {
-  const configs = configsInTier(input.industry, input.tier, input.countryCode, false, input.financingType, input.financingTerms);
   const byBrand = new Map<string, TierCandidate[]>();
-  for (const sel of configs) {
-    const key = selKey(sel);
-    if (input.excludeKeys.has(key)) continue;
-    const node = input.romramByKey.get(`${sel.modelId}|${sel.romram}`);
-    const price = referencePriceOf(node, input.currency);
-    const brand = brandOfModel(sel.modelId);
+  // 键归一（2026-11-28）：byGroup 键 = groupKeyOf（romram 空白剥离）；dataKeys/groupSkus
+  // 由调用方按 dimProduct 原值键构建——查询侧统一归一后再查，两侧键口径解耦
+  const normKey = (k: string): string => {
+    const sep = k.indexOf('|');
+    return `${k.slice(0, sep)}|${k.slice(sep + 1).replace(/\s+/g, '')}`;
+  };
+  const dataKeysNorm = new Set([...input.dataKeys].map(normKey));
+  const groupSkusNorm = new Map<string, readonly string[]>();
+  for (const [k, v] of input.groupSkus) groupSkusNorm.set(normKey(k), v);
+  for (const [key, entry] of input.byGroup) {
+    if (entry.tier !== input.band) continue;
+    if (!dataKeysNorm.has(key)) continue;
+    if (input.excludeKeys.has(selKey(entry.sel))) continue;
+    const brand = brandOfModel(entry.sel.modelId);
     const cand: TierCandidate = {
-      sel,
+      sel: entry.sel,
       key,
       brand,
-      modelName: modelNameOf(sel.modelId),
-      romram: sel.romram,
-      price,
-      coverage: coverageOf(node ? node.colors.map((c) => c.skuId) : sel.skuIds, input.countryCode),
-      diffPct: price != null && input.mainPrice != null && input.mainPrice > 0 ? (price - input.mainPrice) / input.mainPrice : null,
+      modelName: modelNameOf(entry.sel.modelId),
+      romram: entry.sel.romram,
+      usd: entry.price.usd,
+      local: entry.price.local,
+      period: entry.price.period,
+      droppedCount: entry.price.dropped.length,
+      diffPct: entry.price.usd != null && input.mainUsd != null && input.mainUsd > 0 ? (entry.price.usd - input.mainUsd) / input.mainUsd : null,
+      coverage: coverageOf(groupSkusNorm.get(key) ?? [], input.countryCode),
     };
     const list = byBrand.get(brand);
     if (list) list.push(cand);
@@ -186,3 +196,11 @@ export function latestText(c: CoverageInfo): string {
     ? `${m[1]}W${Number(m[2])}`
     : `${m[1]}-${m[2]}`;
 }
+
+/** 期号文案（取价期：周 id → 2026W45；月 id → 2026-10）；与 latestText 同规则 */
+export function periodText(period: string | null): string {
+  return latestText({ covered: 0, total: 1, latest: period });
+}
+
+// CurrentPrice 类型透传（弹窗 tooltip 用，无需直接引 dataModel）
+export type { CurrentPrice };

@@ -43,20 +43,9 @@ export function applyCategory1Selection(
   next: ProductSelection,
 ): FiltersState {
   const nextSel = next.platform === undefined && target.platform !== undefined ? { ...next, platform: target.platform } : next;
-  if ((state.analysisMode ?? 'compare') === 'panorama') {
-    const oldKey = selKey(target);
-    return {
-      ...state,
-      panorama: {
-        ...state.panorama,
-        brands: state.panorama.brands.map((brand) => ({
-          ...brand,
-          sels: brand.sels.map((sel) => (selKey(sel) === oldKey ? nextSel : sel)),
-        })),
-        baselineKey: state.panorama.baselineKey === oldKey ? selKey(nextSel) : state.panorama.baselineKey,
-      },
-    };
-  }
+  // 2026-11-27 二轮：品牌全景结构退场——选择草稿恒为 mains，切换配置恒写 mains；
+  // 被切换的选择若是分列视图的临时基准，基准键随新配置改写（仍在册，不清空）
+  const oldKey = selKey(target);
   let changed = false;
   const mains = state.mains.map((card) => {
     if (card.main && selKey(card.main) === selKey(target)) {
@@ -67,7 +56,11 @@ export function applyCategory1Selection(
     changed = true;
     return withCompares(card, card.compares.map((sel) => (selKey(sel) === selKey(target) ? nextSel : sel)));
   });
-  return changed ? { ...state, mains } : state;
+  if (!changed) return state;
+  const columns = state.columns.baselineKey === oldKey
+    ? { ...state.columns, baselineKey: selKey(nextSel) }
+    : state.columns;
+  return { ...state, mains, columns };
 }
 
 function selectionForSeries(state: FiltersState, series: Series): ProductSelection | null {
@@ -75,10 +68,6 @@ function selectionForSeries(state: FiltersState, series: Series): ProductSelecti
     if (card.main && seriesKeyMatches(series.key, seriesKeyOf(card.main))) return card.main;
     const compare = card.compares.find((sel) => seriesKeyMatches(series.key, seriesKeyOf(sel)));
     if (compare) return compare;
-  }
-  for (const brand of state.panorama.brands) {
-    const sel = brand.sels.find((item) => seriesKeyMatches(series.key, seriesKeyOf(item)));
-    if (sel) return sel;
   }
   return null;
 }
@@ -153,8 +142,9 @@ export default function Category1QuickSwitch({ series, nodes }: { series: Series
                 if (!node) return;
                 const next = remapSelection(target, oldNode, node);
                 const nextState = applyCategory1Selection(state, target, next);
-                if ((state.analysisMode ?? 'compare') === 'panorama') actions.setPanorama(nextState.panorama);
-                else actions.setMains(nextState.mains);
+                // 原子写入（actions.set 同补丁携带 mains + columns）：分两次写会让
+                // setMains 的基准收口先把「暂时失指」的基准清掉，再写 columns 已来不及
+                actions.set({ mains: nextState.mains, columns: nextState.columns });
                 setOpen(false);
                 triggerRef.current?.focus();
               }}

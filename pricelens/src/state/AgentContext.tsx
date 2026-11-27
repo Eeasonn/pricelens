@@ -22,6 +22,7 @@ import {
   type FilterPatch,
 } from '../agent-stable';
 import type { FiltersState } from './filtersTypes';
+import { focusHeaderSearch } from './headerSearchFocus';
 import { materializeAlertRecords, alertAgentContextOf } from '../dataModel/alertLifecycle';
 
 export interface AgentMessage {
@@ -435,7 +436,11 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!event.defaultPrevented && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openAgent('dock'); }
+      if (!event.defaultPrevented && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !event.isComposing) {
+        event.preventDefault();
+        // 页头搜索（价格走势页）是快速筛选入口：已挂载就聚焦它，否则打开 Agent 面板
+        if (!focusHeaderSearch()) openAgent('dock');
+      }
       if (event.key === 'Escape' && open) setOpen(false);
     };
     window.addEventListener('keydown', onKey);

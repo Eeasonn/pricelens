@@ -193,7 +193,7 @@ export interface AgentContextSnapshot {
   ruleVersion?: string;
 }
 
-export type FilterPatch = Partial<Pick<FiltersState, 'countryCode' | 'industry' | 'mains' | 'platform' | 'granularity' | 'adaptive' | 'rangeStart' | 'rangeEnd' | 'currency' | 'priceTypes' | 'agg'>>;
+export type FilterPatch = Partial<Pick<FiltersState, 'countryCode' | 'industry' | 'mains' | 'platform' | 'granularity' | 'adaptive' | 'rangeStart' | 'rangeEnd' | 'currency' | 'priceTypes' | 'agg' | 'viewMode' | 'columns'>>;
 
 export interface AgentCitation {
   id: string;
@@ -580,10 +580,15 @@ export interface FilterValidationResult {
 
 export function validateFilterPatch(patch: unknown): FilterValidationResult {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return { valid: false, errors: ['筛选预览格式无效'] };
-  const allowed = new Set(['countryCode', 'industry', 'mains', 'platform', 'granularity', 'adaptive', 'rangeStart', 'rangeEnd', 'currency', 'priceTypes', 'agg']);
+  const allowed = new Set(['countryCode', 'industry', 'mains', 'platform', 'granularity', 'adaptive', 'rangeStart', 'rangeEnd', 'currency', 'priceTypes', 'agg', 'viewMode', 'columns']);
   const errors: string[] = [];
   for (const key of Object.keys(patch)) if (!allowed.has(key)) errors.push(`不允许修改字段：${key}`);
   const value = patch as Record<string, unknown>;
+  if (value.viewMode !== undefined && !['compare', 'columns', 'lineage'].includes(String(value.viewMode))) errors.push('视图不受支持');
+  if (value.columns !== undefined) {
+    const columns = value.columns as Record<string, unknown> | null;
+    if (!columns || typeof columns !== 'object' || Array.isArray(columns) || !['brand', 'series', 'tier'].includes(String(columns.groupBy)) || typeof columns.sharedY !== 'boolean') errors.push('分列设置格式无效');
+  }
   if (value.currency !== undefined && value.currency !== 'usd' && value.currency !== 'local') errors.push('币种不受支持');
   if (value.granularity !== undefined && !['week', 'month', 'quarter'].includes(String(value.granularity))) errors.push('时间粒度不受支持');
   if (value.agg !== undefined && value.agg !== 'avg' && value.agg !== 'min') errors.push('汇总方式不受支持');

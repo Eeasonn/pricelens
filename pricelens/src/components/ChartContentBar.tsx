@@ -8,18 +8,22 @@
 // （稳定版此前即不渲染这两枚页签，DOM 不变）。
 import { usePage } from '../state/PageContext';
 import { useChartContent } from '../state/chartContent';
-import { color, space } from '../theme/tokens';
+import { color, radius, space } from '../theme/tokens';
 
-/** 导航页签：文字 + 墨色下划线表达当前项（aria-current，不依赖颜色单一表达）。 */
+/** 导航页签：文字 + 墨色下划线表达当前项（aria-current，不依赖颜色单一表达）。
+ *  wip（2026-11-27 施工中标记）：文字降为弱灰、尾随「施工中」中性小药丸，仍可点击
+ *  （仅视觉降级 ≠ 禁用）；激活态文字回墨色、下划线照常；可访问名带「（施工中）」。 */
 function Tab({
   active,
   disabled,
+  wip,
   onClick,
   children,
   title,
 }: {
   active?: boolean;
   disabled?: boolean;
+  wip?: boolean;
   onClick?: () => void;
   children: string;
   title?: string;
@@ -29,6 +33,7 @@ function Tab({
       type="button"
       aria-current={active && !disabled ? 'page' : undefined}
       aria-disabled={disabled || undefined}
+      aria-label={wip ? `${children}（施工中）` : undefined}
       title={title}
       onClick={disabled ? undefined : onClick}
       className="lpl-chart-tab"
@@ -39,7 +44,7 @@ function Tab({
         border: 'none',
         borderBottom: `2px solid ${active && !disabled ? color.ink : 'transparent'}`,
         background: 'transparent',
-        color: disabled ? color.hairlineStrong : active ? color.ink : color.body,
+        color: disabled ? color.hairlineStrong : wip && !active ? color.mute : active ? color.ink : color.body,
         font: 'inherit',
         fontSize: 13,
         fontWeight: active && !disabled ? 600 : 400,
@@ -49,6 +54,25 @@ function Tab({
       }}
     >
       {children}
+      {wip && (
+        <span
+          aria-hidden
+          style={{
+            marginLeft: 6,
+            padding: '1px 6px',
+            border: `1px solid ${color.hairlineStrong}`,
+            borderRadius: radius.pill,
+            background: color.canvasSoft2,
+            color: color.mute,
+            fontSize: 11,
+            fontWeight: 400,
+            lineHeight: '14px',
+            verticalAlign: 1,
+          }}
+        >
+          施工中
+        </span>
+      )}
     </button>
   );
 }
@@ -81,7 +105,7 @@ export default function ChartContentBar() {
       }}
     >
       <Tab active={priceOn} onClick={openPrice}>价格走势</Tab>
-      <Tab active={volumeOn} onClick={openVolume}>量价走势</Tab>
+      <Tab active={volumeOn} wip onClick={openVolume} title="讨论稿：竞品销量与成本口径未定，暂不作为正式结论">量价走势</Tab>
     </nav>
   );
 }

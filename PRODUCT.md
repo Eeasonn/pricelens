@@ -4,7 +4,7 @@
 
 > 用途：这是 PriceLens 的产品上下文文件，供设计、实现和审查工具（包括 Impeccable）理解产品边界、用户任务和可信度要求。它约束产品语义，不替代运行时视觉令牌。更新日期：2026-11-01。
 
-> **品牌名（2026-11-27 用户决策）**：系统所有用户可见品牌名为 **PriceAgent**（页头、浏览器标题、favicon、Agent 入口「问 PriceAgent」等）；`PriceLens` 仅保留为内部仓库名、文件名与历史文档名，不得再出现在正式界面文案里。品牌标记 = 极简墨色圆角方块 + 白色 P（`components/PriceAgentMark.tsx`），不引入机器人、魔法星、渐变或 AI 紫色。同一轮确立「一个产业与产品入口、两种分析结构」：产业并入「产业与产品」面板作全局范围开关（原筛选栏「产业」控件退役、国家选择器下移到筛选条），产品对标之外新增品牌全景；局部决策见 `pricelens/.impeccable/surfaces/industry-product-entry-panorama.md`。
+> **品牌名（2026-11-27 用户决策）**：系统所有用户可见品牌名为 **PriceAgent**（页头、浏览器标题、favicon、Agent 入口「问 PriceAgent」等）；`PriceLens` 仅保留为内部仓库名、文件名与历史文档名，不得再出现在正式界面文案里。品牌标记 = 极简墨色圆角方块 + 白色 P（`components/PriceAgentMark.tsx`），不引入机器人、魔法星、渐变或 AI 紫色。同一轮确立「一个产业与产品入口、两种分析结构」：产业并入「产业与产品」面板作全局范围开关（原筛选栏「产业」控件退役、国家选择器下移到筛选条），产品对标之外新增品牌全景；局部决策见 `pricelens/.impeccable/surfaces/industry-product-entry-panorama.md`。2026-11-27 二轮：品牌全景结构退场，并入价格走势「视图：分列」（按品牌 / 系列 / 档位），见 stable-optimization-20261127.md。
 
 ## Platform: web
 
@@ -63,7 +63,7 @@ PriceLens 的核心任务包括：
 2. **量价走势**：价格与周销量联动，支持取价平台选择。
 3. **预警中心**：四类预警规则、阈值和订阅状态。
 4. **配置**：竞品对标矩阵、参考汇率和默认店铺。上一代关系不在此维护：现由服务器端配置表 `config_tables.xlsx`「上一代配置」页签维护，关系落到配置层级（当前「型号 × 配置」→ 上一代「型号 × 配置」，一个上一代可对多个下一代，竞品也登记），随数据包的 `prevGen` 段下发；配置页本机的「上一代关系」区块与个人配置工作簿的同名页签均已移除。
-5. **PriceLens Agent**：页头「问 PriceAgent」或 `⌘/Ctrl+K` 进入；默认只读，结果可追溯。
+5. **PriceLens Agent**：页头「问 PriceAgent」进入对话；价格走势页 `⌘/Ctrl+K` 聚焦页头快搜（Agent 快速筛选：意图 → 筛选预览 → 确认应用、可撤销，见 `.impeccable/surfaces/agent-intent-filter.md`），其他页 `⌘/Ctrl+K` 打开对话；明细内「分析提示」为本地规则计算、不调用模型（`detail-insight-strip.md`）。默认只读，结果可追溯。
 
 正式交付只有在线版，另有本地开发版，两者共享同一源码和产品口径：
 

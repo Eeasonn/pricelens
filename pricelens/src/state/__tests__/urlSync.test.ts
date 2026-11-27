@@ -215,6 +215,20 @@ describe('range / priceTypes / agg url params', () => {
   });
 });
 
+describe('view / by url params（2026-11-27 二轮「视图：对标 / 分列」）', () => {
+  it('view=columns → 分列视图；by=series/tier 读入、缺省落品牌；缺省 view 不写键', () => {
+    const cols = withWindowSearch('?view=columns&by=tier', () => readUrlOverrides());
+    expect(cols.filters.viewMode).toBe('columns');
+    expect(cols.filters.columns?.groupBy).toBe('tier');
+    expect(withWindowSearch('?view=columns&by=series', () => readUrlOverrides()).filters.columns?.groupBy).toBe('series');
+    expect(withWindowSearch('?view=columns', () => readUrlOverrides()).filters.columns?.groupBy).toBe('brand');
+    expect(withWindowSearch('?view=columns&by=bogus', () => readUrlOverrides()).filters.columns?.groupBy).toBe('brand');
+    const cmp = withWindowSearch('?c=RU', () => readUrlOverrides());
+    expect(cmp.filters.viewMode).toBeUndefined();
+    expect(cmp.filters.columns).toBeUndefined();
+  });
+});
+
 describe('retired pages url entry', () => {
   // 2026-11-27 演进版退场：情报中心 / 量价预测 / 大盘走势三页下线——老分享链接的
   // ?p= 静默忽略（不解析 page，回退默认页）；其余页照常解析（见 retiredPages.test）

@@ -48,21 +48,21 @@ export interface MainProduct {
   excluded?: string[];
 }
 
-/** 分析结构（2026-11-27「一个产业与产品入口、两种分析结构」）：
- *  compare = 产品对标（主分析卡 mains）；panorama = 品牌全景（panorama 草稿）。
- *  两套选择草稿分别保存，来回切换不丢。 */
-export type AnalysisMode = 'compare' | 'panorama';
+/** 视图（2026-11-27 二轮「视图：对标 / 分列」，品牌全景结构退场）：
+ *  选择与摆放是两个独立维度——选择草稿恒为 mains（选择方式：按产品 / 按档位），
+ *  视图只决定怎么摆。compare = 对标（分图/合并照旧）；columns = 分列（多产品分列图，
+ *  分组 = 品牌 / 系列 / 档位）；lineage = 代际（prevGen 拼接阶梯线，2026-11-27 三轮）。 */
+export type ViewMode = 'compare' | 'columns' | 'lineage';
 
-/** 品牌全景里一个品牌的已选产品（型号 × 配置；颜色取默认最低价色） */
-export interface PanoramaBrand {
-  brand: string;
-  sels: ProductSelection[];
-}
+/** 分列视图的分组依据：brand = 品牌；series = 系列（按选择产品树的系列节点）；
+ *  tier = 档位（现价落档，tierPrice 口径；无现价归「暂无现价」末组） */
+export type ColumnsGroupBy = 'brand' | 'series' | 'tier';
 
-/** 品牌全景草稿：无默认主品、无默认价差基准——基准只能由用户显式选临时基准。 */
-export interface BrandPanorama {
-  brands: PanoramaBrand[];
-  /** true（默认）= 各品牌图共享同一 Y 轴；false = 各图独立自适应 */
+/** 分列视图设置：分组依据 + Y 轴共享 + 用户显式选的临时价差基准。
+ *  无默认基准——基准只能由用户显式选；基准产品离开 mains 即清空（随 mains 收口）。 */
+export interface ColumnsView {
+  groupBy: ColumnsGroupBy;
+  /** true（默认）= 各列图共享同一 Y 轴；false = 各图独立自适应 */
   sharedY: boolean;
   /** 用户显式选的临时价差基准（selKey：`modelId|配置去空格`）；null = 无基准 */
   baselineKey: string | null;
@@ -99,12 +99,14 @@ export interface FiltersState {
   industry: Industry; // 手机/平板/穿戴/音频（IoT/PC 有数据无矩阵）
   // 第一百二十三轮：「按档位」主体模式退役（subjectMode/tier 字段删除）——
   // 档位有机融入「选择产品」浮窗的树筛选与批量动作，见 tierSelection.appendTierCards。
-  /** 主分析产品卡列表：卡序 = 分离面板序；≥2 张卡看板自动分离。无卡数上限 */
+  /** 主分析产品卡列表：卡序 = 分离面板序；≥2 张卡看板自动分离。无卡数上限。
+   *  唯一选择草稿（2026-11-27 二轮：品牌全景草稿退场——选择方式 按产品/按档位
+   *  都只写 mains，视图只决定怎么摆） */
   mains: MainProduct[];
-  /** 当前分析结构（产品对标 / 品牌全景）；两套草稿分别保存在 mains 与 panorama */
-  analysisMode: AnalysisMode;
-  /** 品牌全景选择草稿（与 mains 分别保存；按 国家×产业 会话快照隔离） */
-  panorama: BrandPanorama;
+  /** 当前视图（对标 / 分列）；只决定展示，与选择草稿解耦 */
+  viewMode: ViewMode;
+  /** 分列视图设置（分组依据 / Y 轴共享 / 临时基准）；视图非分列时同样保留 */
+  columns: ColumnsView;
   platform: PlatformSelection | null; // null=未选=该国默认电渠单平台口径；渠道内多店铺取最低在架价
   /** R7-M1：稳定版平台口径归一说明（见 PlatformScopeNotice）；缺省/null = 无归一
    *  发生或说明已失效。不参与 URL 同步；随持久化整包留存（读档按形状校验）。 */
@@ -157,10 +159,10 @@ export interface FiltersActions {
   autoMatchCard(cardId: string): void;
   /** 全局「全部自动匹配」开关：全部华为主品卡都在开 → 全部关；否则全部开 */
   autoMatchAll(): void;
-  /** 切换分析结构（产品对标 / 品牌全景）；两套草稿分别保留 */
-  setAnalysisMode(mode: AnalysisMode): void;
-  /** 写入品牌全景草稿（选择、Y 轴共享、临时基准） */
-  setPanorama(next: BrandPanorama): void;
+  /** 切换视图（对标 / 分列）；选择草稿（mains）不动 */
+  setViewMode(mode: ViewMode): void;
+  /** 分列视图设置（分组依据 / Y 轴共享 / 临时基准，部分补丁） */
+  setColumns(patch: Partial<ColumnsView>): void;
   /** 单个产品的取价口径（第一百六十轮）：selKey 命中的主品/对比条目全部改写；
    *  platform = null 恢复自动（该产品日常价最低渠道） */
   setSelectionPlatform(selKey: string, platform: PlatformSelection | null): void;

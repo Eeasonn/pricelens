@@ -314,6 +314,9 @@ export interface SeriesPoint {
   } | null;
   /** 取数渠道（平台-店铺显示名，如 OZON 3P；自动口径每周随最低价来源变化） */
   channelName?: string | null;
+  /** 代际拼接序列的当代名（2026-11-28 代际视图走共享 Chart）：悬停小卡附行
+   *  「当代：{genLabel}」。纯呈现字段，由代际拼接层逐桶赋值——普通序列为空。 */
+  genLabel?: string | null;
   platform?: string | null; // 取价平台（dim_channel.platform，随最低价行带出；明细表平台列）
   /**
    * 异常价格守卫（2026-11-01 数据质量口径，buildSeries 取数层打标）：
@@ -348,7 +351,7 @@ export interface Series {
   financeLabel?: string | null;
   /** 药丸短标注（2026-11-11 Eason：线侧名称药丸标分期）：'先付' / '36期'，随 financeLabel 同源生成 */
   financeTag?: string | null;
-  /** 线型（2026-11-27 品牌全景）：同品牌多条线共享品牌色，以虚线节律区分；缺省 = 实线。
+  /** 线型（2026-11-27 分列视图）：同组多条线共享品牌色，以虚线节律区分；缺省 = 实线。
    *  纯呈现字段，由呈现层按品牌内序赋值，取数层（buildSeries）不产出。缺采跨接段
    *  仍固定为 [4, 4] 短虚线桥，与本字段无关。 */
   lineDash?: number[];

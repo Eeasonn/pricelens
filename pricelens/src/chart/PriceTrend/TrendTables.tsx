@@ -21,7 +21,9 @@ import BrandDot from '../../components/BrandMark';
 import { configTextOf } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, fontSize, motion, radius } from '../../theme/tokens';
+import { color, fontSize, motion, radius, selectSoft } from '../../theme/tokens';
+import { buildInsights } from './insights';
+import InsightStrip from './InsightStrip';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { curCodeOf, diffPct, moneyPlain } from './helpers';
@@ -137,11 +139,11 @@ export default function TrendTables(props: {
   fourWeekChanges: ReadonlyMap<string, number | null>; // 周序列独立计算，锚定当前窗口末周
   currency: CurrencyMode;
   granularity: Granularity;
-  /** 卡标题（缺省「价差与明细」；品牌全景传「品牌价格明细」） */
+  /** 卡标题（缺省「价差与明细」；分列视图传「分列价格明细」） */
   title?: string;
   /** 明细区标题（缺省「核心信息明细」） */
   detailCaption?: string;
-  /** 价差基准列的表头名（缺省「主分析产品」；品牌全景的临时基准传「价差基准」） */
+  /** 价差基准列的表头名（缺省「主分析产品」；分列视图的临时基准传「价差基准」） */
   baseCaption?: string;
 }) {
   // 异常守卫阈值（「疑」角标 title 用）：一次读取供全表单元格复用——
@@ -152,7 +154,7 @@ export default function TrendTables(props: {
   const title = props.title ?? '价差与明细';
   const detailCaption = props.detailCaption ?? '核心信息明细';
   const baseCaption = props.baseCaption ?? '主分析产品';
-  // 组名：品牌全景组带 label（品牌名）；产品对标卡 = 主品 品牌+型号+配置
+  // 组名：分列视图组带 label（组名）；对标视图卡 = 主品 品牌+型号+配置
   const groupTitle = (b: Block): string => b.g.label ?? blockTitle(b);
   // 组别页签选中态（本轮）：值 = 组 id；组集变化后找不到时回落第一组
   const [activeGid, setActiveGid] = useState<string | null>(null);
@@ -190,6 +192,53 @@ export default function TrendTables(props: {
   // 时间列正序（第一百九十三轮，Eason）：早→晚从左到右，与图上时间轴同向；
   // ci.i = 升序内容下标（points 对位）
   const cols = useMemo(() => buckets.map((b, i) => ({ bk: b, i })), [buckets]);
+
+  // ---- 分析提示（2026-11-28，Eason 拍板）：与表同源的组/桶/环比按固定阈值本地
+  // 计算（insights.ts），不调用模型；每组一条提示条，渲染在横向滚动表体之外 ----
+  const insightsByGroup = useMemo(
+    () =>
+      buildInsights(groups, buckets, fourWeekChanges, {
+        currencyLabel: curCodeOf(currency),
+        granularityLabel: granularity === 'week' ? '周' : granularity === 'month' ? '月' : '季',
+        formatMoney: (v) => moneyPlain(v, currency),
+        bucketLabel: (b) => (granularity === 'week' ? `${weekIdText(b.id)}（${b.xLabel}）` : bucketDateText(granularity, b.xLabel)),
+      }),
+    [groups, buckets, fourWeekChanges, currency, granularity],
+  );
+  // 「定位」高亮列：桶 id；常规 1.5s 自动复位，减少动效 = 静态高亮到下一次交互
+  const [hiCol, setHiCol] = useState<string | null>(null);
+  const hiTimer = useRef<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  useEffect(() => () => { if (hiTimer.current != null) window.clearTimeout(hiTimer.current); }, []);
+  useEffect(() => {
+    if (hiCol == null || !reducedMotion) return undefined;
+    const clear = (): void => setHiCol(null);
+    // 下一次交互即清除（推迟注册，避免触发「定位」的同一次点击立刻清掉）
+    const t = window.setTimeout(() => {
+      window.addEventListener('pointerdown', clear, { once: true });
+      window.addEventListener('keydown', clear, { once: true });
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('pointerdown', clear);
+      window.removeEventListener('keydown', clear);
+    };
+  }, [hiCol, reducedMotion]);
+  const locateBucket = (bucketId: string): void => {
+    setHiCol(bucketId);
+    if (hiTimer.current != null) window.clearTimeout(hiTimer.current);
+    if (!reducedMotion) hiTimer.current = window.setTimeout(() => setHiCol(null), 1500);
+    const box = scrollRef.current;
+    const head = box?.querySelector<HTMLElement>(`[data-bucket-col="${bucketId}"]`);
+    if (box && head) {
+      // 横向：把目标列滚到冻结区右侧可见处；纵向：表体进入视口
+      const frozenVisible = narrowViewport ? W_PROD_NARROW : W_PROD + W_CONF + W_TYPE;
+      const delta = head.getBoundingClientRect().left - box.getBoundingClientRect().left;
+      box.scrollLeft = Math.max(0, box.scrollLeft + delta - frozenVisible - 16);
+      if (typeof box.scrollIntoView === 'function') box.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'auto' : 'smooth' });
+    }
+  };
 
   const markCopied = (which: 'diff' | 'detail', ok: boolean): void => {
     // 第一百八十五轮（外部 UX 审计）：失败同样给短暂反馈（「复制失败」），不再静默
@@ -293,12 +342,17 @@ export default function TrendTables(props: {
 
   /** 单元格通用样式；c = 网格列号（0 起）：首列外每列左缘 1px hairline
    *  竖向分界线（第一百三十一轮改全列——产品/配置/类型与每个时间列之间都有线） */
+  const hiIdx = hiCol != null ? cols.findIndex(({ bk }) => bk.id === hiCol) : -1;
   const cell = (c: number, extra?: CSSProperties): CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
     padding: '5px 8px',
     borderBottom: `1px solid ${color.hairline}`,
     borderLeft: c >= 1 ? `1px solid ${color.hairline}` : undefined,
+    // 「定位」列高亮：inset 阴影铺 selectSoft——叠在各行自带底色之上、文字之下，
+    // 调用方后写的 background 覆盖不到（不改单元格结构，时间列对齐不受影响）
+    boxShadow: hiIdx >= 0 && c === 3 + hiIdx ? `inset 0 0 0 9999px ${selectSoft}` : undefined,
+    transition: reducedMotion ? undefined : `box-shadow ${motion.fast}ms ${motion.enter}`,
     ...extra,
   });
   /** 左缘冻结列定位（sticky left 随列累计）。
@@ -491,6 +545,7 @@ export default function TrendTables(props: {
           key={`${gid}-h-${part}-${bk.id}`}
           role="columnheader"
           className="tnum"
+          data-bucket-col={bk.id}
           title={wk ? `${wk} · ${d}` : undefined}
           style={{
             ...cell(3 + ri), gridColumn: String(4 + ri),
@@ -827,7 +882,17 @@ export default function TrendTables(props: {
       {/* 横向滚动区：只渲染页签选中组的表体；整张网格只横向滚动（无纵向滚动条）。
           ARIA（第一百八十二轮）：div 网格补全 table 语义——row/cell/列头/行头，
           读屏按行列关系朗读，冻结列与合并单元格经 aria-rowspan 表达 */}
-      <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}>
+      {/* 分析提示条（2026-11-28）：当前组表体上方、横向滚动区之外——不进网格，
+          时间列对齐不受影响；无提示时不渲染 */}
+      {active != null && (insightsByGroup.get(active.g.id)?.length ?? 0) > 0 && (
+        <InsightStrip
+          key={active.g.id}
+          groupTitle={groupTitle(active)}
+          insights={insightsByGroup.get(active.g.id)!}
+          onLocate={locateBucket}
+        />
+      )}
+      <div ref={scrollRef} style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}>
         {active != null && (
           <div role="table" aria-label={title} style={{ display: 'grid', gridTemplateColumns: gridCols, gridAutoFlow: 'row dense', minWidth: frozenW + n * W_TIME, alignItems: 'stretch' }}>
             {groupBody(active)}

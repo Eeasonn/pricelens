@@ -4,8 +4,8 @@
 // 只验证状态流转与 DOM 语义，不验证像素）。聚焦五件事：
 // ① 新名称与国家位置：页头 PriceAgent + P 标、无「单国家分析」、国家选择器进筛选条、
 //    产业不再作为独立筛选控件；
-// ② 双模式：面板顶栏「产品对标 | 品牌全景」；品牌全景空态；
-// ③ 模式往返不丢草稿：品牌全景里勾的产品来回切换仍在，产品对标主品卡不受影响；
+// ② 面板顶栏 = 产业 + 选择方式（按产品 / 按档位）；「分析结构」开关已随品牌全景退场；
+// ③ 视图切换（对标 ↔ 分列）不丢选择：分列视图按品牌分列渲染 mains 在册选择；
 // ④ 同档推荐：每品牌选 1 款 → 加入对比 → 对比区按来源 'tier' 并入、自动匹配不关；
 // ⑤ 超过旧 8 线上限：整品牌勾选加入对比后全部保留（不截断、不提示上限）。
 // ============================================================
@@ -33,8 +33,10 @@ vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
 import App from '../../App';
 import type { MainProduct } from '../../state/filtersTypes';
+import { brandOfModel, buildProductTree } from '../../components/ProductCascader/tree';
+import { brandLabelOf } from '../../components/BrandMark';
 
-type Persisted = { mains: MainProduct[]; industry?: string; analysisMode?: string; panorama?: { brands: { brand: string; sels: unknown[] }[]; baselineKey: string | null; sharedY?: boolean } };
+type Persisted = { mains: MainProduct[]; industry?: string; viewMode?: string; columns?: { groupBy?: string; sharedY?: boolean; baselineKey?: string | null } };
 const persisted = (): Persisted => JSON.parse(window.localStorage.getItem('LPL3.filters') ?? '{}') as Persisted;
 
 /** 本项目 jsdom 环境不带可用的 localStorage（既有测试一律 try/catch 兜底）；本测试要读
@@ -152,62 +154,59 @@ describe('产业切换：直接执行且按产业恢复', () => {
   });
 });
 
-describe('统一入口双模式', () => {
-  itApp('面板顶栏 = 产业选择 +「产品对标 | 品牌全景」；切到品牌全景出空态（无默认品牌 / 主品 / 基准）', async () => {
+describe('统一入口：选择方式（2026-11-27 二轮：「分析结构」开关随品牌全景退场）', () => {
+  itApp('面板顶栏 = 产业选择 + 选择方式（按产品 | 按档位），无「分析结构」开关；默认按产品出主品卡编辑区', async () => {
     render(<App />);
     const panel = await openEntry();
     expect(within(panel).getByText('产业')).toBeTruthy();
-    expect(within(panel).getByText('分析结构')).toBeTruthy();
-    expect(within(panel).getByText('产品对标')).toBeTruthy();
-    expect(within(panel).getByText('主分析产品')).toBeTruthy(); // 产品对标编辑区
-    expect(screen.queryByTestId('panorama-picker')).toBeNull();
-
-    clickSegmented(panel, '品牌全景');
-    await screen.findByTestId('panorama-picker');
-    expect(screen.getByTestId('panorama-empty').textContent).toContain('品牌全景尚未选择产品');
-    expect(persisted().analysisMode).toBe('panorama');
-    expect(persisted().panorama?.brands ?? []).toEqual([]);
-    expect(persisted().panorama?.baselineKey ?? null).toBeNull();
+    expect(within(panel).getByText('选择方式')).toBeTruthy();
+    expect(within(panel).getByText('按产品')).toBeTruthy();
+    expect(within(panel).getByText('按档位')).toBeTruthy();
+    expect(within(panel).queryByText('分析结构')).toBeNull(); // 退场
+    expect(within(panel).getByText('主分析产品')).toBeTruthy(); // 按产品编辑区
     // 顶栏的产业开关只列该国可选产业，当前产业选中
     const industryItems = within(panel).getAllByText(/^(手机|平板|穿戴|音频)$/).map((el) => el.textContent);
     expect(industryItems).toContain('手机');
   });
+
+  itApp('图表卡常驻「视图：对标 | 分列」切换行；切到分列出分列图，切回对标复原——选择草稿不动', async () => {
+    render(<App />);
+    const row = screen.getByTestId('view-switch-row');
+    expect(within(row).getByText('视图')).toBeTruthy();
+    expect(within(row).queryByText('分列依据')).toBeNull(); // 对标视图不出分列依据
+    const mainsBefore = persisted().mains.map((c) => c.main?.modelId);
+
+    clickSegmented(row, '分列');
+    await screen.findByTestId('columns-view');
+    expect(persisted().viewMode).toBe('columns');
+    expect(within(row).getByText('分列依据')).toBeTruthy(); // 分列视图出依据下拉
+    expect(persisted().mains.map((c) => c.main?.modelId)).toEqual(mainsBefore); // 草稿不动
+
+    clickSegmented(row, '对标');
+    await waitFor(() => expect(screen.queryByTestId('columns-view')).toBeNull());
+    expect(persisted().viewMode).toBe('compare');
+    expect(persisted().mains.map((c) => c.main?.modelId)).toEqual(mainsBefore);
+  });
 });
 
-describe('模式往返不丢草稿', () => {
-  itApp('品牌全景里勾的产品来回切换仍在；产品对标主品卡原样保留；入口摘要随模式变', async () => {
+describe('视图往返不丢选择', () => {
+  itApp('对标 ↔ 分列往返：mains 原样保留；入口摘要不因视图变化（恒描述 mains）', async () => {
     render(<App />);
     const mainBefore = persisted().mains.map((c) => c.main?.modelId);
     expect(mainBefore.length).toBeGreaterThan(0);
+    const entryText = (): string => screen.getByRole('button', { name: '产业与产品' }).textContent ?? '';
+    const summaryBefore = entryText();
 
-    const panel = await openEntry();
-    clickSegmented(panel, '品牌全景');
-    const picker = await screen.findByTestId('panorama-picker');
-    const first = within(picker).getAllByRole('checkbox', { name: /^选择 / })[0];
-    const pickedName = first.getAttribute('aria-label')!.replace(/^选择 /, '');
-    fireEvent.click(first);
-    await waitFor(() => expect(persisted().panorama?.brands.length).toBe(1));
-    expect(persisted().panorama?.brands[0].sels.length).toBe(1);
-
-    // 回产品对标：主品卡不变、图主体回到产品对标
-    clickSegmented(panel, '产品对标');
-    await waitFor(() => expect(screen.queryByTestId('brand-panorama')).toBeNull());
-    expect(within(panel).getByText('主分析产品')).toBeTruthy();
+    const row = screen.getByTestId('view-switch-row');
+    clickSegmented(row, '分列');
+    await screen.findByTestId('columns-view');
     expect(persisted().mains.map((c) => c.main?.modelId)).toEqual(mainBefore);
+    expect(entryText()).toBe(summaryBefore); // 视图不进摘要
 
-    // 再去品牌全景：先前勾选仍在（已勾选的复选框以「取消选择 …」命名）
-    clickSegmented(panel, '品牌全景');
-    const again = await screen.findByTestId('panorama-picker');
-    const still = within(again).getByRole('checkbox', { name: `取消选择 ${pickedName}` });
-    expect((still as HTMLInputElement).checked).toBe(true);
-    expect(persisted().panorama?.brands[0].sels.length).toBe(1);
+    clickSegmented(row, '对标');
+    await waitFor(() => expect(screen.queryByTestId('columns-view')).toBeNull());
     expect(persisted().mains.map((c) => c.main?.modelId)).toEqual(mainBefore);
-
-    // 关闭面板后入口摘要显示品牌全景
-    fireEvent.click(screen.getByRole('button', { name: '产业与产品' }));
-    await waitFor(() => expect(document.querySelector('[data-lpl-picker-panel]')).toBeNull());
-    const entry = screen.getByRole('button', { name: '产业与产品' });
-    expect(entry.textContent).toContain('品牌全景');
+    expect(entryText()).toBe(summaryBefore);
   });
 });
 
@@ -216,7 +215,10 @@ describe('同档推荐：勾选加入', () => {
     render(<App />);
     const comparesBefore = persisted().mains[0].compares.length;
     const panel = await openEntry();
-    fireEvent.click(screen.getByTestId('tier-recommend-entry'));
+    // 2026-11-27 二轮改版：同档位入口收进「匹配竞品 ▾」下拉（原独立 pill 退役）
+    fireEvent.click(screen.getAllByTestId('match-dropdown-entry')[0]);
+    const menu = await screen.findByRole('menu');
+    fireEvent.click(within(menu).getByText('同档位…'));
     const dialog = await screen.findByRole('dialog', { name: /同档位推荐/ }); // 面板本身也是 dialog，按名称区分
     expect(dialog.textContent).toContain('同档位推荐');
     const rows = await within(dialog).findAllByTestId('tier-candidate-row');
@@ -285,41 +287,50 @@ describe('超过旧 8 线上限仍保留', () => {
   });
 });
 
-describe('品牌全景分图（三品牌各一张图）', () => {
-  itApp('勾三个品牌 → 三张品牌图三列、Y 轴默认共享、无默认基准；第四个品牌加入后仍三列（换行不限制）', async () => {
+describe('分列视图分图（按品牌：在册选择涉及的品牌各一张图）', () => {
+  itApp('默认对比区跨品牌 → 分列图按品牌逐组一列、三列网格、Y 轴默认共享、无默认基准；加进第四个品牌后仍三列（换行不限制）', async () => {
     render(<App />);
-    const panel = await openEntry();
-    clickSegmented(panel, '品牌全景');
-    const picker = await screen.findByTestId('panorama-picker');
-    const pickAll = (brand: string): void => {
-      fireEvent.click(within(picker).getByRole('checkbox', { name: new RegExp(`^全选 ${brand} 当前结果`) }));
-    };
-    pickAll('Huawei');
-    pickAll('Apple');
-    pickAll('Samsung');
-    await waitFor(() => expect(screen.getAllByTestId('panorama-card')).toHaveLength(3));
-    const titles = (): string[] => screen.getAllByTestId('panorama-card').map((el) => el.getAttribute('aria-label') ?? '');
-    expect(titles().sort()).toEqual(['Apple 价格走势', 'Huawei 价格走势', 'Samsung 价格走势']);
-    expect(screen.getAllByTestId('panorama-card')[0].parentElement!.style.gridTemplateColumns).toContain('repeat(3');
+    const row = screen.getByTestId('view-switch-row');
+    clickSegmented(row, '分列');
+    const view = await screen.findByTestId('columns-view');
+    // 默认主品卡 + 匹配竞品：在册选择已跨品牌 → 多张分列图，逐组一列
+    await waitFor(() => expect(screen.getAllByTestId('columns-card').length).toBeGreaterThanOrEqual(2));
+    const titles = (): string[] => screen.getAllByTestId('columns-card').map((el) => el.getAttribute('aria-label') ?? '');
+    expect(titles()[0]).toMatch(/^Huawei 价格走势/); // 我司组在最前
+    expect(screen.getAllByTestId('columns-card')[0].parentElement!.style.gridTemplateColumns).toContain('repeat(3');
     // 默认共享 Y 轴；没有默认价差基准（基准只能由用户显式选）
-    const yCtl = within(screen.getByTestId('brand-panorama')).getByText('Y 轴').parentElement!;
+    const yCtl = within(view).getByText('Y 轴').parentElement!;
     expect(within(yCtl).getByText('共享').closest('.ant-segmented-item')!.className).toContain('ant-segmented-item-selected');
-    expect(persisted().panorama?.baselineKey ?? null).toBeNull();
-    expect(persisted().panorama?.brands.map((b) => b.brand).sort()).toEqual(['APPLE', 'HUAWEI', 'SAMSUNG']);
+    expect(persisted().columns?.baselineKey ?? null).toBeNull();
 
-    pickAll('Honor');
-    await waitFor(() => expect(screen.getAllByTestId('panorama-card')).toHaveLength(4));
-    expect(titles()).toContain('Honor 价格走势');
-    expect(screen.getAllByTestId('panorama-card')[3].parentElement!.style.gridTemplateColumns).toContain('repeat(3');
+    // 在对比上下文整品牌勾选 → 该品牌的选择进 mains → 分列多出一组。
+    // 品牌 = 树内逐树的第一个 romram 事实品牌（与分列分组完全同口径），挑当前还
+    // 没有分列图的品牌（默认对比区可能已含某些品牌，数据驱动不断言具体品牌）
+    const brandsPresent = new Set(titles().map((t) => t.replace(' 价格走势', '')));
+    const presentModelIds = new Set(persisted().mains.flatMap((c) => [c.main?.modelId, ...c.compares.map((x) => x.modelId)]));
+    const treeData = buildProductTree('phone', 'RU');
+    const targetRow = treeData.flatMap((b) => b.series.flatMap((sr) => sr.models.flatMap((m) => m.romrams)))
+      .find((r) => !brandsPresent.has(brandLabelOf(brandOfModel(r.modelId))));
+    expect(targetRow).toBeTruthy();
+    expect(presentModelIds.has(targetRow!.modelId)).toBe(false); // 该品牌整牌未在册
+    const brandLabel = brandLabelOf(brandOfModel(targetRow!.modelId));
+    await openEntry();
+    fireEvent.click(screen.getByRole('button', { name: '添加对比产品' }));
+    const tree = await screen.findByRole('tree', { hidden: true });
+    const brandRow = within(tree).queryByRole('treeitem', { name: brandLabel, hidden: true });
+    expect(brandRow).toBeTruthy();
+    const countBefore = screen.getAllByTestId('columns-card').length;
+    fireEvent.click(within(brandRow!).getByRole('checkbox'));
+    await waitFor(() => expect(screen.getAllByTestId('columns-card').length).toBeGreaterThan(countBefore));
+    expect(titles()).toContain(`${brandLabel} 价格走势`);
+    expect(screen.getAllByTestId('columns-card')[0].parentElement!.style.gridTemplateColumns).toContain('repeat(3');
 
-    // Y 轴切「独立」：各图各自带轴、仍每品牌一张图，不崩；切回「共享」
+    // Y 轴切「独立」：各图各自带轴、仍逐组一张图，不崩；切回「共享」
     clickSegmented(yCtl, '独立');
     await waitFor(() => expect(within(yCtl).getByText('独立').closest('.ant-segmented-item')!.className).toContain('ant-segmented-item-selected'));
-    expect(screen.getAllByTestId('panorama-card')).toHaveLength(4);
-    expect(persisted().panorama?.sharedY).toBe(false);
+    expect(persisted().columns?.sharedY).toBe(false);
     expect(screen.queryByRole('button', { name: '刷新页面' })).toBeNull(); // 未落入错误边界
     clickSegmented(yCtl, '共享');
-    await waitFor(() => expect(persisted().panorama?.sharedY).toBe(true));
-    expect(screen.getAllByTestId('panorama-card')).toHaveLength(4);
+    await waitFor(() => expect(persisted().columns?.sharedY).toBe(true));
   });
 });

@@ -205,6 +205,18 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
     }
     const agg = q.get('agg');
     if (agg === 'avg' || agg === 'min') out.filters.agg = agg;
+    // 2026-11-27 二轮「视图：对标 / 分列」：view=columns = 分列视图（缺省/其他值 =
+    // 对标，不写键）；by = 分列依据（缺省 = 品牌，不写键）
+    const view = q.get('view');
+    if (view === 'columns' || view === 'lineage') {
+      out.filters.viewMode = view;
+      const by = q.get('by');
+      out.filters.columns = {
+        groupBy: by === 'series' || by === 'tier' ? by : 'brand',
+        sharedY: true,
+        baselineKey: null,
+      };
+    }
   } catch {
     /* 无 window / 解析失败 = 无覆写 */
   }

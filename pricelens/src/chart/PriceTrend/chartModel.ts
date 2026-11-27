@@ -577,7 +577,7 @@ export function buildLabelPlan(p: {
               ...(cfgText ? { cfgText } : {}),
             }
           : {}),
-        // 线型样例（2026-11-27 品牌全景）：系列带 lineDash 才携带
+        // 线型样例（2026-11-27 分列视图）：系列带 lineDash 才携带
         ...(s.lineDash ? { lineDash: s.lineDash } : {}),
       });
       continue;
@@ -597,7 +597,7 @@ export function buildLabelPlan(p: {
       color: s.color,
       anchorX: px,
       anchorY: py,
-      // 线型样例（2026-11-27 品牌全景）：锚定模式与名称带同口径——系列带 lineDash 才携带
+      // 线型样例（2026-11-27 分列视图）：锚定模式与名称带同口径——系列带 lineDash 才携带
       ...(s.lineDash ? { lineDash: s.lineDash } : {}),
     });
   }
@@ -745,7 +745,7 @@ export function buildOption(p: {
         // 数据点圆点删除（第三十八轮）：悬停浮窗承担点检视，线面更干净；
         // symbolSize 0 而非 symbol 'none'（第二十轮教训：'none' 会吞数值标签）
         symbolSize: 0,
-        // 线型：品牌全景按系列 lineDash 区分同品牌产品。平滑模式的线体透明，
+        // 线型：分列视图按系列 lineDash 区分同组产品。平滑模式的线体透明，
         // 这里只保留真实点标签；阶梯模式仍由本系列与下方固定 [4,4] 缺采桥描边。
         lineStyle: {
           color: s.color,

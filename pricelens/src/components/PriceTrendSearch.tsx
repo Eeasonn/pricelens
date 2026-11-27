@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { App as AntdApp, message as staticMessage } from 'antd';
 import { dimProduct } from '../data';
-import { buildFilterPatch } from '../agent-stable/core';
-import type { AgentSuggestion } from '../agent-stable';
+import { buildFilterChanges, buildFilterPatch } from '../agent-stable/core';
+import { parseFilterIntent } from '../agent-stable/intentFilter';
+import type { FilterPatch } from '../agent-stable';
+import { currentPricesByGroup } from '../dataModel/tierPrice';
 import { useAgent } from '../state/AgentContext';
 import { useFilters } from '../state/FiltersContext';
 import { usePage } from '../state/PageContext';
+import { registerHeaderSearch } from '../state/headerSearchFocus';
 import { newCardId, withAutoOn } from '../state/mainSelection';
-import type { MainProduct, ProductSelection } from '../state/filtersTypes';
+import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import { brandLabelOf } from './BrandMark';
 import { AGENT_STATUS_LABELS, platformShortcutLabel, PRICE_TREND_AI_SUGGESTIONS } from './CopilotStable/agentCopy';
-import { PriceSearchSurface } from './Search/PriceSearchSurface';
+import { PriceSearchSurface, type SearchFilterPreview } from './Search/PriceSearchSurface';
+import { color, space } from '../theme/tokens';
 
 type SearchMode = 'products' | 'ai';
 
@@ -83,10 +88,38 @@ export function cardOf(hit: ProductHit, skuId = hit.skuId): MainProduct {
   return hit.isOwn ? withAutoOn(card) : card;
 }
 
+/** 输入停顿多久后计算筛选预览（毫秒） */
+const PREVIEW_DEBOUNCE_MS = 150;
+
+/** AI 模式空态的筛选模板：用当前国家 / 产业的真实数据拼出可直接应用的句子。
+ *  我司旗舰 = 该口径下现价 USD 最高的我司组；无现价我司组时回落静态建议。 */
+export function filterTemplatesFor(countryCode: string, industry: FiltersState['industry']): string[] {
+  const ownIds = new Set(dimProduct.filter((row) => row.is_own && row.industry === industry).map((row) => row.model_id));
+  let flagship: { modelId: string; usd: number } | null = null;
+  for (const entry of currentPricesByGroup(industry, countryCode).values()) {
+    if (!ownIds.has(entry.sel.modelId) || entry.price.usd == null) continue;
+    if (!flagship || entry.price.usd > flagship.usd) flagship = { modelId: entry.sel.modelId, usd: entry.price.usd };
+  }
+  const name = flagship ? dimProduct.find((row) => row.model_id === flagship!.modelId)?.model_name : undefined;
+  if (!name) return PRICE_TREND_AI_SUGGESTIONS.map((item) => item.label);
+  return [`${name} 同档 苹果 三星`, '华为旗舰 vs 上一代', '$600-800 手机 按品牌分列'];
+}
+
+/** 搜索文本 → 是否值得显示筛选预览（补丁有变化且超出单个型号命中） */
+export function previewOfQuery(text: string, state: FiltersState): { patch: FilterPatch; preview: SearchFilterPreview } | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const intent = parseFilterIntent(trimmed, state);
+  if (!intent.structured) return null;
+  const changes = buildFilterChanges(state, intent.patch);
+  if (!changes.length) return null;
+  return { patch: intent.patch, preview: { changes, notes: intent.notes, isQuestion: intent.isQuestion } };
+}
+
 export default function PriceTrendSearch() {
   const { page } = usePage();
   const { state, actions } = useFilters();
-  const { open: agentOpen, openAgent, send, running, runStatus, activeRun } = useAgent();
+  const { openAgent, send, running, runStatus, activeRun } = useAgent();
   // latest-ref：NL 补丁先经 actions.set 提交（国家/产品/时间词换算），Provider 随即
   // 重渲染出携带新 context 的 send。下方 setTimeout 闭包捕获的是点击那一刻的旧
   // send——用它会把答案按旧国家/旧主品计算，且结束时指纹比对整体判 stale_context
@@ -101,7 +134,13 @@ export default function PriceTrendSearch() {
   const [mode, setMode] = useState<SearchMode>('products');
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [previewQuery, setPreviewQuery] = useState('');
+  /** 用户用 ↑↓ 显式选中了某条产品命中：此时 Enter 选产品而非应用预览 */
+  const arrowedRef = useRef(false);
   const submittedPromptRef = useRef('');
+  const { message: contextMessage } = AntdApp.useApp();
+  // App 上下文外（单测 / 独立挂载）useApp 返回空壳，回落静态 message
+  const toast = typeof contextMessage?.success === 'function' ? contextMessage : staticMessage;
 
   const hits = useMemo(() => productHits(query, state.countryCode, state.industry).slice(0, query.trim() ? 6 : 4), [query, state.countryCode, state.industry]);
   const trimmed = query.trim();
@@ -110,29 +149,39 @@ export default function PriceTrendSearch() {
 
   useEffect(() => {
     setActiveIndex(0);
+    arrowedRef.current = false;
   }, [mode, query, state.countryCode, state.industry]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setPreviewQuery(query), PREVIEW_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  const previewed = useMemo(() => previewOfQuery(previewQuery, state), [previewQuery, state]);
+  const templates = useMemo(
+    () => (renderedOpen ? filterTemplatesFor(state.countryCode, state.industry) : []),
+    [renderedOpen, state.countryCode, state.industry],
+  );
+
+  // ⌘/Ctrl+K：页头搜索挂载期间由 AgentContext 的全局快捷键先聚焦这里（见 headerSearchFocus）
+  useEffect(() => {
     if (!isDashboard) return undefined;
-    const onShortcut = (event: KeyboardEvent) => {
+    return registerHeaderSearch(() => {
+      setRenderedOpen(true);
+      setOpen(true);
+      inputRef.current?.focus();
+    });
+  }, [isDashboard]);
+
+  useEffect(() => {
+    if (!isDashboard || !open) return undefined;
+    const onEscape = (event: KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return;
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        if (agentOpen) return;
-        event.preventDefault();
-        openSearch();
-        window.setTimeout(() => inputRef.current?.focus(), 0);
-      }
-      if (event.key === 'Escape' && open) {
-        setOpen(false);
-        closeSearch();
-      }
+      if (event.key === 'Escape') closeSearch();
     };
-    // Capture this shortcut before the Agent provider's global handler so the
-    // visible header search is the first entry point on the dashboard. The
-    // provider still owns the same shortcut everywhere else.
-    window.addEventListener('keydown', onShortcut, true);
-    return () => window.removeEventListener('keydown', onShortcut, true);
-  }, [agentOpen, isDashboard, open]);
+    window.addEventListener('keydown', onEscape, true);
+    return () => window.removeEventListener('keydown', onEscape, true);
+  }, [isDashboard, open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -171,9 +220,9 @@ export default function PriceTrendSearch() {
     setActiveIndex(0);
   };
 
-  const useSuggestion = (suggestion: AgentSuggestion) => {
+  const useSuggestion = (text: string) => {
     setMode('ai');
-    setQuery(suggestion.prompt);
+    setQuery(PRICE_TREND_AI_SUGGESTIONS.find((item) => item.label === text)?.prompt ?? text);
     setActiveIndex(0);
     openSearch();
     window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -193,6 +242,36 @@ export default function PriceTrendSearch() {
     // Agent snapshots its context. The response still comes from the local
     // deterministic engine or configured remote-with-fallback client.
     // （sendRef：见上方 latest-ref 注释——必须用提交后的新 send 快照新 context）
+    window.setTimeout(() => void sendRef.current(trimmed), 0);
+  };
+
+  /** 当前输入的预览：Enter 可能在去抖前到达，此时按最新文本现算 */
+  const currentPreview = () => (previewQuery === query ? previewed : previewOfQuery(query, state));
+
+  const applyPreview = () => {
+    const next = currentPreview();
+    if (!next) return false;
+    const keys = Object.keys(next.patch) as Array<keyof FilterPatch>;
+    // 撤销只恢复本次补丁涉及的键（取应用前的值）
+    const before = Object.fromEntries(keys.map((key) => [key, state[key]])) as Partial<FiltersState>;
+    actions.set(next.patch);
+    close();
+    const key = `price-search-apply-${Date.now()}`;
+    void toast.success({
+      key,
+      content: <span>已应用筛选<button type="button"
+        style={{ marginLeft: space.sm, padding: 0, border: 0, background: 'transparent', color: color.link, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer', font: 'inherit' }}
+        onClick={() => { actions.set(before); toast.destroy(key); }}>撤销</button></span>,
+    });
+    return true;
+  };
+
+  const previewToAgent = () => {
+    if (!trimmed || running) return;
+    submittedPromptRef.current = trimmed;
+    close(true);
+    // 只交接问题本身，不写筛选：筛选写入只发生在用户点「应用」时
+    openAgent('dock', trimmed);
     window.setTimeout(() => void sendRef.current(trimmed), 0);
   };
 
@@ -222,19 +301,22 @@ export default function PriceTrendSearch() {
     open={open} renderedOpen={renderedOpen} mode={mode} query={query} countryCode={state.countryCode}
     products={hits.map((hit) => ({ ...hit, brand: brandLabelOf(hit.brand), configurations: hit.configOptions }))}
     activeIndex={activeIndex} shortcut={shortcutLabel} running={running} failure={aiFailureMessage} status={aiStatusMessage}
-    completed={sameAsSubmitted && runStatus === 'completed'} suggestions={PRICE_TREND_AI_SUGGESTIONS.map((suggestion) => suggestion.label)}
+    completed={sameAsSubmitted && runStatus === 'completed'} suggestions={templates}
+    preview={trimmed ? previewed?.preview ?? null : null} onApplyPreview={applyPreview} onPreviewToAgent={previewToAgent}
     onOpen={() => openSearch()} onQuery={(value) => { setQuery(value); openSearch(); }}
     onMode={setMode} onActive={setActiveIndex}
     onSelect={(index, skuId) => selectProduct(hits[index], skuId)}
-    onSuggestion={(index) => useSuggestion(PRICE_TREND_AI_SUGGESTIONS[index])} onSubmit={searchWithAgent}
+    onSuggestion={(index) => useSuggestion(templates[index])} onSubmit={searchWithAgent}
     onOpenAgent={() => openAgent('dock', submittedPromptRef.current)}
     onKeyDown={(event) => {
       if (event.key === 'Escape' && open) {
         event.preventDefault(); close();
       } else if (event.key === 'ArrowDown' && mode === 'products' && hits.length) {
-        event.preventDefault(); setActiveIndex((index) => (index + 1) % hits.length);
+        event.preventDefault(); arrowedRef.current = true; setActiveIndex((index) => (index + 1) % hits.length);
       } else if (event.key === 'ArrowUp' && mode === 'products' && hits.length) {
-        event.preventDefault(); setActiveIndex((index) => (index - 1 + hits.length) % hits.length);
+        event.preventDefault(); arrowedRef.current = true; setActiveIndex((index) => (index - 1 + hits.length) % hits.length);
+      } else if (event.key === 'Enter' && !(mode === 'products' && arrowedRef.current && hits.length) && currentPreview()) {
+        event.preventDefault(); applyPreview();
       } else if (event.key === 'Enter' && mode === 'ai') {
         event.preventDefault(); searchWithAgent();
       } else if (event.key === 'Enter' && mode === 'products' && hits.length) {

@@ -1,5 +1,7 @@
 # 价格走势 · AI 快速搜索
 
+> **2026-11-27 注记**：页头搜索现为 Agent 快捷筛选入口（意图解析 → 筛选预览 → 一键应用），见 `agent-intent-filter.md`。
+
 ## 2026-11-12 · 双渠道搜索浮层整理
 
 Mode: Operate. 两版共用 `components/Search/PriceSearchSurface.tsx` 展示层，保留各自产品检索、SKU 选择、国家解析、Agent 交接与语音逻辑。

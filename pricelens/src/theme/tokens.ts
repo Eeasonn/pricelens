@@ -123,6 +123,7 @@ export const shadow = {
 export const selectSoft = '#e8f1ff'; // 选中/悬停底色（浅蓝）
 export const selectSoftInk = '#0053c2'; // 选中态文字（深蓝）
 export const selectAccent = '#0070f3'; // 聚焦边框/选中强调（浅蓝系）
+export const selectAccentFaint = 'rgba(0, 112, 243, 0.32)'; // 相邻档提示框（按档位选择 ±1 档）
 
 // ============================================================
 // 量价参考卡 · 事件类型色板（referenceEventPalette）：事件类型库的默认

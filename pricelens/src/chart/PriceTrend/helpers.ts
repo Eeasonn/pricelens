@@ -1152,7 +1152,7 @@ export interface AvoidItem {
   nameText?: string;
   brandWord?: string | null;
   cfgText?: string;
-  /** 线型样例（2026-11-27 品牌全景）：名称药丸前的线段样条按此虚线节律画——同品牌
+  /** 线型样例（2026-11-27 分列视图）：名称药丸前的线段样条按此虚线节律画——同品牌
    *  多条线同色，靠线型辨认；仅系列带 lineDash 时携带（金测序列化不受影响） */
   lineDash?: number[];
 }
@@ -1183,7 +1183,7 @@ export interface AvoidResult {
     nameText?: string;
     brandWord?: string | null;
     cfgText?: string;
-    /** 线型样例（2026-11-27 品牌全景）：见 AvoidItem.lineDash */
+    /** 线型样例（2026-11-27 分列视图）：见 AvoidItem.lineDash */
     lineDash?: number[];
   }[];
 }

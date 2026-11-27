@@ -1,8 +1,11 @@
 // ============================================================
-// 「同档位推荐」弹窗（2026-11-27）：主品卡上「自动匹配竞品」之外的另一个对比区来源。
-// 入口 = 选择产品面板每张主品卡组头的「同档位推荐」。候选与口径见 ./tierRecommend
-// （同档 = 主品配置在当前国家的 tier_by_country；同国家、同产业；型号 × 配置为单位、
-// 按品牌分组）。默认只看竞品品牌，勾「含我司品牌」可包含我司。
+// 「同档位推荐」弹窗（2026-11-27 二轮改版 · 现价落档口径）：主品卡「匹配竞品 ▾」
+// 下「同档位…」菜单项打开的弹窗。候选与口径见 ./tierRecommend——
+// 同档 = 与主品配置按现价落入同一档位（dataModel/tierPrice：最新有价期全渠道
+// 价格点剔除低于均值 30% 的异常低价后取最低，USD 口径落 tierBandsOf 阶梯），
+// 不再是 tier_by_country 声明档；同国家、同产业、型号 × 配置为单位、按品牌分组。
+// 主品无现价 = 空态「主品暂无现价，无法按档位推荐」。
+// 默认只看竞品品牌，勾「含我司品牌」可包含我司。
 // 交互：每品牌选 1 款 / 全选当前结果 / 清空本次勾选 + 固定底部「加入对比」；
 // 加入 = actions.addCardCompares(…, 'tier')——与矩阵匹配并存为并集、去重，不改
 // 「自动匹配竞品」开关（见 state/mainSelection）。勾选态只在本次弹窗内有效。
@@ -12,24 +15,24 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { Checkbox, Modal, Tooltip, message } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
-import { dimRegion } from '../../data';
+import { dimProduct, dimRegion } from '../../data';
 import { useFilters } from '../../state/FiltersContext';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
 import { selKey } from '../../state/mainSelection';
 import { TIER_LABELS } from '../../dataModel/aggregate';
 import { INDUSTRY_LABELS } from '../../dataModel/scope';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
+import { currentPricesByGroup, currentTierOfSelection } from '../../dataModel/tierPrice';
 import { color, fontSize, formatPrice, radius, selectSoft, selectSoftInk } from '../../theme/tokens';
 import BrandDot, { brandLabelOf } from '../BrandMark';
-import { configTextOf, modelNameOf, ownBrand } from '../ProductCascader';
+import { configTextOf, modelNameOf, ownBrand, productHasDataInCountry } from '../ProductCascader';
 import {
   buildTierCandidates,
   coverageText,
   diffPctText,
   latestText,
+  periodText,
   pickOnePerBrand,
-  referencePriceOf,
-  tierOfSelection,
   type TierCandidateGroup,
 } from './tierRecommend';
 import { POPOVER_Z, useTreeData } from './pickerBits';
@@ -95,34 +98,50 @@ function SourceBadge({ real, title, children }: { real: boolean; title: string; 
 
 export default function TierRecommendModal({ card, onClose }: { card: MainProduct; onClose: () => void }) {
   const { state, actions } = useFilters();
-  const { fullTree, romramByKey } = useTreeData();
+  const { fullTree } = useTreeData();
   const [includeOwn, setIncludeOwn] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(() => new Set<string>());
 
   const main = card.main;
   const countryCode = state.countryCode;
   const currency = state.currency;
-  const tier = useMemo(() => (main ? tierOfSelection(main, countryCode) : null), [main, countryCode]);
-  const mainPrice = useMemo(
-    () => (main ? referencePriceOf(romramByKey.get(`${main.modelId}|${main.romram}`), currency) : null),
-    [main, romramByKey, currency],
-  );
+  // 主品现价落档（tierPrice 口径，2026-11-27 二轮改版）：无现价 → tier null → 空态
+  const mainTier = useMemo(() => (main ? currentTierOfSelection(main, countryCode) : null), [main, countryCode]);
+  const band = mainTier?.tier ?? null;
+  const mainUsd = mainTier?.price.usd ?? null;
+  // 批量裁定（事实表一遍扫描，纯函数）：本产业本国的全部组现价/落档
+  const byGroup = useMemo(() => currentPricesByGroup(state.industry, countryCode), [state.industry, countryCode]);
+  // 该国有数据的组键集（productHasDataInCountry 口径，financing-aware）与覆盖 SKU 集
+  const { dataKeys, groupSkus } = useMemo(() => {
+    const keys = new Set<string>();
+    const skus = new Map<string, readonly string[]>();
+    for (const p of dimProduct) {
+      if (p.industry !== state.industry || !p.countries.includes(countryCode)) continue;
+      const key = `${p.model_id}|${p.romram}`;
+      const list = skus.get(key);
+      if (list) (list as string[]).push(p.sku_id);
+      else skus.set(key, [p.sku_id]);
+      if (productHasDataInCountry(p, countryCode, state.financingType, state.financingTerms)) keys.add(key);
+    }
+    return { dataKeys: keys, groupSkus: skus };
+  }, [state.industry, countryCode, state.financingType, state.financingTerms]);
   // 候选：主品自身组 + 已在对比区的组不进候选（已加入的不重复列出）
   const groups = useMemo<TierCandidateGroup[]>(() => {
-    if (!main || !tier) return [];
+    if (!main || !band) return [];
     return buildTierCandidates({
       industry: state.industry,
-      tier,
+      band,
       countryCode,
-      currency,
       financingType: state.financingType,
       financingTerms: state.financingTerms,
-      mainPrice,
+      mainUsd,
       excludeKeys: new Set([selKey(main), ...card.compares.map(selKey)]),
-      romramByKey,
+      byGroup,
+      dataKeys,
+      groupSkus,
       brandOrder: fullTree.map((b) => b.key),
     });
-  }, [main, tier, state.industry, countryCode, currency, state.financingType, state.financingTerms, mainPrice, card.compares, romramByKey, fullTree]);
+  }, [main, band, state.industry, countryCode, state.financingType, state.financingTerms, mainUsd, card.compares, byGroup, dataKeys, groupSkus, fullTree]);
   const visibleGroups = useMemo(
     () => (includeOwn ? groups : groups.filter((g) => g.brand !== ownBrand())),
     [groups, includeOwn],
@@ -141,8 +160,12 @@ export default function TierRecommendModal({ card, onClose }: { card: MainProduc
     });
 
   const countryName = dimRegion.find((r) => r.country_code === countryCode)?.country_name ?? countryCode;
-  const tierLabel = tier ? (TIER_LABELS[tier] ?? tier) : '';
+  const bandLabel = band ? (TIER_LABELS[band] ?? band) : '';
   const own = ownBrand();
+  const mainPriceText = (usd: number | null, local: number | null): number | null => {
+    const v = currency === 'usd' ? usd : local;
+    return v != null ? Math.round(v) : null;
+  };
 
   const addSelected = (): void => {
     const sels: ProductSelection[] = [];
@@ -158,12 +181,12 @@ export default function TierRecommendModal({ card, onClose }: { card: MainProduc
 
   const emptyHint = !main
     ? '先选择主分析产品，再按档位推荐对比产品'
-    : tier == null
-      ? '主品配置在当前国家没有档位信息，无法按档位推荐'
+    : band == null
+      ? '主品暂无现价，无法按档位推荐'
       : groups.length === 0
-        ? `同档位（${tierLabel}）在${countryName}暂无其他可推荐的产品配置`
+        ? `同档位（${bandLabel}）在${countryName}暂无其他可推荐的产品配置`
         : visibleGroups.length === 0
-          ? `同档位（${tierLabel}）下只有我司产品，勾选「含我司品牌」后显示`
+          ? `同档位（${bandLabel}）下只有我司产品，勾选「含我司品牌」后显示`
           : null;
 
   return (
@@ -179,17 +202,17 @@ export default function TierRecommendModal({ card, onClose }: { card: MainProduc
       zIndex={POPOVER_Z}
       destroyOnHidden
     >
-      {/* 口径行：范围 + 排序规则（明示，不打黑箱分） */}
+      {/* 口径行：现价落档 + 范围 + 排序规则（明示，不打黑箱分） */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px', marginBottom: 10, fontSize: 12, color: color.mute }}>
-        {main && tier && (
+        {main && band && (
           <span data-testid="tier-recommend-scope">
-            同档位 <strong style={{ color: color.ink }}>{tierLabelShort(tierLabel)}</strong> · {countryName} · {INDUSTRY_LABELS[state.industry]}
+            同档位 <strong style={{ color: color.ink }}>{tierLabelShort(bandLabel)}</strong> · 按现价落档 · {countryName} · {INDUSTRY_LABELS[state.industry]}
           </span>
         )}
         <Tooltip
           title={
-            '候选 = 与主品配置同一档位（分国档位）、同国家、同产业的产品配置（型号 × 配置）。' +
-            '当前参考价 = 默认最低价颜色在默认电渠口径下最新有价周 / 期的折后价，币种随筛选；' +
+            '按现价落档：现价 = 该配置全部颜色在最新有价期的全部渠道价格点，剔除低于同期均值 30% 的异常低价后取最低（USD 口径）；' +
+            '档位 = 现价落入的产业价格阶梯（如 200-400 美元）。候选 = 现价落档与主品同档、同国家、同产业且有数据的产品配置（型号 × 配置）。' +
             '数据覆盖 = 当前国家有价的周数（南非 = 月数）；来源 = 周度平台实抓（南非 = 运营商小册子），均为真实数据。' +
             '组内按与主品现价最接近排序，「每品牌选 1 款」取组内第一款。'
           }
@@ -203,7 +226,7 @@ export default function TierRecommendModal({ card, onClose }: { card: MainProduc
           </button>
         </Tooltip>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          主品现价 <span className="tnum" style={{ color: color.ink, fontWeight: 600 }}>{formatPrice(mainPrice != null ? Math.round(mainPrice) : null, currency)}</span>
+          主品现价 <span className="tnum" style={{ color: color.ink, fontWeight: 600 }}>{formatPrice(mainPriceText(mainTier?.price.usd ?? null, mainTier?.price.local ?? null), currency)}</span>
         </span>
       </div>
 
@@ -301,7 +324,10 @@ export default function TierRecommendModal({ card, onClose }: { card: MainProduc
                 </tr>
                 {g.items.map((c) => {
                   const on = effectivePicked.has(c.key);
-                  const noPrice = c.price == null;
+                  const noPrice = c.usd == null;
+                  const priceTip = c.period == null
+                    ? '当前国家该配置没有可用的最新价格'
+                    : `${periodText(c.period)} · 现价 = 最新有价期全渠道价格点剔除异常低价后取最低${c.droppedCount > 0 ? ` · 已剔除 ${c.droppedCount} 个异常低价` : ''}`;
                   return (
                     <tr key={c.key} data-testid="tier-candidate-row">
                       <td style={{ ...TD, width: 32 }}>
@@ -315,8 +341,8 @@ export default function TierRecommendModal({ card, onClose }: { card: MainProduc
                         {c.modelName}
                       </td>
                       <td className="tnum" style={{ ...TD, color: color.body }}>{configTextOf(c.romram) || '—'}</td>
-                      <td className="tnum" style={{ ...TD, textAlign: 'right', color: noPrice ? color.mute : color.ink }}>
-                        {formatPrice(c.price != null ? Math.round(c.price) : null, currency)}
+                      <td className="tnum" style={{ ...TD, textAlign: 'right', color: noPrice ? color.mute : color.ink }} title={priceTip}>
+                        {formatPrice(mainPriceText(c.usd, c.local), currency)}
                       </td>
                       <td
                         className="tnum"
@@ -355,7 +381,7 @@ export default function TierRecommendModal({ card, onClose }: { card: MainProduc
                           real={!noPrice}
                           title={
                             noPrice
-                              ? '当前国家默认电渠下该配置没有可用的最新价格'
+                              ? '当前国家该配置没有可用的最新价格'
                               : countryCode === 'ZA'
                                 ? `南非运营商小册子月度事实（已复核发布），最新 ${latestText(c.coverage)}`
                                 : `周度平台实抓价格，最新 ${latestText(c.coverage)}`

@@ -280,6 +280,9 @@ export interface ChartProps {
   /** 量价看板传入的销量序列，与 series.points 下标对齐（同窗同长）；浮层在系列价格行后、
    *  若该列值非 null 追加一行「销量 …台」；缺省不传或该列 null = 不渲染销量行 */
   volumes?: (number | null)[];
+  /** 代际交接标记（2026-11-28 代际视图）：竖直细线 + 新一代短名，画在绘图区顶部。
+   *  idx = 窗口内桶下标（与 series.points 同坐标系）；普通视图为空。 */
+  markers?: Array<{ idx: number; label: string }>;
   /** 第一百一十三轮（评审）：true = 折线起点旁的系列名称药丸整体不画（量价看板：
    *  产品名已在面板头，面板内空间留给绘图区）；缺省 false 维持原语义 */
   hideNamePills?: boolean;
@@ -407,7 +410,7 @@ const NAME_PILL_BOX: CSSProperties = {
   background: color.canvas,
   borderRadius: radius.pill,
 };
-const NAME_PILL_TEXT: CSSProperties = { fontSize: 11, lineHeight: '15px', color: color.body, whiteSpace: 'nowrap' }; // 2026-11-19 收紧 16→15（计划盒 ZONE_LINE_H 同步）
+const NAME_PILL_TEXT: CSSProperties = { fontSize: 11, lineHeight: '15px', color: color.body, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }; // 2026-11-19 收紧 16→15；2026-11-28 代际返修②：药丸盒 maxWidth 内文本截断（全名留 title/悬停卡）
 /** 「模拟」徽标（销毛迷你卡原样式；图层标注、成本药丸、成本脚行共用） */
 const SIM_BADGE: CSSProperties = {
   padding: '0 4px',
@@ -545,7 +548,7 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
 /** 系列名称小药丸：统一灰字不取品牌色，点击隐藏该产品，恢复统一走图例。
  *  悬停药丸 = 显示该系列的起点指引线（默认全部隐藏）。
  *  避让盒 = 渲染盒（药丸行高 + 配置行 + 生命周期行）。 */
-/** 名称药丸的识别标记：缺省 = 品牌色点；系列带线型（2026-11-27 品牌全景：同品牌
+/** 名称药丸的识别标记：缺省 = 品牌色点；系列带线型（2026-11-27 分列视图：同品牌
  *  多条线同色、靠虚线节律区分）时改为「同色线段样条」——药丸直接给出该线的线型，
  *  便于对线辨认（直接标签 + 线型双重辨认，不新增色板） */
 function NameMark({ brand, lineDash }: { brand: string; lineDash?: number[] }) {
@@ -605,6 +608,7 @@ function ZoneNamePill(props: {
         style={{
           ...NAME_PILL_BOX,
           maxWidth: nm.maxW ?? 200,
+          overflow: 'hidden',
           border: `1px solid ${color.hairline}`,
           cursor: 'pointer',
         }}
@@ -641,6 +645,7 @@ function ZoneNamePill(props: {
           )}
           <span
             data-testid="name-pill-text"
+            title={nm.text}
             style={
               nm.zone
                 ? NAME_PILL_TEXT
@@ -2791,6 +2796,10 @@ export default function Chart(props: ChartProps) {
                           style={{ flex: '1 1 0', minWidth: 0, color: color.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         >
                           {`${brandLabelOf(s.brand)} ${curveNameOf(s)}`}
+                          {/* 代际拼接序列：该桶活跃代名（2026-11-28 代际视图） */}
+                          {pt?.genLabel ? (
+                            <span style={{ display: 'block', fontSize: 10.5, color: color.mute, lineHeight: '14px' }}>当代：{pt.genLabel}</span>
+                          ) : null}
                         </span>
                         {/* 三列定宽列内居中（第一百八十四轮：同 px 宽与表头共列，居中
                             对齐；原右对齐 + 表头 ch 宽随字号缩水导致表头错位）。
@@ -3211,6 +3220,45 @@ export default function Chart(props: ChartProps) {
                 zIndex: 1,
               }}
             />
+          )}
+          {/* 代际交接标记（2026-11-28 代际视图）：竖直细线 + 新一代短名，置顶。
+              用与十字竖线同源的 xPxOf 几何——DOM 覆盖层，不入侵 ECharts 网格。 */}
+          {props.markers?.map((m) =>
+            m.idx < geom.n ? (
+              <Fragment key={`mk-${m.idx}-${m.label}`}>
+                <div
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: Math.round(xPxOf(geom, m.idx)) - 0.5,
+                    top: geom.plotTop,
+                    width: 1,
+                    height: geom.plotHeight,
+                    background: color.hairlineStrong,
+                    opacity: 0.8,
+                    pointerEvents: 'none',
+                    zIndex: 2,
+                  }}
+                />
+                <div
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: Math.round(xPxOf(geom, m.idx)) + 3,
+                    top: geom.plotTop + 2,
+                    fontSize: 11,
+                    lineHeight: '14px',
+                    color: color.body,
+                    fontFamily: font.family,
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
+                    zIndex: 2,
+                  }}
+                >
+                  {m.label}
+                </div>
+              </Fragment>
+            ) : null,
           )}
           {/* 跨图参考线（第110轮，评审）：分离模式下其他面板悬停的时间列在本面板
               同列画 1px 虚线（本面板自身悬停 = 上面的实线十字已足够，不叠画）；

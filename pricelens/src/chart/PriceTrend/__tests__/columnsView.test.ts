@@ -1,7 +1,7 @@
 // ============================================================
-// 品牌全景纯逻辑金测（2026-11-27）：
-// ① 三列网格（三品牌默认三列、更多品牌换行不限制）；
-// ② 同品牌线型循环（首条实线、其后虚线节律两两可辨、按表长循环）；
+// 分列视图纯逻辑金测（2026-11-27 二轮；前身 = 品牌全景金测）：
+// ① 三列网格（≤3 组逐组一列、更多组换行不限制）；
+// ② 组内线型循环（首条实线、其后虚线节律两两可辨、按表长循环）；
 // ③ 线型接线：buildOption 主线 lineStyle.type = 系列线型（缺省实线不带 type）、
 //    缺采跨接桥恒为 [4, 4] 不受线型影响；名称带名称项仅在线型存在时携带 lineDash；
 // ④ 图例搜索命中规则（品牌 / 产品名 / 配置，忽略大小写与空白）与「折线较多」阈值。
@@ -28,37 +28,37 @@ vi.mock('echarts/components', () => ({
 }));
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
-import { PANORAMA_COLUMNS, PANORAMA_DASH_PATTERNS, dashPatternAt, panoramaColumnsOf } from '../BrandPanorama';
+import { COLUMNS_GRID, COLUMNS_DASH_PATTERNS, dashPatternAt, columnsGridOf } from '../ColumnsView';
 import { MANY_LINES_HINT_AT, legendSearchMatch } from '../LegendTools';
 
-describe('panoramaColumnsOf（三列网格）', () => {
-  it('≤3 个品牌 = 每品牌一列；三品牌默认三列', () => {
-    expect(PANORAMA_COLUMNS).toBe(3);
-    expect([0, 1, 2, 3].map(panoramaColumnsOf)).toEqual([1, 1, 2, 3]);
+describe('columnsGridOf（三列网格）', () => {
+  it('≤3 组 = 每组一列；三组默认三列', () => {
+    expect(COLUMNS_GRID).toBe(3);
+    expect([0, 1, 2, 3].map(columnsGridOf)).toEqual([1, 1, 2, 3]);
   });
 
-  it('更多品牌不限制：每行最多三列、换行', () => {
-    expect([4, 5, 6, 7, 12].map(panoramaColumnsOf)).toEqual([3, 3, 3, 3, 3]);
+  it('更多组不限制：每行最多三列、换行', () => {
+    expect([4, 5, 6, 7, 12].map(columnsGridOf)).toEqual([3, 3, 3, 3, 3]);
   });
 });
 
 describe('dashPatternAt（同品牌线型循环）', () => {
-  it('品牌内首条实线（undefined），其后取虚线节律；节律两两可辨', () => {
+  it('组内首条实线（undefined），其后取虚线节律；节律两两可辨', () => {
     expect(dashPatternAt(0)).toBeUndefined();
-    const rest = PANORAMA_DASH_PATTERNS.slice(1);
+    const rest = COLUMNS_DASH_PATTERNS.slice(1);
     expect(new Set(rest.map((p) => p.join(','))).size).toBe(rest.length);
     rest.forEach((p, i) => expect(dashPatternAt(i + 1)).toEqual([...p]));
   });
 
   it('按表长循环；返回副本（改返回值不污染表）；负下标不越界', () => {
-    const n = PANORAMA_DASH_PATTERNS.length;
+    const n = COLUMNS_DASH_PATTERNS.length;
     expect(dashPatternAt(n)).toBeUndefined();
     expect(dashPatternAt(n + 1)).toEqual(dashPatternAt(1));
     expect(dashPatternAt(2 * n + 3)).toEqual(dashPatternAt(3));
-    expect(dashPatternAt(-1)).toEqual([...PANORAMA_DASH_PATTERNS[n - 1]]);
+    expect(dashPatternAt(-1)).toEqual([...COLUMNS_DASH_PATTERNS[n - 1]]);
     const got = dashPatternAt(1)!;
     got.push(999);
-    expect(PANORAMA_DASH_PATTERNS[1]).not.toContain(999);
+    expect(COLUMNS_DASH_PATTERNS[1]).not.toContain(999);
   });
 });
 

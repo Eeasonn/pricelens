@@ -5,7 +5,8 @@
 // ①首槽 = 国家选择器（地区部 → 国家），从页头下移到原「产业」槽位（ScopeFields）；
 // ②「产业」不再作为独立筛选控件——并入「产业与产品」选择面板作整个面板的全局
 //   范围开关；入口 chip 关闭时显示「产业 · 选择摘要」；
-// ③面板顶部 = 产业选择 +「产品对标 | 品牌全景」模式切换，两套草稿分别保存。
+// ③面板顶部 = 产业选择 + 选择方式（按产品 / 按档位）；2026-11-27 二轮起「分析结构」
+//   开关随品牌全景退场——选择草稿恒为 mains，视图（对标 / 分列）在图表侧切换。
 // 原「我司产品级联 vs 竞品级联 + 自动按钮」两个并列筛选器已于第一百一十七轮退役
 // ——「我司比竞品」的主观预设退场，主分析/对比是用户指定的角色，
 // 品牌列里华为与其他品牌并列。
@@ -46,9 +47,8 @@ import { useChartContent } from '../../state/chartContent';
 import { brandOfModel, configTextOf, modelNameOf } from '../ProductCascader/tree';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
-import { EMPTY_PANORAMA } from '../../state/panorama';
 import { INDUSTRY_LABELS } from '../../dataModel/scope';
-import type { AnalysisMode, MainProduct } from '../../state/filtersTypes';
+import type { MainProduct } from '../../state/filtersTypes';
 
 /** Also used by the overview's product controls. */
 export const filterBarTheme: ThemeConfig = {
@@ -153,11 +153,11 @@ function GroupChip({ card }: { card: MainProduct }) {
 }
 
 /** 统一「产业与产品」入口（2026-11-27 改造；原「选择产品」chip）：摘要 =
- *  产业 · 当前分析结构的选择摘要。点击弹「产业与产品」面板（面板顶部 = 产业选择
- *  与「产品对标 | 品牌全景」模式切换）。
- *  产品对标摘要 = 原三态：未选择（灰字引导）/ 单组（品牌行 + 型号行，与图例药丸
+ *  产业 · 当前选择摘要（恒为 mains——视图只是摆法，不进摘要）。点击弹「产业与产品」
+ *  面板（面板顶部 = 产业选择与「按产品 | 按档位」选择方式切换）。
+ *  摘要 = 三态：未选择（灰字引导）/ 单组（品牌行 + 型号行，与图例药丸
  *  同构）/ 多组（前 2 组紧凑 chip + ＋N 组），放不下整体省略号，悬停列全量。
- *  品牌全景摘要 = 一行「品牌全景 · 各品牌已选款数」。入口盒高 40。 */
+ *  入口盒高 40。 */
 function ProductPickerEntry() {
   const { state } = useFilters();
   // 多平台对比子视图（第一百九十轮）：主图按店铺画多条线，摘要不再写「无对比」。
@@ -182,16 +182,10 @@ function ProductPickerEntry() {
   const single = mains.length === 1 ? mains[0] : null;
   const visibleGroups = narrow || !fitsTwo ? 1 : 2;
   const industryLabel = INDUSTRY_LABELS[state.industry] ?? state.industry;
-  const mode: AnalysisMode = state.analysisMode ?? 'compare';
-  const panorama = state.panorama ?? EMPTY_PANORAMA;
-  const panoramaLine = panorama.brands.length
-    ? `品牌全景 · ${panorama.brands.map((b) => `${brandLabelOf(b.brand)} ${b.sels.length}`).join('、')}`
-    : '品牌全景 · 尚未选择品牌与产品';
-  const hoverTitle = mode === 'panorama'
-    ? `${industryLabel} · ${panoramaLine}`
-    : mains.length
-      ? [`${industryLabel} · 产品对标`, ...mains.map(groupSummaryLine)].join('\n')
-      : `${industryLabel} · 尚未选择主分析产品与对比产品`;
+  // 2026-11-27 二轮：品牌全景结构退场——摘要恒描述 mains（视图只是摆法，不进摘要）
+  const hoverTitle = mains.length
+    ? [`${industryLabel} · 产品对标`, ...mains.map(groupSummaryLine)].join('\n')
+    : `${industryLabel} · 尚未选择主分析产品与对比产品`;
 
   return (
     <ProductPickerFlyout open={open} onOpenChange={setOpen}>
@@ -225,31 +219,7 @@ function ProductPickerEntry() {
           {industryLabel}
           <span aria-hidden style={{ width: 1, height: 14, background: color.hairline }} />
         </span>
-        {mode === 'panorama' ? (
-          <span style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }} data-testid="entry-summary">
-            {panorama.brands.length ? (
-              <>
-                <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>品牌全景</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', minWidth: 0, overflow: 'hidden' }}>
-                  {panorama.brands.slice(0, 3).map((b, i) => (
-                    <span key={b.brand} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 1, minWidth: 0 }}>
-                      {i > 0 && <span style={{ color: color.mute }}>、</span>}
-                      <BrandDot brand={b.brand} />
-                      <span style={{ fontSize: 11, lineHeight: '15px', color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {brandLabelOf(b.brand)} <span className="tnum" style={{ color: color.mute }}>{b.sels.length}</span>
-                      </span>
-                    </span>
-                  ))}
-                  {panorama.brands.length > 3 && (
-                    <span className="tnum" style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>＋{panorama.brands.length - 3}</span>
-                  )}
-                </span>
-              </>
-            ) : (
-              <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>品牌全景 · 选择品牌与产品</span>
-            )}
-          </span>
-        ) : mains.length === 0 ? (
+        {mains.length === 0 ? (
           <span style={{ fontSize: 13, color: color.mute, whiteSpace: 'nowrap' }}>选择主分析产品与对比产品</span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>

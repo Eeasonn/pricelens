@@ -81,17 +81,14 @@ import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { filterBarTheme } from '../FilterBar';
 import { INDUSTRY_LABELS, INDUSTRY_ORDER, industriesOfCountry } from '../../dataModel/scope';
 import type { Industry } from '../../dataModel/types';
-import type { AnalysisMode, MainProduct, ProductSelection } from '../../state/filtersTypes';
+import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import {
   brandOfModel,
   defaultColorSkuIds,
-  filterProductTreeByTier,
   modelNameOf,
-  ownBrand,
   searchProductTree,
   sortModelNodes,
-  tiersOfScope,
   configTextOf,
   type BrandNode,
   type ModelNode,
@@ -112,20 +109,16 @@ import {
   RomramChip,
   RowText,
   StateTag,
-  SwapPill,
   TIP_Z,
   cascadePlacementOf,
   clampPanelPos,
   captureFocusRestore,
   panelPlacementOf,
-  pillW,
-  textW,
   useTopEscClose,
   useTreeData,
   cascadeFrameOf,
   modelTagText,
   PICKER_EDGE,
-  ROW_GAP,
 } from './pickerBits';
 import { PANEL_EXIT_MS, prefersReducedMotion } from '../../theme/motion';
 import {
@@ -139,13 +132,9 @@ import {
 } from './combos';
 import TemplateEditorFlyout from './TemplateEditorFlyout';
 import TierRecommendModal from './TierRecommendModal';
-import PanoramaPicker from './PanoramaPicker';
-import {
-  appendTierCards, configsInTier,
-} from '../../state/tierSelection';
-import { TIER_LABELS } from '../../dataModel/aggregate';
-import { tierLabelShort } from '../../chart/PriceTrend/helpers';
-import { color, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import TierBoardPicker from './TierBoardPicker';
+import { groupsFromPrevGeneration } from '../../state/configStore';
+import { color, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
   isHuaweiModel,
   newCardId,
@@ -239,46 +228,13 @@ function MatchPill({
 
 // ---------------- 更换树浮窗（完整树：唯一更换入口） ----------------
 
-/** 档位批量动作 pill（浅蓝描边 ghost，与对比 pill 同语言） */
-function TierBatchPill({ text, disabled, onClick }: { text: string; disabled?: boolean; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={text}
-      aria-disabled={disabled || undefined}
-      className="lpl-pk-ghost"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!disabled) onClick?.();
-      }}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 3,
-        height: 20,
-        padding: '0 8px',
-        borderRadius: radius.pill,
-        fontSize: 11,
-        color: disabled ? color.mute : selectSoftInk,
-        background: color.canvas,
-        border: '1px solid rgba(0, 112, 243, 0.35)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        whiteSpace: 'nowrap',
-        flexShrink: 0,
-      }}
-    >
-      <PlusOutlined style={{ fontSize: 9 }} /> {text}
-    </button>
-  );
-}
-
 /** 完整树浮窗：品牌→系列→产品→型号四列，预定位当前条目路径；
  *  主品上下文选完型号落地关窗；对比上下文连点不关。
- *  第一百二十三轮：①搜索行右侧「档位」Select——按配置级档位
- *  （tier_by_country，同型号不同配置可跨档）过滤四列树，与搜索叠加，
- *  关窗回「全部档位」；②选中档位后树上方批量动作带（主品上下文 =
- *  该档全部我司配置「全部各成一组」；对比上下文 = 该档全部配置
- *  「全部加入对比」）；③浮窗宽 = 四列自适应宽之和（行尾计入列宽），
+ *  2026-11-27 二轮改版（选择方式 = 按产品 | 按档位）：树浮窗的「档位」Select
+ *  与档位批量动作带（全部各成一组 / 全部加入对比）退役——档位选择整体迁到
+ *  按档位看板（TierBoardPicker），树浮窗只做品牌 / 系列 / 型号 / 配置与搜索，
+ *  搜索行下不再渲染批量动作带（外框高度随之收回，固定骨架规则不变）。
+ *  浮窗宽 = 四列自适应宽之和（行尾计入列宽），
  *  上限 min(视口-48, 1100)，超限面板内横向滚动。
  *  第一百九十轮（外部 UX 审计落地）：①Esc 分层关闭——本浮层此前不响应
  *  Esc（外层浮窗的监听让位给内层、内层自己不接，死区）；useTopEscClose
@@ -318,7 +274,6 @@ function LevelSwitchPopover({
   const { fullTree, romramByKey } = useTreeData();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
   const [modelSort, setModelSort] = useState<ModelSortMode>('default'); // 型号列排序
   // ---- 固定骨架（2026-11-27）：视口宽 + 按未过滤全量树冻结的四列宽 ----
   // 视口宽只在 resize 时更新（不随渲染读取 window.innerWidth）；骨架只依赖全量树 /
@@ -362,7 +317,6 @@ function LevelSwitchPopover({
   const closeAll = useCallback((): void => {
     setOpen(false);
     setSearch('');
-    setTier(null); // 关窗档位筛选回「全部档位」
   }, []);
   useTopEscClose(open, closeAll);
 
@@ -390,15 +344,11 @@ function LevelSwitchPopover({
     if (open) openedAtRef.current = Date.now();
   }, [open]);
 
-  // 档位过滤（配置级）与树内搜索叠加：先档位剪枝、再按关键词命中
-  const scopedTree = useMemo(
-    () => (tier ? filterProductTreeByTier(fullTree, tier, state.countryCode, state.financingType, state.financingTerms) : fullTree),
-    [fullTree, tier, state.countryCode, state.financingType, state.financingType, state.financingTerms],
-  );
-  const tree = useMemo(() => searchProductTree(scopedTree, search), [scopedTree, search]);
+  // 树内搜索（2026-11-27 二轮改版：档位 Select 退役后只剩关键词过滤）
+  const tree = useMemo(() => searchProductTree(fullTree, search), [fullTree, search]);
 
   // 定位（2026-11-27）：打开时定位——优先当前条目的型号路径，否则首个结果；此后
-  // 搜索 / 换档位时**当前路径仍有效则原样保留**（各列滚动位置不动），仅当前路径
+  // 搜索时**当前路径仍有效则原样保留**（各列滚动位置不动），仅当前路径
   // 失效（品牌 / 系列 / 型号被筛掉）才重定位并令各列把新选中行滚入视野
   // （locateEpoch +1）。此前每次搜索 / 换档位都无条件重定位，勾选与筛选都会让列跳动。
   const [path, setPath] = useState<[string, string, string] | null>(null);
@@ -426,7 +376,7 @@ function LevelSwitchPopover({
     setPath(locate(tree));
     setLocateEpoch((e) => e + 1); // 仅当前路径失效才重定位
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, search, tier]);
+  }, [open, search]);
 
   const brand = tree.find((b) => b.key === path?.[0]) ?? tree[0];
   const series = brand?.series.find((s) => s.key === path?.[1]) ?? brand?.series[0];
@@ -604,76 +554,6 @@ function LevelSwitchPopover({
       actions.setMains([...list, ...cards]);
     }
     setOpen(false);
-  };
-
-  // ---- 档位批量动作（第一百二十三轮：替代原「按档位」模式的一键集结） ----
-
-  const tierOptions = useMemo(
-    () => tiersOfScope(state.industry, state.countryCode, state.financingType, state.financingTerms).map((t) => ({
-      value: t,
-      label: tierLabelShort(TIER_LABELS[t] ?? t),
-    })),
-    [state.industry, state.countryCode, state.financingType, state.financingType, state.financingTerms],
-  );
-  const tierOwnConfigs = useMemo(
-    () => (tier ? configsInTier(state.industry, tier, state.countryCode, true, state.financingType, state.financingTerms) : []),
-    [tier, state.industry, state.countryCode, state.financingType, state.financingType, state.financingTerms],
-  );
-  const tierAllConfigs = useMemo(
-    () => (tier ? configsInTier(state.industry, tier, state.countryCode, false, state.financingType, state.financingTerms) : []),
-    [tier, state.industry, state.countryCode, state.financingType, state.financingType, state.financingTerms],
-  );
-  // 更换主品（replace-main）同属主品语义：批量动作 = 该档逐配置建组（追加不动当前卡），
-  // 不能落对比分支——那会把整档配置塞进本卡对比区（IAB 冒烟发现）
-  const tierBatchCtx = ctx.kind === 'add-main' || ctx.kind === 'set-main' || ctx.kind === 'replace-main';
-
-  /** 主品上下文：该档全部我司配置逐配置成组（矩阵补对比区；封顶/去重在纯函数收口） */
-  const tierGroupAll = (): void => {
-    if (!tier) return;
-    const base = ctx.kind === 'set-main' && activeCard ? mains.filter((c) => c.id !== activeCard.id) : mains;
-    let next = appendTierCards(state.industry, tier, state.countryCode, base, state.financingType, state.financingTerms);
-    if (next === base) return;
-    const baseIds = new Set(base.map((c) => c.id));
-    // 第一百三十一轮：批量成组的新卡同样默认「匹配竞品」——appendTierCards 已按
-    // 矩阵填好对比区，这里补 auto 标记进入矩阵驱动（华为主品恒真，守卫照写）
-    next = next.map((c) => (!baseIds.has(c.id) && c.main && isHuaweiModel(c.main.modelId) ? withAutoOn(c) : c));
-    // 第一百二十五轮（K2）：set-main 批量成组不再丢弃空对先挂的对比区——不改
-    // appendTierCards（返回 base+新卡、对比区按矩阵填），在此对结果后处理：首张
-    // 新卡若未带对比区则沿用被移除空对的（剔同 selKey、截配额）；已被矩阵填好
-    // 则不覆盖。replace-main 分支本就追加不动当前卡，无需处理。
-    if (ctx.kind === 'set-main' && activeCard?.compares.length) {
-      const inherit = activeCard.compares;
-      const firstNew = next.find((c) => !baseIds.has(c.id));
-      if (firstNew && !firstNew.compares.length) {
-        next = next.map((c) =>
-          c === firstNew
-            ? { ...c, auto: undefined, compares: inherit.filter((x) => selKey(x) !== selKey(c.main!)) }
-            : c,
-        );
-      }
-    }
-    actions.setMains(next);
-    setOpen(false);
-  };
-
-  /** 对比上下文：该档全部配置加入对比区（本卡配额封顶、与主品同型号跳过、连点不关） */
-  const tierCompareAll = (): void => {
-    const card = activeCard;
-    if (!card || !tier) return;
-    const base = replaceCompareCtx ? card.compares.filter((c) => c !== ctx.sel) : card.compares;
-    const seen = new Set(base.map(selKey));
-    const added = [...base];
-    for (const sel of tierAllConfigs) {
-      // 与主品同型号同配置才跳过（selKey 级）；同型号不同配置可进对比区
-      if (card.main && selKey(card.main) === selKey(sel)) continue;
-      const k = selKey(sel);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      added.push(sel);
-    }
-    // 2026-11-27 起不设条数上限：该档全部配置全量加入（原超配额截断 + 提示退役）
-    actions.setCardCompares(card.id, added);
-    if (replaceCompareCtx) setOpen(false);
   };
 
   const columns: CascadeColumnSpec[] = useMemo(() => {
@@ -943,9 +823,6 @@ function LevelSwitchPopover({
       window.removeEventListener('resize', clamp);
     };
   }, [open, bodyW, popCls]);
-  // 2026-11-27 起卡数与对比条数无上限：批量动作只在「该档无可加配置」时禁用
-  const tierGroupDisabled = tierOwnConfigs.length === 0;
-  const tierCompareDisabled = !activeCard;
 
   return (
     <Popover
@@ -967,7 +844,6 @@ function LevelSwitchPopover({
         }
         setOpen(o);
         setSearch('');
-        if (!o) setTier(null); // 关窗档位筛选回「全部档位」
       }}
       placement={placement}
       styles={{ body: { padding: 10, width: bodyW } }}
@@ -985,17 +861,6 @@ function LevelSwitchPopover({
               onChange={(e) => setSearch(e.target.value)}
               style={{ flex: narrow ? undefined : '1 1 150px', width: narrow ? '100%' : undefined, minWidth: 0, height: narrow ? 44 : undefined }}
             />
-            <Select
-              size={narrow ? 'middle' : 'small'}
-              aria-label="价格档位"
-              value={tier ?? ''}
-              onChange={(v) => setTier(v === '' ? null : v)}
-              style={{ width: narrow ? '100%' : 138, flexShrink: 0, height: narrow ? 44 : undefined }}
-              popupMatchSelectWidth={false}
-              // 下拉挂在树浮层内部：层级随浮层走（高于面板），不被外层浮窗压住
-              getPopupContainer={(node) => node.closest('.ant-popover') ?? document.body}
-              options={[{ value: '', label: '全部档位' }, ...tierOptions]}
-            />
             <Segmented
               size={narrow ? 'middle' : 'small'}
               aria-label="型号排序"
@@ -1007,47 +872,6 @@ function LevelSwitchPopover({
                 { label: '名称', value: 'name' },
               ]}
             />
-          </div>
-          {/* 档位批量动作带：常驻定高 28（2026-11-27 固定骨架——选 / 不选档位只换内容，
-              外框高度不变）；未选档位时给一句引导 */}
-          <div
-            data-lpl-tier-band={tier ? 'on' : 'off'}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              marginBottom: 8,
-              height: 28,
-              padding: '4px 10px',
-              boxSizing: 'border-box',
-              borderRadius: radius.control,
-              background: tier ? selectSoft : color.canvasSoft,
-              fontSize: 12,
-              color: tier ? selectSoftInk : color.mute,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-            }}
-          >
-            {tier ? (
-              <>
-                <span className="tnum">
-                  {tierBatchCtx
-                    ? `该档位 ${brandLabelOf(ownBrand())} 共 ${tierOwnConfigs.length} 个配置`
-                    : `该档位共 ${tierAllConfigs.length} 个配置`}
-                </span>
-                {tierBatchCtx ? (
-                  <Tooltip title={tierGroupDisabled ? '该档位没有可成组的配置' : '该档位全部配置逐配置成组，各按对标矩阵带出对比区'} zIndex={TIP_Z}>
-                    <TierBatchPill text="全部各成一组" disabled={tierGroupDisabled} onClick={tierGroupAll} />
-                  </Tooltip>
-                ) : (
-                  <Tooltip title="该档位全部配置加入本组对比区（与矩阵匹配并存，可继续手动增删）" zIndex={TIP_Z}>
-                    <TierBatchPill text="全部加入对比" disabled={tierCompareDisabled} onClick={tierCompareAll} />
-                  </Tooltip>
-                )}
-              </>
-            ) : (
-              <span>选择档位后可把该档配置批量成组或加入对比</span>
-            )}
           </div>
           <div style={{ display: 'flex', minWidth: 0 }}>
             <CascadePanel
@@ -1231,72 +1055,109 @@ function CompareRow({ card, sel }: { card: MainProduct; sel: ProductSelection })
 
 // ---------------- 分析对部件 ----------------
 
-/** 「匹配竞品」开关（第一百三十一轮更名）：选中 = 本组对比区由对标矩阵驱动
- *  （换主品/矩阵更新自动跟随）；置灰 = 无矩阵可依（仅华为主品可开） */
-function AutoMatchInline({ card }: { card: MainProduct }) {
+/** 「匹配竞品 ▾」下拉 pill（2026-11-27 二轮改版：原「自动匹配竞品」开关与
+ *  「同档位推荐」入口两枚 pill 收口为一枚下拉，对比区来源一目了然）：
+ *  · 对标矩阵 —— 勾选态 = card.auto（开 = 对比区由对标矩阵驱动），点击切换；
+ *    非华为主品无矩阵可依，置灰并给原提示；
+ *  · 同档位… —— 打开 TierRecommendModal（按现价落档的同档候选），无主品置灰；
+ *  · 上一代 —— 包内 prevGen 映射带出的上一代配置加入对比区（已在对比区的
+ *    不再重复），缺失 / 已在对比区分别如实提示。
+ *  pill 选中态 = 对标矩阵开（卡级矩阵驱动可见即达）。 */
+function MatchDropdown({ card }: { card: MainProduct }) {
   const { actions } = useFilters();
-  const huawei = card.main != null && isHuaweiModel(card.main.modelId);
-  const on = !!card.auto;
-  const tip =
-    card.main == null
+  const [tierOpen, setTierOpen] = useState(false);
+  const main = card.main;
+  const huawei = main != null && isHuaweiModel(main.modelId);
+  const auto = !!card.auto;
+  const matrixDisabled = !huawei;
+  const matrixTip =
+    main == null
       ? '先选择主分析产品'
       : !huawei
         ? '按对标矩阵带出对比区，仅支持华为产品；请手动添加'
-        : on
+        : auto
           ? '已开启：换主品或对标矩阵更新时自动重算本组对比区；点击关闭'
           : '开启后按对标矩阵自动带出本组对比区';
-  return (
-    <MatchPill
-      label={`自动匹配竞品${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
-      text="自动匹配竞品"
-      can={huawei}
-      selected={on}
-      tip={tip}
-      onClick={() => actions.autoMatchCard(card.id)}
-    />
-  );
-}
-
-/** 「同档位推荐」入口（2026-11-27，主品卡组头，「自动匹配竞品」之外）：打开
- *  TierRecommendModal——按主品配置在当前国家的同档位推荐对比产品，加入后与矩阵
- *  匹配并存为并集。无主品时置灰（没有档位可依）。 */
-function TierRecommendInline({ card }: { card: MainProduct }) {
-  const [open, setOpen] = useState(false);
-  const can = card.main != null;
+  const tip = matrixDisabled ? matrixTip : '对比区来源：对标矩阵（可开关）· 同档推荐 · 上一代';
   return (
     <>
-      <Tooltip title={can ? '按主品配置在当前国家的同档位推荐对比产品（与自动匹配并存，可多选）' : '先选择主分析产品，再按档位推荐'} zIndex={TIP_Z}>
-        <button
-          type="button"
-          aria-label={`同档位推荐${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
-          aria-disabled={!can || undefined}
-          className="lpl-pk-ghost"
-          data-testid="tier-recommend-entry"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (can) setOpen(true);
-          }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 3,
-            height: 20,
-            padding: '0 8px',
-            borderRadius: radius.pill,
-            fontSize: 11,
-            fontWeight: 600,
-            color: can ? color.body : color.mute,
-            background: color.canvas,
-            border: `1px solid ${color.hairline}`,
-            cursor: can ? 'pointer' : 'not-allowed',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          同档位推荐
-        </button>
-      </Tooltip>
-      {open && card.main && <TierRecommendModal card={card} onClose={() => setOpen(false)} />}
+      <Dropdown
+        trigger={['click']}
+        placement="bottomRight"
+        getPopupContainer={(node) => node.closest('[data-lpl-picker-panel]') ?? document.body}
+        menu={{
+          selectable: false,
+          items: [
+            {
+              key: 'matrix',
+              disabled: matrixDisabled,
+              title: matrixDisabled ? matrixTip : undefined,
+              label: (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 14, display: 'inline-flex', justifyContent: 'center' }}>{auto ? <CheckOutlined style={{ fontSize: 11 }} /> : null}</span>
+                  对标矩阵
+                </span>
+              ),
+            },
+            { key: 'tier', disabled: main == null, label: '同档位…' },
+            { key: 'prevgen', disabled: main == null, label: '上一代' },
+          ],
+          onClick: ({ key, domEvent }) => {
+            domEvent.stopPropagation();
+            if (key === 'matrix') {
+              if (!matrixDisabled) actions.autoMatchCard(card.id);
+              return;
+            }
+            if (key === 'tier') {
+              if (main) setTierOpen(true);
+              return;
+            }
+            if (key === 'prevgen') {
+              if (!main) return;
+              const res = groupsFromPrevGeneration([main]);
+              const have = new Set([selKey(main), ...card.compares.map(selKey)]);
+              const added = res.added.filter((s) => !have.has(selKey(s)));
+              if (added.length > 0) {
+                actions.addCardCompares(card.id, added, 'manual');
+                message.success(`已加入 ${added.length} 款上一代`);
+              } else if (res.added.length > 0) {
+                message.info('上一代已在对比区');
+              } else {
+                message.info(`数据包未登记 ${modelNameOf(main.modelId)} 的上一代配置`);
+              }
+            }
+          },
+        }}
+      >
+        <Tooltip title={tip} zIndex={TIP_Z}>
+          <button
+            type="button"
+            aria-label={`匹配竞品${main ? ` ${modelNameOf(main.modelId)}` : ''}`}
+            className="lpl-pk-ghost"
+            data-testid="match-dropdown-entry"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              height: 20,
+              padding: '0 8px',
+              borderRadius: radius.pill,
+              fontSize: 11,
+              fontWeight: 600,
+              color: auto ? selectSoftInk : color.body,
+              background: auto ? selectSoft : color.canvas,
+              border: `1px solid ${auto ? 'rgba(0, 112, 243, 0.35)' : color.hairline}`,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            匹配竞品 <DownOutlined style={{ fontSize: 8 }} />
+          </button>
+        </Tooltip>
+      </Dropdown>
+      {tierOpen && card.main && <TierRecommendModal card={card} onClose={() => setTierOpen(false)} />}
     </>
   );
 }
@@ -1537,7 +1398,11 @@ function PickerPanel() {
   const { state, actions } = useFilters();
   const narrow = useNarrowViewport();
   const industry = state.industry;
-  const mode = state.analysisMode ?? 'compare';
+  // 选择方式（2026-11-27 二轮改版）：按产品 = 主品卡编辑区；按档位 = TierBoardPicker
+  // 看板（只在「应用」时写回 state.mains）。组件态，不持久化、不进 URL，默认按产品；
+  // 按档位应用后组件自行切回按产品。「分析结构」开关随品牌全景退场——选择草稿
+  // 恒为 mains，视图（对标/分列）在图表侧切换。
+  const [selectMode, setSelectMode] = useState<'product' | 'tier'>('product');
   const available = useMemo(() => new Set<Industry>(industriesOfCountry(state.countryCode)), [state.countryCode]);
   const industryOptions = INDUSTRY_ORDER.map((ind) => ({
     label: INDUSTRY_LABELS[ind],
@@ -1547,7 +1412,7 @@ function PickerPanel() {
 
   return (
     <>
-      {/* 顶栏：产业（全局范围开关）+ 模式切换 */}
+      {/* 顶栏：产业（全局范围开关）+ 选择方式 */}
       <div
         style={{
           display: 'flex',
@@ -1568,22 +1433,24 @@ function PickerPanel() {
               size="small"
             />
           </ConfigProvider>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <span id="lpl-picker-mode-label" style={{ fontSize: 12, color: color.mute }}>分析结构</span>
+          <span id="lpl-picker-selectmode-label" style={{ fontSize: 12, color: color.mute, flexShrink: 0, marginLeft: 4 }}>选择方式</span>
           <Segmented
-            aria-labelledby="lpl-picker-mode-label"
-            value={mode}
-            onChange={(v) => actions.setAnalysisMode(v as AnalysisMode)}
+            aria-labelledby="lpl-picker-selectmode-label"
+            value={selectMode}
+            onChange={(v) => setSelectMode(v as 'product' | 'tier')}
             options={[
-              { label: '产品对标', value: 'compare' },
-              { label: '品牌全景', value: 'panorama' },
+              { label: '按产品', value: 'product' },
+              { label: '按档位', value: 'tier' },
             ]}
             size="small"
           />
         </div>
       </div>
-      {mode === 'panorama' ? <PanoramaPicker /> : <ComparePanelBody />}
+      {selectMode === 'tier' ? (
+        <TierBoardPicker onApplied={() => setSelectMode('product')} />
+      ) : (
+        <ComparePanelBody />
+      )}
     </>
   );
 }
@@ -2117,8 +1984,7 @@ function ComparePanelBody() {
                 <div style={{ flex: narrow ? '0 0 auto' : '1 1 0', width: narrow ? '100%' : undefined, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', minHeight: narrow ? 36 : '100%', flexWrap: 'wrap', gap: 6 }}>
                   <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
                   <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <AutoMatchInline card={card} />
-                    <TierRecommendInline card={card} />
+                    <MatchDropdown card={card} />
                     {card.main && (
                       <Tooltip title={`把该组存为模板（默认名 = ${modelNameOf(card.main.modelId)}）`} zIndex={TIP_Z}>
                         <button
