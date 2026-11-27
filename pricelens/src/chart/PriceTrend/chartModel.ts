@@ -583,6 +583,8 @@ export function buildLabelPlan(p: {
               ...(cfgText ? { cfgText } : {}),
             }
           : {}),
+        // 线型样例（2026-11-27 品牌全景）：系列带 lineDash 才携带
+        ...(s.lineDash ? { lineDash: s.lineDash } : {}),
       });
       continue;
     }
@@ -602,6 +604,8 @@ export function buildLabelPlan(p: {
       anchorX: px,
       anchorY: py,
       hidden: hidden || undefined,
+      // 线型样例（2026-11-27 品牌全景）：锚定模式与名称带同口径——系列带 lineDash 才携带
+      ...(s.lineDash ? { lineDash: s.lineDash } : {}),
     });
   }
   // 带内名称与价格标签同走一遍避让（pinned = 期望位冲突时最小位移上推；带内同 x，
@@ -651,6 +655,48 @@ export function flipLabelDxOf(p: { v: number; i: number; geom: Geom }): number {
   const w = priceLabelW(fmtInt(v));
   if (xPxOf(geom, i) + w / 2 <= geom.plotLeft + geom.plotWidth - LABEL_RIGHT_PAD) return 0;
   return -w / 2;
+}
+
+export function smoothGapBridgeValues(values: readonly (number | null)[], a: number, b: number): (number | null)[] {
+  const out: (number | null)[] = [...values];
+  const leftIndex = a - 1;
+  const rightIndex = b + 1;
+  const p0 = values[leftIndex];
+  const p1 = values[rightIndex];
+  if (p0 == null || p1 == null || rightIndex <= leftIndex) return out;
+  const h = rightIndex - leftIndex;
+  const secant = (p1 - p0) / h;
+  const nearest = (from: number, dir: -1 | 1): { index: number; value: number } | null => {
+    for (let i = from; i >= 0 && i < values.length; i += dir) {
+      const value = values[i];
+      if (value != null) return { index: i, value };
+    }
+    return null;
+  };
+  const left = nearest(leftIndex - 1, -1);
+  const right = nearest(rightIndex + 1, 1);
+  const cap = Math.abs(secant) * 3;
+  const clampSlope = (v: number): number => Math.max(-cap, Math.min(cap, v));
+  const m0 = clampSlope(left ? (p0 - left.value) / (leftIndex - left.index) : secant);
+  const m1 = clampSlope(right ? (right.value - p1) / (right.index - rightIndex) : secant);
+  const lo = Math.min(p0, p1);
+  const hi = Math.max(p0, p1);
+  const steps = Math.max(2, (b - a + 1) * 4);
+  out[leftIndex] = p0;
+  out[rightIndex] = p1;
+  for (let j = 1; j < steps; j++) {
+    const t = j / steps;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const value = (2 * t3 - 3 * t2 + 1) * p0
+      + (t3 - 2 * t2 + t) * h * m0
+      + (-2 * t3 + 3 * t2) * p1
+      + (t3 - t2) * h * m1;
+    const index = Math.round(leftIndex + h * t);
+    if (index === leftIndex || index === rightIndex) continue;
+    out[index] = Math.max(lo, Math.min(hi, value));
+  }
+  return out;
 }
 
 export function buildOption(p: {
@@ -748,7 +794,10 @@ export function buildOption(p: {
         // 数据点圆点删除（第三十八轮）：悬停浮窗承担点检视，线面更干净；
         // symbolSize 0 而非 symbol 'none'（第二十轮教训：'none' 会吞数值标签）
         symbolSize: 0,
-        lineStyle: { color: s.color, width: 2, ...(dim ? { opacity: 0.15 } : {}) },
+        // 线型（2026-11-27 品牌全景）：系列带 lineDash 时按节律画虚线——同品牌多条线
+        // 同色，靠线型区分；缺省实线，既有调用方输出不变。缺采跨接段另走下方固定
+        // [4, 4] 短虚线桥，与线型字段无关
+        lineStyle: { color: s.color, width: 2, ...(s.lineDash?.length ? { type: s.lineDash } : {}), ...(dim ? { opacity: 0.15 } : {}) },
         z: 12,
         silent: true,
       });
@@ -758,9 +807,12 @@ export function buildOption(p: {
         const vp = s.points[a - 1].price;
         const vn = s.points[b + 1].price;
         if (vp == null || vn == null) continue;
-        const bridge = s.points.map((_, i) =>
-          i === a - 1 ? yNormOf(geom, vp) : i === b + 1 ? yNormOf(geom, vn) : null,
-        );
+        const bridge = p.lineShape === 'smooth'
+          ? smoothGapBridgeValues(s.points.map((pt) => (pt.price != null ? yNormOf(geom, pt.price) : null)), a, b)
+            .map((value, i) => (i >= a - 1 && i <= b + 1 ? value : null))
+          : s.points.map((_, i) =>
+              i === a - 1 ? yNormOf(geom, vp) : i === b + 1 ? yNormOf(geom, vn) : null,
+            );
         sArr.push({
           type: 'line',
           data: bridge,

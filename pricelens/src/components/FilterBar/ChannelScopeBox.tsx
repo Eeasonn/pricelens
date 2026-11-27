@@ -334,7 +334,7 @@ export default function ChannelScopeBox() {
         </div>
       }
     >
-      <div data-testid="channel-scope-trigger" style={{ width: '100%', minWidth: 0 }}>
+      <div data-testid="channel-scope-trigger" role="group" aria-label="平台" style={{ width: '100%', minWidth: 0 }}>
         <CascadeTrigger labels={labels} placeholder={placeholder} open={open} />
       </div>
     </Popover>

@@ -7,6 +7,7 @@ export default function CurrencyBox() {
   const { state, actions } = useFilters();
   return (
     <Segmented
+      aria-label="币种"
       value={state.currency}
       onChange={(value) => actions.set({ currency: value as CurrencyMode })}
       options={[{ label: '本币', value: 'local' }, { label: 'USD', value: 'usd' }]}

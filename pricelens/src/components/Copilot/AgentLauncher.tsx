@@ -1,6 +1,7 @@
 import { RobotOutlined } from '@ant-design/icons';
 import { useAgent } from '../../state/AgentContext';
 import { color, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { BRAND_NAME } from '../PriceAgentMark';
 
 export default function AgentLauncher() {
   const { open, running, unreadCount, openAgent } = useAgent();
@@ -8,7 +9,7 @@ export default function AgentLauncher() {
     running ? '正在运行' : '',
     unreadCount > 0 ? `${unreadCount > 9 ? '9+' : unreadCount} 条未读结果` : '',
   ].filter(Boolean);
-  const accessibleLabel = `打开 PriceLens Agent${statusParts.length ? ` · ${statusParts.join(' · ')}` : ''}`;
+  const accessibleLabel = `打开 ${BRAND_NAME}${statusParts.length ? ` · ${statusParts.join(' · ')}` : ''}`;
   return (
     <button
       type="button"
@@ -25,7 +26,7 @@ export default function AgentLauncher() {
       }}
     >
       <RobotOutlined />
-      <span>问 PriceLens</span>
+      <span>问 {BRAND_NAME}</span>
       {unreadCount > 0 && <span aria-hidden="true" style={{ minWidth: 16, height: 16, padding: '0 4px', display: 'inline-grid', placeItems: 'center', borderRadius: 9999, background: color.ink, color: color.onPrimary, fontSize: 12, lineHeight: 1 }}>{unreadCount > 9 ? '9+' : unreadCount}</span>}
       {running && <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: color.link }} />}
     </button>

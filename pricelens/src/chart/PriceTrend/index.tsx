@@ -59,7 +59,7 @@ import { modelNameOf } from '../../components/ProductCascader/tree';
 import { useAlerts } from '../../components/AlertCenter';
 import { groupAlertsBySeries, latestAlerts } from '../../dataModel/alerts';
 import { buildSeries, defaultPlatformAnchorOf, effectiveLinePlatform, lifecycleDeltaOf, tierOf, tierOrderOf } from '../../dataModel/aggregate';
-import { flatSelections, MERGE_LINES_CAP, MAX_LINES_PER_CHART } from '../../state/mainSelection';
+import { flatSelections } from '../../state/mainSelection';
 import usePageViewState from '../../state/usePageViewState';
 import { dimPromo, dimProduct, dimRegion, dimTime } from '../../data';
 import type {
@@ -135,6 +135,7 @@ import PointPanel from './PointPanel';
 import { compareKeysOfGroups, groupsOfCards, onlyMainState, recentFourWeekChange, seriesKeyMatches, seriesKeyOf, type DetailBucket, type LegendGroup, type TableGroup } from './tableModel';
 import SplitScrollBar from './SplitScrollBar';
 import BrandLegendStrip from './BrandLegendStrip';
+import LegendTools from './LegendTools';
 import { pinnedSelectionFromBadge, restorePlatformSync, snapshotPlatformSync, syncComparesWithMain, type PlatformSyncCardSnap } from './platformSync';
 
 /** 面板头/无障碍文案：面板 = 主分析卡；卡未选主品（空对）时以对比产品组示之。
@@ -712,17 +713,13 @@ export default function PriceTrend(props: {
   // 单卡合并成图；手动开关与「折线超限强制分离」退役（配额已在选择时收口，
   // 图上永远装得下）。面板顺序 = 卡序（选择浮窗内拖拽），页内把手拖拽仍可覆盖。
   // 第一百二十三轮⑥（宽容合并）：≥2 组默认分图但可切回一张图（单产品多型号等
-  // 用户认为该合并的场景）；合并可用 = 全部组系列去重总数 ≤ MERGE_LINES_CAP，
-  // 超限「合并」项置灰，选区变化致超限时自动回落分图。mergeView 会话态跨页保留
-  //（P1-5，见下方 usePageViewState 声明）。
+  // 用户认为该合并的场景）。2026-11-27 取消合并 16 线上限：合并恒可用（原超限置灰
+  // 「合并」、选区变化致超限自动回落分图的逻辑退役——不自动减少、不强制切图）；
+  // 线多时的可读性由图例搜索 / 隔离 / 主动隐藏（LegendTools）承担。mergeView 会话态
+  // 跨页保留（P1-5，见下方 usePageViewState 声明）。
   const multiCards = effMains.length >= 2;
-  // 合并/分图选择：会话态跨页保留（P1-5）——切页返回保持上次选择；超限回落逻辑不变
+  // 合并/分图选择：会话态跨页保留（P1-5）——切页返回保持上次选择
   const [mergeView, setMergeView] = usePageViewState<boolean>('dashboard.mergeView', () => false);
-  const mergeLines = mainSels.length + compareSels.length; // 全部组系列去重总数
-  const mergeOk = mergeLines <= MERGE_LINES_CAP;
-  useEffect(() => {
-    if (mergeView && !mergeOk) setMergeView(false); // 超限回落分图；回到限内不自动回跳，由用户重选
-  }, [mergeView, mergeOk]);
   const splitActive = multiCards && !mergeView;
   // 分离模式一行可见面板数：按面板数量自适应，最多 3 个；不再提供手动 2/3 切换。
   const splitColumns = Math.min(3, Math.max(1, effMains.length));
@@ -826,6 +823,30 @@ export default function PriceTrend(props: {
         return { ...p, all, vis: all.filter((x) => !hiddenKeys.has(x.key)) };
       }),
     [panelData, effWins, hiddenKeys, win.s, win.e],
+  );
+
+  // 图例工具的数据与悬停（2026-11-27）：合并 = 窗口内全部系列；分离 = 各面板系列并集
+  //（含被图例隐藏者——隐藏的条目要能在清单里恢复）。悬停按系列所在视图分发：
+  // 合并走 legendHoverKey；分离按面板记 { panel, key }（面板图例悬停同一通道）
+  const legendSeries: Series[] = useMemo(
+    () => (splitActive ? panelViews.flatMap((p) => p.all) : visSeries),
+    [splitActive, panelViews, visSeries],
+  );
+  const legendHover = useCallback(
+    (key: string | null): void => {
+      if (key == null) {
+        setLegendHoverKey(null);
+        setPanelLegendHover(null);
+        return;
+      }
+      if (splitActive) {
+        const owner = panelViews.find((p) => p.all.some((x) => x.key === key));
+        setPanelLegendHover(owner ? { panel: owner.key, key } : null);
+      } else {
+        setLegendHoverKey(key);
+      }
+    },
+    [splitActive, panelViews],
   );
 
   // 展示顺序：拖拽把手换位后记录 key 序；空 = 数据序
@@ -1723,22 +1744,23 @@ export default function PriceTrend(props: {
                 onChange={(v) => setMergeView(v === 'merge')}
                 options={[
                   { label: '分图', value: 'split' },
-                  mergeOk
-                    ? { label: '合并', value: 'merge' }
-                    : {
-                        label: (
-                          <Tooltip title={`合并后共 ${mergeLines} 条，超过合并上限 ${MERGE_LINES_CAP} 条（每组最多 ${MAX_LINES_PER_CHART} 条：主品 + 对比产品）`}>
-                            <span>合并</span>
-                          </Tooltip>
-                        ),
-                        value: 'merge',
-                        disabled: true,
-                      },
+                  // 2026-11-27：合并不再受折线总数限制（原超 16 线置灰退役）
+                  { label: '合并', value: 'merge' },
                 ]}
               />
             )}
           </ConfigProvider>
           <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* 图例工具（2026-11-27 取消折线条数上限后的可读性手段）：搜索 / 隔离 /
+                主动隐藏；折线较多时入口旁给非阻断提示。图上系列（含被隐藏者）全量进清单 */}
+            {legendSeries.length > 0 && (
+              <LegendTools
+                series={legendSeries}
+                hiddenKeys={hiddenKeys}
+                onSetHidden={setHiddenKeys}
+                onHover={legendHover}
+              />
+            )}
             <ChartToolbar
               mode="actions"
               anomalySlot={<AnomalyQualityChip page="price" />}

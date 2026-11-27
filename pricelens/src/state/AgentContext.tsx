@@ -22,7 +22,7 @@ import {
   type FilterResultCard,
 } from '../agent';
 import type { FiltersState } from './filtersTypes';
-import { clampMains } from './mainSelection';
+import { tidyMains } from './mainSelection';
 import { STABLE } from '../appChannel';
 import { useAgent as useAgentStable } from './AgentContextStable';
 import { materializeAlertRecords, alertAgentContextOf, transitionAlertRecord } from '../dataModel/alertLifecycle';
@@ -364,7 +364,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     if (controller.current) return;
     const validation = validateFilterPatch(patch);
     if (!validation.valid) return;
-    const nextPatch = patch.mains ? { ...patch, mains: clampMains(patch.mains) } : patch;
+    const nextPatch = patch.mains ? { ...patch, mains: tidyMains(patch.mains) } : patch;
     const mergedState: FiltersState = { ...state, ...nextPatch };
     const mergedContext = buildAgentContext(page, mergedState, alertRecords(alerts, mergedState, page, alertOverrides));
     // 与 applyFilter 同一写入通道：留撤销快照，用户可一键回退。
@@ -414,7 +414,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     if (card.contextFingerprint && card.contextFingerprint !== context.fingerprint) return { ok: false, error: '当前筛选口径已变化，请重新生成预览。' };
     setUndoSnapshots((prev) => [...prev, state].slice(-5));
     setRedoSnapshots([]);
-    actions.set(card.patch.mains ? { ...card.patch, mains: clampMains(card.patch.mains) } : card.patch);
+    actions.set(card.patch.mains ? { ...card.patch, mains: tidyMains(card.patch.mains) } : card.patch);
     setAppliedFilterIds((prev) => new Set([...prev, card.id]));
     return { ok: true };
   }, [actions, context.fingerprint, state]);

@@ -102,7 +102,7 @@ describe('R4-M1 · 组件方向：点「回看板定位」先落地 RU + nova �
     const view = mounted();
     fireEvent.click(screen.getByRole('button', { name: '准备 AE Nova' }));
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' }), { target: { value: 'RU nova 14 Pro 价格趋势' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '向 PriceAgent 提问' }), { target: { value: 'RU nova 14 Pro 价格趋势' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     const chartCard = await waitFor(() => {
       const found = [...view.baseElement.querySelectorAll('[data-agent-result-card]')].filter((element) => element.textContent?.includes('价格走势')).pop();

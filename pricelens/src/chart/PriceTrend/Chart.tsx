@@ -18,7 +18,7 @@
 //   跳变，不平滑），同色 85% 不透明度——粗细对比表达「主价/参照」层级
 // - 缺采：跨接段仅虚线（第二十四轮撤销空心插值点）；价格标签自适应避让（resolveCollisions 两遍式）
 // - 悬停：十字竖线（DOM）+ 钉顶附框（含折扣率胶囊，第五十二轮）+ 月/季下钻图标 +
-//   offer 图标 + 「快照」取证胶囊（第五十轮）；ECharts tooltip 禁用
+//   offer 图标 + 商品现页链接；ECharts tooltip 禁用
 // - 第五十二轮 图顶工具行单行三区：左 = $/齿轮 + 折后价/RRP 粗细线胶囊；中 = 系列图例页签
 //   （由看板层注入并居中）；右 = 大促档期/offer/最高最低/价格变化提醒圆框组
 // - 点击：月/季圈点（±12px 命中）触发下钻；周视图点击 = 锁定/解锁该时间列
@@ -35,8 +35,8 @@
 //   crosshairIdx（第110轮参考线机制的延伸）：分离模式悬停任一面板时间列，其余面板
 //   同列同步出各自的明细浮层（各显各的系列价格；十字实线/参考线图标仍只跟真实鼠标）。
 //   新增 volumes 入参：量价看板浮层在价格行后追加「销量 …台」行
-// - 第一百一十四轮（评审）：①悬停数据点只画品牌色小圆点（快照/下钻悬停图标全撤，
-//   快照查看收进图下核心信息明细的取证列）；②横向虚线随鼠标 Y 实时横跨所有图
+// - 第一百一十四轮（评审）：①悬停数据点只画品牌色小圆点（下钻悬停图标全撤，
+//   商品现页链接保留在核心信息明细产品名）；②横向虚线随鼠标 Y 实时横跨所有图
 //   （crosshairY 受控联动，与竖向参考线同机制）；③tipBox=true 时浮层改为图下方
 //   居中预留框（量价看板；无悬停显灰色斜体提示）；④labelMode='compact' 精简标签
 //   （每系列仅最高/最低/最新三价，白底胶囊避线）
@@ -65,7 +65,7 @@
 // ============================================================
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover, Popconfirm } from 'antd';
-import { TagOutlined, CloseOutlined } from '@ant-design/icons';
+import { TagOutlined, CloseOutlined, ExportOutlined } from '@ant-design/icons';
 // 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
 // bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
 import * as echarts from 'echarts/core';
@@ -75,8 +75,10 @@ import { CanvasRenderer } from 'echarts/renderers';
 
 echarts.use([LineChart, ScatterChart, GridComponent, CanvasRenderer]);
 import type { CurrencyMode, Granularity, Series } from '../../dataModel/types';
-import { color, currencyCodeOf, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
+import { brandColorOf, color, currencyCodeOf, font, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk, shadow } from '../../theme/tokens';
 import { measureText } from '../../components/ProductCascader';
+import Category1QuickSwitch from './Category1QuickSwitch';
+import { useTreeData } from '../../components/ProductPicker/pickerBits';
 import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate';
 // 区间量尺（2026-11-06 Eason 拍板）：读数 / 量尺几何 / 量带细档上限（纯计算见 rangeRuler）
 import { rulerLayerOf, rulerSummaryOf, volumeBandMaxOf, type RangeMode, type RulerLayerSide } from './rangeRuler';
@@ -377,7 +379,7 @@ export interface ChartProps {
 const HIT_PX = 12; // 圈点点击/悬停命中半径
 /** 第一百一十四轮：图下方居中明细预留框高度（tipBox 模式；日期行+一产品行+销量行 + 内边距） */
 const TIP_BOX_H = 84;
-/** 悬停数据点小圆点直径（第一百一十四轮：替代快照/下钻悬停图标） */
+/** 悬停数据点小圆点直径（第一百一十四轮：替代下钻悬停图标） */
 const HOVER_DOT_PX = 7;
 /** 预警事件焦点带小标签（第一百九十轮，外部 UX 审计）：预警页跳转带来的触发周，
  *  图上焦点带顶缘的归属标注（业务语义，不带工程词） */
@@ -543,8 +545,22 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
  *  ——统一灰字不取品牌色，点击 = 切换该系列折线显隐（屏蔽态 = 虚线置灰，同页签语言）。
  *  悬停药丸 = 显示该系列的起点指引线（默认全部隐藏）。
  *  避让盒 = 渲染盒（药丸 行高16×行数+内边距6 + 生命周期14）。 */
+/** 名称药丸的识别标记：缺省 = 品牌色点；系列带线型（2026-11-27 品牌全景：同品牌
+ *  多条线同色、靠虚线节律区分）时改为「同色线段样条」——药丸直接给出该线的线型，
+ *  便于对线辨认（直接标签 + 线型双重辨认，不新增色板） */
+function NameMark({ brand, lineDash }: { brand: string; lineDash?: number[] }) {
+  if (!lineDash?.length) return <BrandDot brand={brand} />;
+  return (
+    <svg aria-hidden width={14} height={8} viewBox="0 0 14 8" style={{ flexShrink: 0 }}>
+      <path d="M0 4H14" fill="none" stroke={brandColorOf(brand)} strokeWidth={2} strokeDasharray={lineDash.join(' ')} />
+    </svg>
+  );
+}
+
 function ZoneNamePill(props: {
   nm: SeriesNameItem;
+  series: Series;
+  romramByKey: ReturnType<typeof useTreeData>['romramByKey'];
   brand: string;
   deltaPct: { pct: number } | null;
   hidden: boolean;
@@ -590,11 +606,6 @@ function ZoneNamePill(props: {
         onBlur={() => { setBrandOpen(false); props.onHover(null); }}
         style={{
           ...NAME_PILL_BOX,
-          // 两行药丸（2026-11-13 Eason 名称带改版）：行1 = 色点+[品牌词]+产品名、
-          // 行2 = 配置 chip——叠 column 方向；单行/锚定模式布局不变
-          ...(nm.cfgText
-            ? { flexDirection: 'column' as const, alignItems: 'flex-start' as const, rowGap: 1 } // 2026-11-19 收紧 2→1（计划盒 ZONE_CFG_ROW_H = 14 行高 + 1 行距）
-            : {}),
           maxWidth: nm.maxW ?? 200,
           border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : color.hairline}`,
           cursor: 'pointer',
@@ -623,74 +634,38 @@ function ZoneNamePill(props: {
             {brandLabelOf(props.brand)}
           </span>
         )}
-        {nm.cfgText ? (
-          /* 两行药丸（2026-11-13 Eason 名称带改版）：行1 = 色点 + [品牌词（brand_inline
-              时，Eason：型号名一眼认出品牌的不内联、看不出的恒内联）] + 产品名；
-              行2 = 配置纯文字（二轮拍板：不带任何背景；'—'/规格未标明 = 无配置层级
-              不出配置行，回落单行）。品牌悬停行照旧（非内联时品牌在此显现） */
-          <>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
-              <BrandDot brand={props.brand} />
-              {nm.brandWord != null && (
-                <span
-                  style={{
-                    fontSize: 10,
-                    lineHeight: '12px',
-                    color: color.mute,
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                  }}
-                >
-                  {nm.brandWord}
-                </span>
-              )}
-              <span data-testid="name-pill-text" style={NAME_PILL_TEXT}>
-                {nm.nameText ?? nm.text}
-              </span>
+        <>
+          <NameMark brand={props.brand} lineDash={nm.lineDash} />
+          {nm.brandWord != null && (
+            <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {nm.brandWord}
             </span>
-            <span
-              className="tnum"
-              style={{
-                flexShrink: 0,
-                fontSize: 10,
-                lineHeight: '11px', // 2026-11-19 收紧 13→11（计划盒 ZONE_CFG_ROW_H = 11 行高 + 1 行距；纯数字配置 10px 字号可读）
-                color: color.mute,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {nm.cfgText}
-            </span>
-          </>
-        ) : (
-          <>
-            <BrandDot brand={props.brand} />
-            <span
-              data-testid="name-pill-text"
-              style={
-                nm.zone
-                  ? // 第196轮整改3：名称带内单行 nowrap——带宽按名称实测自适应预留
-                    // （nameZoneWidthOf），正常不换行不省略；overflow 可见兜底极端长名
-                    NAME_PILL_TEXT
-                  : nm.maxW != null
-                    ? {
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical' as const,
-                        WebkitLineClamp: 2,
-                        overflow: 'hidden',
-                        wordBreak: 'break-word',
-                        whiteSpace: 'normal',
-                        fontSize: 11,
-                        lineHeight: '16px',
-                        color: color.body,
-                      }
-                    : { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
-              }
-            >
-              {nm.text}
-            </span>
-          </>
-        )}
+          )}
+          <span
+            data-testid="name-pill-text"
+            style={
+              nm.zone
+                ? NAME_PILL_TEXT
+                : nm.maxW != null
+                  ? {
+                      display: '-webkit-box',
+                      WebkitBoxOrient: 'vertical' as const,
+                      WebkitLineClamp: 2,
+                      overflow: 'hidden',
+                      wordBreak: 'break-word',
+                      whiteSpace: 'normal',
+                      fontSize: 11,
+                      lineHeight: '16px',
+                      color: color.body,
+                    }
+                  : { fontSize: 11, lineHeight: '16px', color: color.body, whiteSpace: 'nowrap' }
+            }
+          >
+            {nm.cfgText ? (nm.nameText ?? nm.text) : nm.text}
+          </span>
+        </>
       </button>
+      {nm.cfgText && <Category1QuickSwitch series={props.series} nodes={props.romramByKey} />}
       {/* 方案 B 切换入口迁移（2026-11-17 Eason）：名称带药丸不再外挂「量」直切按钮
           （多我司产品时一排「量」chip 视觉噪）；切换统一收敛到量带归属药丸的候选菜单 */}
       {delta && (
@@ -710,6 +685,7 @@ export default function Chart(props: ChartProps) {
   // 档位带阶梯随产业（tierBandsOf）——产业属全局筛选，从 FiltersContext 直取，
   // 调用方（含量价看板/下钻弹窗）无需逐层传 prop
   const { state: filterState } = useFilters();
+  const { romramByKey } = useTreeData();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const chartDivRef = useRef<HTMLDivElement | null>(null); // ECharts 挂载层（背景带之下、DOM 覆盖层之下）
   const chartRef = useRef<echarts.ECharts | null>(null);
@@ -1112,6 +1088,7 @@ export default function Chart(props: ChartProps) {
   // 系列名跳转载体（第五十七轮建；第五十九轮改直显目的地）：每系列最后一个
   // 有值且带 url 的点（退市后停在清库末点，语义仍是「该产品现页」）
   const nameAll = props.nameSeries ?? series;
+  const seriesByKey = useMemo(() => new Map(nameAll.map((s) => [s.key, s])), [nameAll]);
   const labelMode = props.labelMode ?? 'detail';
   // 第196轮整改3（2026-11-05 复检定版）：名称带在「Y 轴刻度标签右侧、绘图区左缘」
   // 之间（带右缘贴绘图区），药丸与价格线位置对齐、重叠最小位移避让——见
@@ -1398,7 +1375,7 @@ export default function Chart(props: ChartProps) {
 
   // 第一百一十三轮（评审）：明细浮层取数列 = 本图真实悬停列优先，缺省回落外部联动列
   // （crosshairIdx，第110轮参考线机制延伸）——分离模式悬停任一面板时间列，其余面板
-  // 同列同步出各自的明细浮层。十字实线/快照/下钻图标仍只跟 hoverIdx（真实鼠标）
+  // 同列同步出各自的明细浮层。十字实线/下钻图标仍只跟 hoverIdx（真实鼠标）
   // 第118轮：高亮时间段提交后，悬停明细只响应时间段内（时间段外整体降透明）
   const tipIdxRaw = hoverIdx ?? props.crosshairIdx ?? null;
   const brushCommitted = props.brush ?? null;
@@ -2386,11 +2363,13 @@ export default function Chart(props: ChartProps) {
                               <a
                                 href={b.url}
                                 target="_blank"
-                                rel="noreferrer"
+                                rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                style={{ fontSize: 12, color: color.link, whiteSpace: 'nowrap' }}
+                                title="打开商城现页 · 新标签页"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: color.link, textDecoration: 'underline', textUnderlineOffset: 2, whiteSpace: 'nowrap' }}
                               >
-                                查看商品页
+                                商城现页
+                                <ExportOutlined aria-hidden style={{ fontSize: 10 }} />
                               </a>
                             ) : null}
                           </div>
@@ -2842,7 +2821,7 @@ export default function Chart(props: ChartProps) {
                             </>
                           );
                         })()}
-                        {/* 快照入口已删除（本轮，Eason）：悬停小卡只读；取证走明细表快照列 */}
+                        {/* 快照入口已删除（本轮，Eason）：悬停小卡只读；现页链接走明细表产品名 */}
                       </div>
                     {items.map((it) => (
                       <div
@@ -3520,7 +3499,7 @@ export default function Chart(props: ChartProps) {
             );
           })()}
           {/* 悬停数据点小圆点（第一百一十四轮，评审）：悬停/联动时间列上有值的系列
-              各画一枚品牌色小圆点（白描边），取代原快照/下钻悬停图标；该点已有
+              各画一枚品牌色小圆点（白描边），取代原下钻悬停图标；该点已有
               S/E/‹› 端点徽标或属跨接孤立点时不叠画 */}
           {tipIdx != null &&
             tipIdx < geom.n &&
@@ -3666,6 +3645,8 @@ export default function Chart(props: ChartProps) {
                   <ZoneNamePill
                     key={`nm-${nm.seriesKey}`}
                     nm={nm}
+                    series={seriesByKey.get(nm.seriesKey)!}
+                    romramByKey={romramByKey}
                     brand={brandByKey.get(nm.seriesKey) ?? ''}
                     deltaPct={lifecycleDeltas.get(nm.seriesKey) ?? null}
                     hidden={nm.hidden ?? false}

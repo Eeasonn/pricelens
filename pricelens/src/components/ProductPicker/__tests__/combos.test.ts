@@ -1,12 +1,15 @@
 // ============================================================
 // 模板「＋ 加入当前选择」增量计划金测（planAppend，第一百三十一轮第二次修订）：
-// 逐模板卡处理——主品不在 = 整卡追加（auto 随模板带入、卡数封顶）；
-// 主品已在 = 缺失对比按 selKey 去重合并进现有卡（与主品同组跳过、卡配额封顶）。
+// 逐模板卡处理——主品不在 = 整卡追加（auto 随模板带入）；主品已在 = 缺失对比按
+// selKey 去重合并进现有卡（与主品同组跳过）。
+// 2026-11-27（取消 8 卡 / 单图 8 线上限）：原「卡数封顶 → overflowCards」「对比
+// 配额封顶 → overflowCompares」两条断言与确认目标正面冲突，改写为「不截断、
+// 全量追加 / 全量合并」；overflow 计数随上限退役删除。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { dimProduct } from '../../../data';
 import type { MainProduct, ProductSelection } from '../../../state/filtersTypes';
-import { MAINS_CAP, selKey } from '../../../state/mainSelection';
+import { selKey } from '../../../state/mainSelection';
 import { planAppend, type StoredCombo } from '../combos';
 
 /** n 个互不同组的该国竞品勾选（按 selKey 去重收集，保 dimProduct 序） */
@@ -47,7 +50,6 @@ describe('planAppend（＋ 加入当前选择：逐模板卡增量）', () => {
     expect(plan.fresh[0].auto).toBe(true); // auto 随模板带入
     expect(plan.fresh[0].compares.map(selKey)).toEqual([comps[0], comps[1]].map(selKey));
     expect(plan.fresh[0].id).not.toBe(combo.cards[0].id); // 换新卡 id
-    expect(plan.overflowCards).toBe(0);
   });
 
   it('主品已在但缺对比 → 只把缺失对比合并进现有卡（已有不重复、与主品同组跳过、auto 卡交由调用方退出）', () => {
@@ -60,7 +62,6 @@ describe('planAppend（＋ 加入当前选择：逐模板卡增量）', () => {
     expect(plan.merges[0].cardId).toBe(mains[0].id);
     // 缺失的 comp1/comp2 补入；已有的 comp0 不重复；与主品同组的 ownSel 不进对比区
     expect(plan.merges[0].compares.map(selKey)).toEqual([comps[1], comps[2]].map(selKey));
-    expect(plan.overflowCompares).toBe(0);
   });
 
   it('全部内容均已在当前选择 → 空 plan（tooltip 走「均已在当前选择中」）', () => {
@@ -70,32 +71,30 @@ describe('planAppend（＋ 加入当前选择：逐模板卡增量）', () => {
     const plan = planAppend(mains, combo);
     expect(plan.fresh).toHaveLength(0);
     expect(plan.merges).toHaveLength(0);
-    expect(plan.overflowCards).toBe(0);
-    expect(plan.overflowCompares).toBe(0);
   });
 
-  it('卡数封顶：当前已满 MAINS_CAP 时主品不在的模板卡计入 overflowCards 不追加', () => {
-    const comps = distinctComps(MAINS_CAP + 2);
-    const mains = comps.slice(0, MAINS_CAP).map((sel) => card(sel));
-    const combo: StoredCombo = { label: 'T', cards: [card(comps[MAINS_CAP]), card(comps[0])] };
+  it('卡数不封顶（2026-11-27）：当前已有 10 张卡时，主品不在的模板卡仍整卡追加', () => {
+    const comps = distinctComps(12);
+    const mains = comps.slice(0, 10).map((sel) => card(sel));
+    const combo: StoredCombo = { label: 'T', cards: [card(comps[10]), card(comps[0])] };
     const plan = planAppend(mains, combo);
-    expect(mains).toHaveLength(MAINS_CAP);
-    // comps[MAINS_CAP] 放不下；comps[0] 主品已在且模板卡无缺失对比 → 无合并
-    expect(plan.fresh).toHaveLength(0);
-    expect(plan.overflowCards).toBe(1);
+    expect(mains).toHaveLength(10);
+    // comps[10] 整卡追加（不再计入 overflowCards）；comps[0] 主品已在且模板卡无缺失对比 → 无合并
+    expect(plan.fresh).toHaveLength(1);
+    expect(selKey(plan.fresh[0].main!)).toBe(selKey(comps[10]));
+    expect(plan.merges).toHaveLength(0);
   });
 
-  it('第 4～7 个对比可合并，达到单图 8 条折线后才计入 overflowCompares', () => {
+  it('对比合并不截断（2026-11-27）：缺失的 5 个对比全部合并，不再截到单图 8 条折线', () => {
     const comps = distinctComps(9);
     const mains = [card(ownSel, comps.slice(0, 4))];
     const combo: StoredCombo = { label: 'T', cards: [card(ownSel, comps.slice(4, 9))] };
     const plan = planAppend(mains, combo);
     expect(plan.fresh).toHaveLength(0);
-    expect(plan.merges[0].compares.map(selKey)).toEqual(comps.slice(4, 7).map(selKey));
-    expect(plan.overflowCompares).toBe(2);
+    expect(plan.merges[0].compares.map(selKey)).toEqual(comps.slice(4, 9).map(selKey));
   });
 
-  it('同一张现有卡被多个模板对命中 → 合并累计且只按单图折线配额截断', () => {
+  it('同一张现有卡被多个模板对命中 → 合并累计、不截断', () => {
     const comps = distinctComps(9);
     const mains = [card(ownSel, [comps[0]])];
     const combo: StoredCombo = {
@@ -104,7 +103,6 @@ describe('planAppend（＋ 加入当前选择：逐模板卡增量）', () => {
     };
     const plan = planAppend(mains, combo);
     expect(plan.merges).toHaveLength(1);
-    expect(plan.merges[0].compares.map(selKey)).toEqual(comps.slice(1, 7).map(selKey));
-    expect(plan.overflowCompares).toBe(2);
+    expect(plan.merges[0].compares.map(selKey)).toEqual(comps.slice(1, 9).map(selKey));
   });
 });

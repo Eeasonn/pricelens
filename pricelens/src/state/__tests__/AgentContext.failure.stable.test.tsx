@@ -97,12 +97,12 @@ afterEach(cleanup);
 
 function openPanel(): HTMLElement {
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+  fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
   return screen.getByRole('dialog');
 }
 
 async function sendFromPanel(panel: HTMLElement, text: string): Promise<void> {
-  const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+  const input = within(panel).getByLabelText('向 PriceAgent 提问');
   fireEvent.change(input, { target: { value: text } });
   fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
 }

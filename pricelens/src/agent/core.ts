@@ -1,7 +1,7 @@
 import { buildSeries, defaultChannelOf, effectiveChannelIds, effectiveLinePlatform, latestPricedWeekOfSelection, lowestPriceColorSku, lowestPriceColorSkuAnyChannel, platformPriceSpreadOfSelection, platformScopeLabel, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
 import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { INDUSTRY_LABELS } from '../dataModel/scope';
-import { buildCards, clampMains, flatSelections, normalizeSelectionForCountry, remapSelectionForCountry, selKey } from '../state/mainSelection';
+import { buildCards, tidyMains, flatSelections, normalizeSelectionForCountry, remapSelectionForCountry, selKey } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection, PlatformSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
 import type { AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, AgentSuggestionAction, AlertListResultCard, FilterResultCard, FilterPatch, ForecastContextInput } from './contracts';
@@ -624,7 +624,7 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
   const entities = resolveAgentEntities(text, state);
   if (entities.explicitCountry) patch.countryCode = entities.countryCode;
   if (entities.explicitProduct && entities.selections.length) {
-    patch.mains = clampMains(buildCards(entities.selections, { auto: true, countryCode: entities.countryCode }));
+    patch.mains = tidyMains(buildCards(entities.selections, { auto: true, countryCode: entities.countryCode }));
   }
   return patch;
 }
@@ -1197,7 +1197,7 @@ function scopePatchOf(state: FiltersState): FilterPatch {
   return {
     countryCode: state.countryCode,
     industry: state.industry,
-    mains: clampMains(state.mains.map((card) => ({
+    mains: tidyMains(state.mains.map((card) => ({
       ...card,
       main: card.main ? { ...card.main } : null,
       compares: card.compares.map((compare) => ({ ...compare })),

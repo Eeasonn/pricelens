@@ -519,7 +519,7 @@ export function buildProductTree(
       if (m.launchDate > node.latestLaunch) node.latestLaunch = m.launchDate;
     }
     const series = [...seriesMap.values()].sort(
-      (a, b) => Number(a.eol) - Number(b.eol) || b.latestLaunch.localeCompare(a.latestLaunch) || a.title.localeCompare(b.title, undefined, { numeric: true }),
+      (a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }),
     );
     return { key: brand, title: brand, series, modelCount: models.length } satisfies BrandNode;
   });

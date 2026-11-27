@@ -312,7 +312,7 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
       </div>
       <div style={{ ...infoLine, color: 'rgba(0,0,0,0.45)' }}>
         {serviceMode
-          ? '服务器模式：数据承载在本机 PriceLens 服务器（SQLite + data/ 目录），导入不再受浏览器内存限制（117MB 级全量包可直导）；'
+          ? '服务器模式：数据承载在本机 PriceAgent 服务器（SQLite + data/ 目录），导入不再受浏览器内存限制（117MB 级全量包可直导）；'
             + '关闭服务器后可直接双击打开单文件 PriceLens.html 走离线兜底（数据以浏览器 IndexedDB 为准）。'
           : '便携迁移：把 PriceLens.html（应用）与本数据包拷到目标电脑 → 双击打开应用 → 配置页「导入数据包」。导入保存在本机浏览器'
             + 'IndexedDB，不影响其他人；「还原内置数据」随时可回出厂口径。导入只替换价格/维表数据，不改动个人配置（选品、模板、阈值用'

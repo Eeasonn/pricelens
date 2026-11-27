@@ -55,7 +55,7 @@ function mountedApp() {
 }
 
 async function submit(text: string): Promise<void> {
-  fireEvent.change(screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' }), { target: { value: text } });
+  fireEvent.change(screen.getByRole('textbox', { name: '向 PriceAgent 提问' }), { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: '发送' }));
 }
 
@@ -131,7 +131,7 @@ describe('A M1 · 普通上下文 stale 的消息级副作用锁（组件方向�
     const suggestion = screen.getByRole('button', { name: '价格优势' });
     expect((suggestion as HTMLButtonElement).disabled).toBeFalsy();
     // 输入框不锁
-    const input = screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' }) as HTMLTextAreaElement;
+    const input = screen.getByRole('textbox', { name: '向 PriceAgent 提问' }) as HTMLTextAreaElement;
     expect(input.disabled).toBeFalsy();
     view.unmount();
   });

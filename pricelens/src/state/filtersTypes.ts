@@ -24,16 +24,48 @@ export interface ProductSelection {
   platform?: PlatformSelection | null;
 }
 
+/** 对比区的用户补充来源（2026-11-27）：manual = 手动添加（树勾选 / 更换 / 模板合并）；
+ *  tier = 「同档位推荐」加入。矩阵产出不入册——是否矩阵项由当前对标矩阵动态判定。 */
+export type CompareSource = 'manual' | 'tier';
+
 /** 主分析产品卡：唯一主品（含颜色）+ 它自己的对比区（任意品牌，含华为）。
  *  id = 稳定键（拖拽换序/弹窗定位），与 modelId 解耦（同型号不同配置 = 多卡）。 */
 export interface MainProduct {
   id: string;
   main: ProductSelection | null;
+  /** 生效对比区 = 用户补充 ∪（自动匹配开：对标矩阵产出 − excluded），同型号同配置去重。
+   *  无条数上限（2026-11-27 取消单图 8 线 / 8 卡 / 合并 16 线及全部截断）。 */
   compares: ProductSelection[];
-  /** 「匹配竞品」开关（原「自动匹配竞品」，第一百三十一轮更名）：开 = 对比区
-   *  由对标矩阵驱动（点按钮立即重算；换主品 / 矩阵更新自动跟随）；
-   *  关/缺省 = 用户手动持有。手动改对比区即自动关闭。仅华为主品卡可开。 */
+  /** 「自动匹配竞品」开关：开 = 对标矩阵驱动（矩阵产出随换主品 / 矩阵更新增删）；
+   *  关/缺省 = 矩阵不再驱动。2026-11-27 起手动增删对比不再整体退出自动匹配——
+   *  用户补充与矩阵产出并存为并集，各自保留来源。仅华为主品卡可开。 */
   auto?: boolean;
+  /** 用户补充登记（selKey → 来源）。在册的对比项 = 用户补充：矩阵重算、开关切换、
+   *  刷新恢复都不删。缺省（旧卡）= 自动匹配关时全部对比视作手动补充，
+   *  开时视作矩阵产出（与改造前持久化兼容）。 */
+  compareSources?: Record<string, CompareSource>;
+  /** 自动匹配开时用户主动移除的矩阵项（selKey）：矩阵重算不再带回；换主品即清空 */
+  excluded?: string[];
+}
+
+/** 分析结构（2026-11-27「一个产业与产品入口、两种分析结构」）：
+ *  compare = 产品对标（主分析卡 mains）；panorama = 品牌全景（panorama 草稿）。
+ *  两套选择草稿分别保存，来回切换不丢。 */
+export type AnalysisMode = 'compare' | 'panorama';
+
+/** 品牌全景里一个品牌的已选产品（型号 × 配置；颜色取默认最低价色） */
+export interface PanoramaBrand {
+  brand: string;
+  sels: ProductSelection[];
+}
+
+/** 品牌全景草稿：无默认主品、无默认价差基准——基准只能由用户显式选临时基准。 */
+export interface BrandPanorama {
+  brands: PanoramaBrand[];
+  /** true（默认）= 各品牌图共享同一 Y 轴；false = 各图独立自适应 */
+  sharedY: boolean;
+  /** 用户显式选的临时价差基准（selKey：`modelId|配置去空格`）；null = 无基准 */
+  baselineKey: string | null;
 }
 
 export interface PlatformSelection {
@@ -67,8 +99,12 @@ export interface FiltersState {
   industry: Industry; // 手机/平板/穿戴/音频（IoT/PC 有数据无矩阵）
   // 第一百二十三轮：「按档位」主体模式退役（subjectMode/tier 字段删除）——
   // 档位有机融入「选择产品」浮窗的树筛选与批量动作，见 tierSelection.appendTierCards。
-  /** 主分析产品卡列表：卡序 = 分离面板序；≥2 张卡看板自动分离 */
+  /** 主分析产品卡列表：卡序 = 分离面板序；≥2 张卡看板自动分离。无卡数上限 */
   mains: MainProduct[];
+  /** 当前分析结构（产品对标 / 品牌全景）；两套草稿分别保存在 mains 与 panorama */
+  analysisMode: AnalysisMode;
+  /** 品牌全景选择草稿（与 mains 分别保存；按 国家×产业 会话快照隔离） */
+  panorama: BrandPanorama;
   platform: PlatformSelection | null; // null=未选=该国默认电渠单平台口径；渠道内多店铺取最低在架价
   /** R7-M1：稳定版平台口径归一说明（见 PlatformScopeNotice）；缺省/null = 无归一
    *  发生或说明已失效。不参与 URL 同步；随持久化整包留存（读档按形状校验）。 */
@@ -110,12 +146,21 @@ export interface FiltersActions {
   // ---- 主分析卡操作 ----
   /** 卡片结构变化（增删卡/换主品/换序）：照原样写入，对比区不自动重算 */
   setMains(list: MainProduct[]): void;
-  /** 手动改某卡对比区（增删/调色/换条目）：直接写入，并关闭该卡「自动匹配竞品」 */
+  /** 手动改某卡对比区（增删 / 调色 / 换条目 / 换序）：直接写入。2026-11-27 起不再关闭
+   *  「自动匹配竞品」——新增项登记为手动补充（与矩阵产出并存）；移除矩阵项时记入
+   *  excluded，矩阵重算不再带回 */
   setCardCompares(cardId: string, compares: ProductSelection[]): void;
+  /** 加入对比（用户补充：manual 手动 / tier 同档推荐）：与矩阵产出并存为并集、同型号同
+   *  配置去重、剔除与主品同组者；不改自动匹配开关 */
+  addCardCompares(cardId: string, sels: ProductSelection[], source: CompareSource): void;
   /** 单卡「自动匹配竞品」开关：开 = 立即按矩阵重算并保持驱动；关 = 对比区保留转手动 */
   autoMatchCard(cardId: string): void;
   /** 全局「全部自动匹配」开关：全部华为主品卡都在开 → 全部关；否则全部开 */
   autoMatchAll(): void;
+  /** 切换分析结构（产品对标 / 品牌全景）；两套草稿分别保留 */
+  setAnalysisMode(mode: AnalysisMode): void;
+  /** 写入品牌全景草稿（选择、Y 轴共享、临时基准） */
+  setPanorama(next: BrandPanorama): void;
   /** 单个产品的取价口径（第一百六十轮）：selKey 命中的主品/对比条目全部改写；
    *  platform = null 恢复自动（该产品日常价最低渠道） */
   setSelectionPlatform(selKey: string, platform: PlatformSelection | null): void;

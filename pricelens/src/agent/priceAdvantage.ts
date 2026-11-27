@@ -1,6 +1,6 @@
 import { buildSeries, defaultChannelOf, effectiveLinePlatform, platformScopeLabel, platformSelectionForCountry, pricedChannelIdsOfSelection } from '../dataModel/aggregate';
 import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
-import { autoComparesFor, buildCards, clampMains, remapSelectionForCountry, withAutoOn } from '../state/mainSelection';
+import { autoComparesFor, buildCards, tidyMains, remapSelectionForCountry, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { AgentCitation, AgentResponse, AgentStep, FilterPatch, PriceAdvantageResultCard, PriceAdvantageRow } from './contracts';
 
@@ -190,7 +190,9 @@ function focusCardsOfRow(row: PriceAdvantageRow): MainProduct[] {
   const autoCards = buildCards([row.ownSelection], { auto: true, countryCode: row.countryCode });
   const first = autoCards[0];
   const keepsTarget = first?.compares.some((item) => item.modelId === row.compareSelection.modelId && item.romram.replace(/\s+/g, '') === row.compareSelection.romram.replace(/\s+/g, ''));
-  return keepsTarget ? autoCards : clampMains(autoCards.map((item) => ({ ...item, compares: [...item.compares, row.compareSelection].slice(0, 3) })));
+  // 2026-11-27：原 `.slice(0, 3)` 把矩阵对比静默截到前 3 条——对比区截断随「取消
+  // 折线条数上限」一并退役，目标竞品追加到矩阵产出之后、全量保留
+  return keepsTarget ? autoCards : tidyMains(autoCards.map((item) => ({ ...item, compares: [...item.compares, row.compareSelection] })));
 }
 
 /** R2（本轮返修 m2 + M2，同步稳定线 7edadc6）：结果卡「回看价格走势 / 跳 GTM

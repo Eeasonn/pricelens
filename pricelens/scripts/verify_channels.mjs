@@ -23,7 +23,7 @@ if (!stable.includes('<meta name="pricelens-channel" content="stable">')) {
 if (!iterate.includes('<meta name="pricelens-channel" content="iterate">')) {
   throw new Error('iterate artifact is missing the iterate channel marker');
 }
-if (stable.includes('PriceLens · 演进版')) throw new Error('stable artifact contains iterate title');
-if (!iterate.includes('<title>PriceLens · 演进版</title>')) throw new Error('iterate artifact is missing iterate title');
+if (stable.includes('PriceAgent · 演进版')) throw new Error('stable artifact contains iterate title');
+if (!iterate.includes('<title>PriceAgent · 演进版</title>')) throw new Error('iterate artifact is missing iterate title');
 
 console.log('[verify:channels] stable and iterate artifacts are correctly branded');

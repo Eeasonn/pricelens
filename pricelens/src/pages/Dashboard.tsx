@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useFilters } from '../state/FiltersContext';
 import ChartContentBar from '../components/ChartContentBar';
 import PriceTrend from '../chart/PriceTrend';
+import BrandPanorama from '../chart/PriceTrend/BrandPanorama';
 import TrendTables, { type DetailBucket, type TableGroup } from '../chart/PriceTrend/TrendTables';
 import { color, radius, shadow, space } from '../theme/tokens';
 
@@ -17,9 +18,14 @@ import { color, radius, shadow, space } from '../theme/tokens';
  *  第112~113轮：图卡与明细卡之间插入「竞品价差」卡（矩阵 + 成对走势）。
  *  第118轮（2026-10-21 评审）：价差与明细两卡合并为一张「时间作列」的横向拖动
  *  宽表卡（共享表头 = 图上同一时间轴，见 TrendTables），表内时间恒与图对齐
- *  第一百二十三轮：宽表按主分析组分块上报（组 = 选择浮窗卡，保持卡序） */
+ *  第一百二十三轮：宽表按主分析组分块上报（组 = 选择浮窗卡，保持卡序）
+ *  2026-11-27（一个产业与产品入口、两种分析结构）：analysisMode = 'panorama' 时图主体
+ *  换成品牌全景（BrandPanorama：每品牌一张图、三列网格换行），图下宽表改「品牌价格
+ *  明细」（按品牌分组；用户显式选了临时基准才出价差区）；产品对标（PriceTrend +
+ *  「价差与明细」）原样保留。两套草稿分别保存，模式往返不丢。 */
 export default function Dashboard() {
   const { state } = useFilters();
+  const panoramaMode = (state.analysisMode ?? 'compare') === 'panorama';
   // 图上可见窗口的同源快照 + 独立于展示粒度的近 4 周价格变化
   const [trendWindow, setTrendWindow] = useState<{
     groups: TableGroup[];
@@ -49,9 +55,15 @@ export default function Dashboard() {
               （lpl-card-scroll = 189 轮：恒显横向滚动条，窄屏不误以为内容被裁） */}
           <div className="lpl-card-scroll" style={{ padding: space.lg, overflowX: 'auto' }}>
             <div style={{ minWidth: 880 }}>
-              <PriceTrend
-                onSeriesWindow={(groups, buckets, fourWeekChanges) => setTrendWindow({ groups, buckets, fourWeekChanges })}
-              />
+              {panoramaMode ? (
+                <BrandPanorama
+                  onSeriesWindow={(groups, buckets, fourWeekChanges) => setTrendWindow({ groups, buckets, fourWeekChanges })}
+                />
+              ) : (
+                <PriceTrend
+                  onSeriesWindow={(groups, buckets, fourWeekChanges) => setTrendWindow({ groups, buckets, fourWeekChanges })}
+                />
+              )}
             </div>
           </div>
         </section>
@@ -73,6 +85,9 @@ export default function Dashboard() {
               fourWeekChanges={trendWindow.fourWeekChanges}
               currency={state.currency}
               granularity={state.granularity}
+              // 品牌全景：图下是「品牌价格明细」——按品牌分组；价差区只在用户显式选了
+              // 临时基准后出现，基准列头如实写「价差基准」（无默认主品）
+              {...(panoramaMode ? { title: '品牌价格明细', detailCaption: '品牌价格明细', baseCaption: '价差基准' } : {})}
             />
           </section>
         )}

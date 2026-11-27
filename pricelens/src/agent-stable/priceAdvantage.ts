@@ -1,7 +1,7 @@
 import { buildSeries } from '../dataModel/aggregate';
 import { normalizePlatformScope, platformScopeProvenanceNote } from '../dataModel/platformScope';
 import { dimChannel, dimProduct, dimTime } from '../data';
-import { clampMains, flatSelections } from '../state/mainSelection';
+import { tidyMains, flatSelections } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { PlatformQuery, Series, SeriesQuery } from '../dataModel/types';
 import type { AgentActionTarget, AgentCardAction, AgentStep, FilterPatch, PriceAdvantageDirection, PriceAdvantageResultCard, PriceAdvantageRow, PriceAdvantageSkuOption } from './contracts';
@@ -177,7 +177,7 @@ export function calculatePriceAdvantage(state: FiltersState, contextFingerprint 
   // 口径（我司主卡的 SKU、对比区与 auto 标记；auto 卡对比区由 Filters 侧按目标
   // 国矩阵重算）与参与计算的平台口径，否则跨国 switchScope 会把主品重置成
   // 目标国第一默认主品，回看结果与卡脱节。
-  const scopeMains: MainProduct[] = clampMains(state.mains
+  const scopeMains: MainProduct[] = tidyMains(state.mains
     .filter((card): card is MainProduct & { main: ProductSelection } => card.main != null && ownSelection(card.main))
     .map((card) => ({ ...card, main: { ...card.main }, compares: card.compares.map((compare) => ({ ...compare })) })));
   const scopePatch: FilterPatch = {

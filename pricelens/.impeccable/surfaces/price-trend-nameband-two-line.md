@@ -30,3 +30,11 @@
 
 typecheck / design:check / design:lint / `npm run check`（1994+7skip，金测 84 全过）
 全绿；稳定版单文件已重建。
+
+## 2026-11-27 增补：category1 快切、现页链接与虚线几何平滑
+
+- 两行药丸的第二行由静态配置文案升级为 **category1 下拉入口**；单行配置仍只读，多配置才出现菜单。菜单不推挤名称带，宽度固定；当前项打勾，其他项显示参考价，近期无价禁用。触发器与产品显隐按钮是兄弟控件，禁止按钮嵌套；ArrowUp/ArrowDown/Home/End、Esc 与焦点归还均覆盖。
+- 主品经 `withMain` 换配置并随新主品重算自动竞品；对比品经 `withCompares` 替换，其他对比项保留，新配置登记手动来源，旧矩阵项进入排除；品牌全景只替换所属品牌项，`baselineKey` 同步到新配置键。颜色优先沿用同名颜色，缺失回默认最低价色；每线取价口径保留。
+- 商品现页链接使用链接蓝、默认下划线与外链图标；新标签页打开，`noopener noreferrer`。页面快照功能与明细“记录”行已退役，证据口径见 `snapshot-evidence.md` 的停用说明。
+- 缺采桥在 `smooth` 模式使用单调 Hermite 几何引导：切线斜率受限、端点值域钳制，仅改变屏幕曲线，不生成业务价格、标签或 tooltip 数据；`step` 保持原语义。实现见 `chartModel.smoothGapBridgeValues`。
+- 产品树 series 仅按标题首字母与自然数序排列，不再先排退市或上市时间；型号默认排序不变。

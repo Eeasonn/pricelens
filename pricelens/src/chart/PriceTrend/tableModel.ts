@@ -23,6 +23,9 @@ export interface TableGroup {
   id: string; // 卡 id（与分离面板同 key）
   mainKey: string | null; // 主分析产品的系列 key；未选主品（空对）为 null
   series: Series[]; // 主分析产品在前 + 对比产品（卡内顺序；含被图例屏蔽者）
+  /** 组展示名（2026-11-27 品牌全景 = 品牌名）：页签与复制表头的「组」列用它；
+   *  缺省 = 主品 品牌+型号+配置（产品对标卡） */
+  label?: string;
 }
 
 /** 图例带组块（第一百二十三轮④）：与 TableGroup 同构 + 组序号——

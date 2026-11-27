@@ -45,7 +45,7 @@ const SHEET_DEFINITIONS: SheetData[] = [
     name: '说明',
     widths: [22, 76],
     rows: [
-      ['PriceLens 配置表模板', '请在对应页签填写配置后保存为 .xlsx，再从“配置”页点击“导入配置表”。'],
+      ['PriceAgent 配置表模板', '请在对应页签填写配置后保存为 .xlsx，再从“配置”页点击“导入配置表”。'],
       ['适用版本', 'schemaVersion 1。导入时会全量校验，任何一行字段不合法都会拒绝整份文件。'],
       ['填写原则', '列名不要修改。每个页签的第 1 行是字段名。空白行会被忽略。不要合并单元格。'],
       ['默认店铺', '每个国家最多保留一行。channel_id 必须来自当前数据中的渠道维表，例如 RU:dns:独立站。'],
@@ -450,7 +450,7 @@ function sharedStringsOf(files: Record<string, Uint8Array>): string[] {
 export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSnapshotV1 {
   const files = unzipSync(buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer));
   if (!files['xl/workbook.xml'] || !files['xl/_rels/workbook.xml.rels']) {
-    throw new Error('不是合法的 PriceLens 配置表（缺少工作簿结构）');
+    throw new Error('不是合法的 PriceAgent 配置表（缺少工作簿结构）');
   }
   const sharedStrings = sharedStringsOf(files);
   const marketRuleRows = rowsByHeader(sheetByName(files, '市场采集规则', sharedStrings));

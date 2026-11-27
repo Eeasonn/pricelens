@@ -143,12 +143,12 @@ async function request<T>(path: string, options: RequestOptions, secret?: string
       throw new AgentServiceApiError(
         path === '/test'
           ? '服务器响应超时：服务商长时间没有回应，请检查服务地址与网络后重试'
-          : '服务器响应超时，请确认本机 PriceLens 服务器仍在运行后重试',
+          : '服务器响应超时，请确认本机 PriceAgent 服务器仍在运行后重试',
         null,
       );
     }
     // fetch 的原始报错（Failed to fetch 等）对人没有帮助，换成能照着做的一句话
-    throw new AgentServiceApiError('连不上本机服务器，请确认 PriceLens 服务器正在运行', null);
+    throw new AgentServiceApiError('连不上本机服务器，请确认 PriceAgent 服务器正在运行', null);
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', onOuterAbort);

@@ -100,7 +100,7 @@ function openPanel(): HTMLElement {
 }
 
 async function sendFromPanel(panel: HTMLElement, text: string): Promise<void> {
-  const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+  const input = within(panel).getByLabelText('向 PriceAgent 提问');
   fireEvent.change(input, { target: { value: text } });
   fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
 }

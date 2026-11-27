@@ -40,7 +40,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 describe('shared assistant-ui conversation', () => {
   it('uses external drafts and sends one trimmed query from the composer', async () => {
     render(<Harness initialDraft="  比较当前价格  " />);
-    const input = screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' });
+    const input = screen.getByRole('textbox', { name: '向 PriceAgent 提问' });
     expect((input as HTMLTextAreaElement).value).toBe('  比较当前价格  ');
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(ask).toHaveBeenCalledOnce());

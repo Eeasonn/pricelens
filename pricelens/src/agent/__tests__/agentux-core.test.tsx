@@ -107,7 +107,7 @@ describe('agentux-core price advantage and price alert loops', () => {
     fireEvent.click(card.getAllByRole('button', { name: /标记已确认|开始核查|标记需行动/ })[0] as HTMLButtonElement);
     await new Promise((resolve) => { setTimeout(resolve, 100); });
     expect(card.queryByRole('button', { name: /撤销状态变更/ })).toBeNull();
-    const input = screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' });
+    const input = screen.getByRole('textbox', { name: '向 PriceAgent 提问' });
     fireEvent.change(input, { target: { value: '价格预警' } });
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
     // A placeholder now exists while streaming; wait for the second validated answer.
@@ -200,7 +200,7 @@ describe('Agent 面板输入区与上下文条（UI 审计 2026-11-10）', () =>
   it('输入区不再渲染引擎来源实现名词行，键盘提示行保留', async () => {
     mountedApp();
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
-    await screen.findByRole('textbox', { name: '向 PriceLens Agent 提问' });
+    await screen.findByRole('textbox', { name: '向 PriceAgent 提问' });
     // 两种引擎来源的 label 值都不得出现（env 有无远端地址均覆盖）
     expect(screen.queryByText('本地确定性引擎 · 离线可用')).toBeNull();
     expect(screen.queryByText('平台预设网关 · GLM 叙述 · 本地兜底')).toBeNull();
@@ -212,7 +212,7 @@ describe('Agent 面板输入区与上下文条（UI 审计 2026-11-10）', () =>
     mountedApp();
     fireEvent.click(screen.getByRole('button', { name: '设定主品' }));
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
-    await screen.findByRole('textbox', { name: '向 PriceLens Agent 提问' });
+    await screen.findByRole('textbox', { name: '向 PriceAgent 提问' });
     const chip = screen.getAllByText((content) => content.startsWith('口径 · '))[0];
     expect(chip).toBeTruthy();
     // 默认口径只读到显示名与配置；技术标识通过 tooltip 保留可追溯性。

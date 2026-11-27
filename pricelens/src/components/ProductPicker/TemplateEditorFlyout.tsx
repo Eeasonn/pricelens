@@ -18,8 +18,8 @@ import { createPortal } from 'react-dom';
 import { Input, message, Popconfirm, Popover, Tooltip } from 'antd';
 import { DeleteOutlined, SearchOutlined, CheckOutlined, PlusOutlined } from '@ant-design/icons';
 import { PANEL_EXIT_MS, prefersReducedMotion } from '../../theme/motion';
-import { cascadePlacementOf } from './pickerBits';
-import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
+import { cascadeFrameOf, cascadePlacementOf } from './pickerBits';
+import { CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import {
   configTextOf,
   defaultColorSkuIds,
@@ -32,7 +32,7 @@ import BrandDot, { brandLabelOf } from '../BrandMark';
 import { useFilters } from '../../state/FiltersContext';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
-import { cardQuota, COMPARE_CAP_HINT, MAINS_CAP, newCardId, remapSelection, selKey } from '../../state/mainSelection';
+import { newCardId, remapSelection, selKey } from '../../state/mainSelection';
 import { color, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
   AddPill,
@@ -50,11 +50,8 @@ import {
   TIP_Z,
   EDITOR_Z,
   PAIR_LIST_MAX_H,
-  mainTitleOf,
-  pillW,
-  textW,
   useTreeData,
-  ROW_GAP,
+  mainTitleOf,
 } from './pickerBits';
 import { defaultTemplateName, type StoredCombo } from './combos';
 
@@ -76,7 +73,6 @@ function PickPopover({
   currentKey,
   blockedKeys,
   checkedKeys,
-  quotaFull,
   mainSelKey,
   initialModelId,
   onPick,
@@ -90,8 +86,6 @@ function PickPopover({
   blockedKeys?: Set<string>;
   /** 对比区已有（compare 上下文勾选态） */
   checkedKeys?: Set<string>;
-  /** compare 上下文配额满（未勾选行拦点） */
-  quotaFull?: boolean;
   /** 本卡主品（compare 上下文不可与主品重复占线） */
   mainSelKey?: string;
   initialModelId?: string;
@@ -99,11 +93,19 @@ function PickPopover({
   keepOpen?: boolean;
   children: ReactNode;
 }) {
+  const { state } = useFilters();
   const { fullTree } = useTreeData();
   const narrow = useNarrowViewport();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const tree = useMemo(() => searchProductTree(fullTree, search), [fullTree, search]);
+  // 固定骨架（2026-11-27，与主浮窗 LevelSwitchPopover 同口径）：外框宽 / 落位 / 四列列宽
+  // 按未过滤全量树在打开时刻量一次，不随品牌 / 系列 / 型号 / 勾选 / 搜索变化；仅视口变化重算
+  const [viewportW, setViewportW] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth));
+  const frame = useMemo(
+    () => cascadeFrameOf(fullTree, state.currency, { compareCtx: ctx.kind === 'compare', modelTag: false }),
+    [fullTree, state.currency, ctx.kind],
+  );
   // 关闭守卫（2026-11-17「点了又立马退出」同款，见 ProductPickerModal.LevelSwitchPopover）：
   // onOpenChange(false) 须有真实按下背书；无背书/触发器连点抖动（开窗 <400ms）一律否决。
   const openedAtRef = useRef(0);
@@ -127,10 +129,19 @@ function PickPopover({
     if (open) openedAtRef.current = Date.now();
   }, [open]);
 
-  // 打开/搜索时定位：优先当前条目的型号路径，否则首个结果
+  // 定位（2026-11-27）：打开时定位；搜索后当前路径仍有效则原样保留（各列滚动位置不动），
+  // 仅当前路径失效才重定位并让各列把新选中行滚入视野（locateEpoch + 1）
   const [path, setPath] = useState<[string, string, string] | null>(null);
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  const [locateEpoch, setLocateEpoch] = useState(0);
   useEffect(() => {
     if (!open) return;
+    const stillValid = !!pathRef.current && tree.some(
+      (b) => b.key === pathRef.current![0]
+        && b.series.some((s) => s.key === pathRef.current![1] && s.models.some((m) => m.modelId === pathRef.current![2])),
+    );
+    if (stillValid) return; // 当前路径仍有效：不重定位
     const locate = (t: BrandNode[]): [string, string, string] | null => {
       if (initialModelId) {
         for (const b of t) {
@@ -145,6 +156,7 @@ function PickPopover({
       return b && s && m ? [b.key, s.key, m.modelId] : null;
     };
     setPath(locate(tree));
+    setLocateEpoch((e) => e + 1); // 仅当前路径失效才重定位
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, search]);
 
@@ -160,11 +172,7 @@ function PickPopover({
     if (compareCtx) {
       const checked = checkedKeys?.has(k) ?? false;
       if (!checked && mainSelKey === k) return;
-      // 每组对比硬上限：点行名称加第 4 款给出同句提示（与主浮窗同口径）
-      if (!checked && quotaFull) {
-        message.info(COMPARE_CAP_HINT);
-        return;
-      }
+      // 2026-11-27 起对比区不设条数上限（原「每组对比硬上限」拦截退役，与主浮窗同口径）
     }
     onPick(r);
     if (!keepOpen) setOpen(false);
@@ -207,8 +215,7 @@ function PickPopover({
       if (compareCtx) {
         const checked = checkedKeys?.has(k) ?? false;
         const sameAsMain = mainSelKey === k;
-        const full = quotaFull && !checked;
-        const disabled = !checked && (sameAsMain || full);
+        const disabled = !checked && sameAsMain;
         return {
           key: r.key,
           label: r.romram,
@@ -223,11 +230,9 @@ function PickPopover({
               title={
                 sameAsMain && !checked
                   ? '主分析产品不对比自身配置'
-                  : full
-                    ? COMPARE_CAP_HINT
-                    : checked
-                      ? '移除该对比'
-                      : '加入对比区'
+                  : checked
+                    ? '移除该对比'
+                    : '加入对比区'
               }
             >
               <span
@@ -270,26 +275,19 @@ function PickPopover({
       } satisfies CascadeRowItem;
     });
 
-    // 行尾内容宽度预留（与主浮窗同口径：列宽容纳 label + 行尾，无省略号）
-    const brandExtra = tree.reduce((w, b) => Math.max(w, textW(`${b.modelCount} 型号`, 10)), 0) + ROW_GAP;
-    const eolPillW = textW('退市', 10) + 8;
-    const seriesExtra = (brand?.series ?? []).some((s) => s.eol) ? eolPillW + ROW_GAP : 0;
-    const modelExtra = (series?.models ?? []).some((m) => m.eol) ? eolPillW + ROW_GAP : 0;
-    // 对比 pill = 图标 + 文案（图标 11 + 间隙 3 计入预留）
-    const romramExtra = (compareCtx ? pillW('对比', 11) + 14 : Math.max(textW('当前', 10), textW('已选', 10))) + ROW_GAP;
-
+    // 固定四列骨架（2026-11-27）：列宽取打开时刻按全量树冻结的 frame，不随当前路径 / 搜索 / 勾选变化
     return [
-      { items: brandItems, width: autoColumnWidth(brandItems, { extraW: brandExtra, noMaxClip: true }) },
-      { items: seriesItems, width: autoColumnWidth(seriesItems, { extraW: seriesExtra, noMaxClip: true }) },
-      { items: modelItems, width: autoColumnWidth(modelItems, { extraW: modelExtra, noMaxClip: true }) },
-      { items: romramItems, width: autoColumnWidth(romramItems, { extraW: romramExtra, noMaxClip: true }) },
+      { items: brandItems, width: frame.brand },
+      { items: seriesItems, width: frame.series },
+      { items: modelItems, width: frame.model },
+      { items: romramItems, width: frame.romram, emptyText: '请先选择型号' },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, brand, series, model, ctx, checkedKeys, blockedKeys, quotaFull, mainSelKey, currentKey]);
+  }, [tree, brand, series, model, ctx, checkedKeys, blockedKeys, mainSelKey, currentKey, frame]);
 
-  const panelW = columns.reduce((w, c) => w + (c.width ?? 0), 0);
-  const widthCap = Math.min(typeof window === 'undefined' ? 1148 : window.innerWidth - 48, 1100);
-  const bodyW = narrow ? Math.max(280, widthCap) : Math.max(360, Math.min(panelW + 20, widthCap));
+  // 浮窗宽 = 固定骨架四列宽之和 + 内边距；上限 min(视口 - 48, 1100)，超限面板内横向滚动
+  const widthCap = Math.min(viewportW - 48, 1100);
+  const bodyW = narrow ? Math.max(280, widthCap) : Math.max(360, Math.min(frame.total + 20, widthCap));
   // 2026-11-17 全量审视补齐（190 轮钳回/翻转修复漏掉的第二个调用点）：
   // 触发器量测 → cascadePlacementOf 落位翻转 + per-instance 类 clamp（margin 累积式，可复位）
   const trigRef = useRef<HTMLDivElement | null>(null);
@@ -300,12 +298,13 @@ function PickPopover({
     const measure = (): void => {
       const r = trigRef.current?.getBoundingClientRect();
       if (r) setTrigLeft(r.left);
+      setViewportW(window.innerWidth); // 仅视口变化可重算骨架
     };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, [open]);
-  const placement = cascadePlacementOf(trigLeft, bodyW, typeof window === 'undefined' ? 1280 : window.innerWidth);
+  const placement = cascadePlacementOf(trigLeft, bodyW, viewportW);
   useEffect(() => {
     if (!open) return;
     const clamp = (): void => {
@@ -375,6 +374,9 @@ function PickPopover({
               height={POPOVER_H}
               stepped={narrow}
               levelLabels={['品牌', '系列', '型号', '配置']}
+              // 2026-11-27：各列保留滚动位置，仅打开 / 当前路径失效重定位时滚到选中行
+              sticky={!narrow}
+              locateEpoch={locateEpoch}
             />
           </div>
         </div>
@@ -413,8 +415,6 @@ function PairCard({
     () => new Set(cards.filter((c) => c.id !== card.id && c.main).map((c) => selKey(c.main!))),
     [cards, card.id],
   );
-  const quota = cardQuota(card);
-  const full = card.compares.length >= quota;
 
   /** 落配置：换主品/换对比条目尽量沿用同色；新增走默认最低价色 */
   const buildSel = (from: ProductSelection | null, r: RomramNode): ProductSelection =>
@@ -427,7 +427,7 @@ function PairCard({
         const key = selKey(nextMain);
         // 与主品同组的对比项不再重复占线，并按新主品的卡配额截断
         //（对齐主浮窗 withMain 口径：空对挂满对比后补选主品不收口会超每组对比上限）
-        return { ...c, main: nextMain, compares: c.compares.filter((x) => selKey(x) !== key).slice(0, cardQuota({ main: nextMain })) };
+        return { ...c, main: nextMain, compares: c.compares.filter((x) => selKey(x) !== key) };
       });
       return;
     }
@@ -608,7 +608,6 @@ function PairCard({
               <PickPopover
                 ctx={{ kind: 'compare', cardId: card.id }}
                 checkedKeys={checkedKeys}
-                quotaFull={full}
                 mainSelKey={main ? selKey(main) : undefined}
                 initialModelId={main?.modelId}
                 keepOpen
@@ -678,23 +677,20 @@ function PairCard({
                 })}
               </div>
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
-                {/* 配满（每组 3 款）时按钮置灰并给出同句提示；气泡挂在 DOM 外壳上
-                    （PickPopover 为函数组件，不转发气泡的悬停事件） */}
-                <Tooltip title={full ? COMPARE_CAP_HINT : undefined} zIndex={TIP_Z}>
-                  <span style={{ display: 'inline-flex' }}>
-                    <PickPopover
-                      ctx={{ kind: 'compare', cardId: card.id }}
-                      checkedKeys={checkedKeys}
-                      quotaFull={full}
-                      mainSelKey={main ? selKey(main) : undefined}
-                      initialModelId={main?.modelId}
-                      keepOpen
-                      onPick={(r) => pickInCard({ kind: 'compare', cardId: card.id }, r)}
-                    >
-                      <AddPill label="添加对比产品" disabled={full} />
-                    </PickPopover>
-                  </span>
-                </Tooltip>
+                {/* 气泡挂在 DOM 外壳上（PickPopover 为函数组件，不转发气泡的悬停事件）；
+                    2026-11-27 起对比区不设条数上限，入口不再因「配满」置灰 */}
+                <span style={{ display: 'inline-flex' }}>
+                  <PickPopover
+                    ctx={{ kind: 'compare', cardId: card.id }}
+                    checkedKeys={checkedKeys}
+                    mainSelKey={main ? selKey(main) : undefined}
+                    initialModelId={main?.modelId}
+                    keepOpen
+                    onPick={(r) => pickInCard({ kind: 'compare', cardId: card.id }, r)}
+                  >
+                    <AddPill label="添加对比产品" />
+                  </PickPopover>
+                </span>
               </div>
             </>
           )}
@@ -813,8 +809,7 @@ export default function TemplateEditorFlyout({
   }, []);
 
   const addPair = (r: RomramNode): void => {
-    // 与主浮窗建卡同收口：触发按钮的 disabled 不拦 rc-trigger 注入的点击（树浮窗照开）
-    if (combo.cards.length >= MAINS_CAP) return;
+    // 2026-11-27 起模板卡数不设上限（原「最多 8 组」拦截退役）
     patch({
       ...combo,
       cards: [...combo.cards, { id: newCardId(), main: { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }, compares: [] }],
@@ -953,14 +948,14 @@ export default function TemplateEditorFlyout({
             background: color.canvas,
           }}
         >
-          <Tooltip title={combo.cards.length >= MAINS_CAP ? `最多 ${MAINS_CAP} 组` : '再添一组产品对'} zIndex={TIP_Z}>
+          <Tooltip title="再添一组产品对" zIndex={TIP_Z}>
             <span style={{ display: 'inline-flex' }}>
               <PickPopover
                 ctx={{ kind: 'new' }}
                 blockedKeys={takenMainKeys}
                 onPick={addPair}
               >
-                <AddPill label="新增一组" big disabled={combo.cards.length >= MAINS_CAP} />
+                <AddPill label="新增一组" big />
               </PickPopover>
             </span>
           </Tooltip>

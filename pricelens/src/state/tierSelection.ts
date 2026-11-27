@@ -3,14 +3,15 @@
 // 价值（一键集结）收进「选择产品」浮窗的树筛选——选中档位后提示带
 // 「该档位 {我司品牌} 共 n 个配置 · 全部各成一组」。
 // 本文件 = 该动作的纯计算：该档全部我司配置逐配置追加成卡（各按对标矩阵
-// 补对比区、配额收口；同型号同配置已有主品的卡跳过；卡数封顶 MAINS_CAP）。
+// 补对比区；同型号同配置已有主品的卡跳过）。2026-11-27 起卡数不封顶（原
+// MAINS_CAP 上限随「取消 8 张主品卡」退役）。
 // 无副作用；配置颜色取最低价色，与手动勾选的默认行为一致。
 // ============================================================
 import { dimProduct } from '../data';
 import { lowestPriceColorSku, tierOf } from '../dataModel/aggregate';
 import { getCurrentCountry } from './currentScope';
 import type { FiltersState, MainProduct, ProductSelection } from './filtersTypes';
-import { autoComparesFor, MAINS_CAP, newCardId, selKey } from './mainSelection';
+import { autoComparesFor, newCardId, selKey } from './mainSelection';
 import { productHasDataInCountry } from '../components/ProductCascader/tree';
 import type { FinancingPlan, FinancingTerm } from '../dataModel/marketProfile';
 import type { FinancingType } from './filtersTypes';
@@ -44,7 +45,7 @@ export function configsInTier(
 
 /** 档位批量成卡（追加式）：该档全部我司配置逐配置追加成卡，每卡对比区 =
  *  该配置的分国对标（autoComparesFor，配额收口）；同型号同配置已有主品
- *  （含空对以外的全部现有卡）跳过；总卡数封顶 MAINS_CAP。
+ *  （含空对以外的全部现有卡）跳过；卡数不封顶。
  *  返回 = 现有卡 + 新卡 的完整列表（无新增时原引用返回）。 */
 export function appendTierCards(
   industry: FiltersState['industry'],
@@ -59,7 +60,6 @@ export function appendTierCards(
   const seen = new Set(existing.flatMap((c) => (c.main ? [selKey(c.main)] : [])));
   const cards: MainProduct[] = [];
   for (const sel of configs) {
-    if (existing.length + cards.length >= MAINS_CAP) break;
     const key = selKey(sel);
     if (seen.has(key)) continue;
     seen.add(key);

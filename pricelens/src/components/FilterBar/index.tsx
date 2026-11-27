@@ -1,6 +1,11 @@
 // ============================================================
 // 筛选条（第一百一十七轮重构：统一产品选择入口）：
 // 国家/产业 · 选择产品（浮窗：主分析卡 + 每卡对比区）· 平台 · 币种。
+// 2026-11-27（PriceAgent 改造 · 一个产业与产品入口、两种分析结构）：
+// ①首槽 = 国家选择器（地区部 → 国家），从页头下移到原「产业」槽位（ScopeFields）；
+// ②「产业」不再作为独立筛选控件——并入「产业与产品」选择面板作整个面板的全局
+//   范围开关；入口 chip 关闭时显示「产业 · 选择摘要」；
+// ③面板顶部 = 产业选择 +「产品对标 | 品牌全景」模式切换，两套草稿分别保存。
 // 原「我司产品级联 vs 竞品级联 + 自动按钮」两个并列筛选器已于第一百一十七轮退役
 // ——「我司比竞品」的主观预设退场，主分析/对比是用户指定的角色，
 // 品牌列里华为与其他品牌并列。
@@ -21,7 +26,7 @@
 // 店铺」三级级联（PlatformBox）从筛选条撤下（总览页矩阵仍在用该组件，文件
 // 保留）；showPlatform prop 退役为 no-op，仅为 App.AnalysisShell 既有传参保留。
 // ============================================================
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ConfigProvider, Tooltip } from 'antd';
 import type { ThemeConfig } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
@@ -43,7 +48,9 @@ import { useChartContent } from '../../state/chartContent';
 import { brandOfModel, configTextOf, modelNameOf } from '../ProductCascader/tree';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import { EMPTY_MAIN_LABEL } from '../../state/mainSelection';
-import type { MainProduct } from '../../state/filtersTypes';
+import { EMPTY_PANORAMA } from '../../state/panorama';
+import { INDUSTRY_LABELS } from '../../dataModel/scope';
+import type { AnalysisMode, MainProduct } from '../../state/filtersTypes';
 
 /** Also used by the overview's product controls. */
 export const filterBarTheme: ThemeConfig = {
@@ -55,17 +62,6 @@ export const filterBarTheme: ThemeConfig = {
     Cascader: { optionSelectedBg: selectSoft, optionSelectedColor: selectSoftInk },
   },
 };
-
-const labelStyle: React.CSSProperties = { fontSize: 12, color: color.mute, whiteSpace: 'nowrap', flexShrink: 0 };
-
-function Field({ label, width, children }: { label: string; width?: number; children: ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, width, minWidth: 0 }}>
-      <span style={labelStyle}>{label}</span>
-      <div style={{ minWidth: 0, flex: 1 }}>{children}</div>
-    </div>
-  );
-}
 
 // ---------------- 统一产品选择入口（产品对摘要） ----------------
 
@@ -158,11 +154,12 @@ function GroupChip({ card }: { card: MainProduct }) {
   );
 }
 
-/** 统一产品选择入口：摘要 chip → 点击弹「选择产品」浮窗。
- *  摘要 = 产品对语言三态：未选择（灰字引导）/ 单组（品牌行 + 型号行，与图例
- *  药丸同构）/ 多组（前 2 组紧凑 chip + ＋N 组），放不下整体省略号，悬停列全量。
- *  第一百四十八轮：单组摘要与 chip 均改两行带品牌（拉齐看板图例药丸设计），
- *  入口盒高度 30→40 容纳两行。 */
+/** 统一「产业与产品」入口（2026-11-27 改造；原「选择产品」chip）：摘要 =
+ *  产业 · 当前分析结构的选择摘要。点击弹「产业与产品」面板（面板顶部 = 产业选择
+ *  与「产品对标 | 品牌全景」模式切换）。
+ *  产品对标摘要 = 原三态：未选择（灰字引导）/ 单组（品牌行 + 型号行，与图例药丸
+ *  同构）/ 多组（前 2 组紧凑 chip + ＋N 组），放不下整体省略号，悬停列全量。
+ *  品牌全景摘要 = 一行「品牌全景 · 各品牌已选款数」。入口盒高 40。 */
 function ProductPickerEntry() {
   const { state } = useFilters();
   // 多平台对比子视图（第一百九十轮）：主图按店铺画多条线，摘要不再写「无对比」。
@@ -186,110 +183,150 @@ function ProductPickerEntry() {
   const mains = state.mains;
   const single = mains.length === 1 ? mains[0] : null;
   const visibleGroups = narrow || !fitsTwo ? 1 : 2;
+  const industryLabel = INDUSTRY_LABELS[state.industry] ?? state.industry;
+  const mode: AnalysisMode = state.analysisMode ?? 'compare';
+  const panorama = state.panorama ?? EMPTY_PANORAMA;
+  const panoramaLine = panorama.brands.length
+    ? `品牌全景 · ${panorama.brands.map((b) => `${brandLabelOf(b.brand)} ${b.sels.length}`).join('、')}`
+    : '品牌全景 · 尚未选择品牌与产品';
+  const hoverTitle = mode === 'panorama'
+    ? `${industryLabel} · ${panoramaLine}`
+    : mains.length
+      ? [`${industryLabel} · 产品对标`, ...mains.map(groupSummaryLine)].join('\n')
+      : `${industryLabel} · 尚未选择主分析产品与对比产品`;
 
   return (
     <ProductPickerFlyout open={open} onOpenChange={setOpen}>
       <button
         type="button"
-        aria-label="选择产品"
+        aria-label="产业与产品"
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={mains.length ? mains.map(groupSummaryLine).join('\n') : '点击选择主分析产品与对比产品'}
+        title={hoverTitle}
         ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
         style={{
-            minHeight: 40,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 7,
-            padding: '0 10px',
-            border: `1px solid ${open ? selectAccent : color.hairline}`,
-            borderRadius: radius.control,
-            background: color.canvas,
-            cursor: 'pointer',
-            minWidth: 0,
-            flex: '1 1 auto',
-            overflow: 'hidden',
-            textAlign: 'left',
-            boxShadow: open ? `0 0 0 1px ${selectAccent}` : undefined,
-          }}
-        >
-          {mains.length === 0 ? (
-            <span style={{ fontSize: 13, color: color.mute, whiteSpace: 'nowrap' }}>选择主分析产品与对比产品</span>
-          ) : (
-            <span style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>
-              {single ? (
-                single.main ? (
-                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, minWidth: 0, width: '100%', overflow: 'hidden' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
-                      <BrandDot brand={brandOfModel(single.main.modelId)} />
-                      <span
-                        style={{
-                          fontSize: 10, lineHeight: '12px', color: color.mute,
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {brandLabelOf(brandOfModel(single.main.modelId))}
+          minHeight: 40,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '0 10px',
+          border: `1px solid ${open ? selectAccent : color.hairline}`,
+          borderRadius: radius.control,
+          background: color.canvas,
+          cursor: 'pointer',
+          minWidth: 0,
+          flex: '1 1 auto',
+          overflow: 'hidden',
+          textAlign: 'left',
+          boxShadow: open ? `0 0 0 1px ${selectAccent}` : undefined,
+        }}
+      >
+        {/* 产业前缀：面板的全局范围开关在关闭态也要一眼可见 */}
+        <span data-testid="entry-industry" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0, fontSize: 12, fontWeight: 600, color: color.ink }}>
+          {industryLabel}
+          <span aria-hidden style={{ width: 1, height: 14, background: color.hairline }} />
+        </span>
+        {mode === 'panorama' ? (
+          <span style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }} data-testid="entry-summary">
+            {panorama.brands.length ? (
+              <>
+                <span style={{ fontSize: 10, lineHeight: '12px', color: color.mute, flexShrink: 0 }}>品牌全景</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', minWidth: 0, overflow: 'hidden' }}>
+                  {panorama.brands.slice(0, 3).map((b, i) => (
+                    <span key={b.brand} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 1, minWidth: 0 }}>
+                      {i > 0 && <span style={{ color: color.mute }}>、</span>}
+                      <BrandDot brand={b.brand} />
+                      <span style={{ fontSize: 11, lineHeight: '15px', color: color.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {brandLabelOf(b.brand)} <span className="tnum" style={{ color: color.mute }}>{b.sels.length}</span>
                       </span>
-                    </span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', minWidth: 0, overflow: 'hidden' }}>
-                      <span
-                        style={{
-                          flex: '1 100 auto',
-                          minWidth: 0,
-                          fontSize: 12, lineHeight: '15px', fontWeight: 600, color: color.ink,
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {modelNameOf(single.main.modelId)}
-                      </span>
-                      {configTextOf(single.main.romram) && (
-                        <span className="tnum" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>
-                          {configTextOf(single.main.romram)}
-                        </span>
-                      )}
-                      <span style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>vs</span>
-                      {/* 第一百九十轮（外部 UX 审计）：多平台子视图下无对比产品时示
-                          「平台对比」（主图已按店铺画线）；产品对比子视图维持「无对比」 */}
-                      <span
-                        className="tnum"
-                        style={{
-                          fontSize: 11, lineHeight: '15px', fontWeight: 600,
-                          color: single.compares.length || platformCompare ? color.body : color.mute, flexShrink: 0,
-                        }}
-                      >
-                        {single.compares.length ? `${single.compares.length} 款对比` : platformCompare ? '平台对比' : '无对比'}
-                      </span>
-                    </span>
-                  </span>
-                ) : single.compares.length ? (
-                  <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                    <span className="tnum" style={{ fontWeight: 600, color: color.body }}>
-                      对比 {single.compares.length} 款
-                    </span>
-                    <span style={{ color: color.mute }}> · {EMPTY_MAIN_LABEL}</span>
-                  </span>
-                ) : (
-                  <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>{EMPTY_MAIN_LABEL}</span>
-                )
-              ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, width: '100%', overflow: 'hidden' }}>
-                  {mains.slice(0, visibleGroups).map((m, i) => (
-                    <span key={m.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 120px', maxWidth: 240, overflow: 'hidden' }}>
-                      {i > 0 && <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: color.hairline, flexShrink: 0 }} />}
-                      <GroupChip card={m} />
                     </span>
                   ))}
-                  {mains.length > visibleGroups && (
-                    <span style={{ fontSize: 12, lineHeight: '16px', color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                      ＋{mains.length - visibleGroups} 组
-                    </span>
+                  {panorama.brands.length > 3 && (
+                    <span className="tnum" style={{ fontSize: 11, color: color.mute, flexShrink: 0 }}>＋{panorama.brands.length - 3}</span>
                   )}
                 </span>
-              )}
-            </span>
-          )}
-          <DownOutlined style={{ marginLeft: 'auto', fontSize: 10, color: color.mute, flexShrink: 0 }} />
+              </>
+            ) : (
+              <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>品牌全景 · 选择品牌与产品</span>
+            )}
+          </span>
+        ) : mains.length === 0 ? (
+          <span style={{ fontSize: 13, color: color.mute, whiteSpace: 'nowrap' }}>选择主分析产品与对比产品</span>
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto', minWidth: 0, overflow: 'hidden' }}>
+            {single ? (
+              single.main ? (
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, minWidth: 0, width: '100%', overflow: 'hidden' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%' }}>
+                    <BrandDot brand={brandOfModel(single.main.modelId)} />
+                    <span
+                      style={{
+                        fontSize: 10, lineHeight: '12px', color: color.mute,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {brandLabelOf(brandOfModel(single.main.modelId))}
+                    </span>
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: '100%', minWidth: 0, overflow: 'hidden' }}>
+                    <span
+                      style={{
+                        flex: '1 100 auto',
+                        minWidth: 0,
+                        fontSize: 12, lineHeight: '15px', fontWeight: 600, color: color.ink,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {modelNameOf(single.main.modelId)}
+                    </span>
+                    {configTextOf(single.main.romram) && (
+                      <span className="tnum" style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>
+                        {configTextOf(single.main.romram)}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 11, lineHeight: '15px', color: color.mute, flexShrink: 0 }}>vs</span>
+                    {/* 第一百九十轮（外部 UX 审计）：多平台子视图下无对比产品时示
+                        「平台对比」（主图已按店铺画线）；产品对比子视图维持「无对比」 */}
+                    <span
+                      className="tnum"
+                      style={{
+                        fontSize: 11, lineHeight: '15px', fontWeight: 600,
+                        color: single.compares.length || platformCompare ? color.body : color.mute, flexShrink: 0,
+                      }}
+                    >
+                      {single.compares.length ? `${single.compares.length} 款对比` : platformCompare ? '平台对比' : '无对比'}
+                    </span>
+                  </span>
+                </span>
+              ) : single.compares.length ? (
+                <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                  <span className="tnum" style={{ fontWeight: 600, color: color.body }}>
+                    对比 {single.compares.length} 款
+                  </span>
+                  <span style={{ color: color.mute }}> · {EMPTY_MAIN_LABEL}</span>
+                </span>
+              ) : (
+                <span style={{ fontSize: 12, color: color.mute, whiteSpace: 'nowrap' }}>{EMPTY_MAIN_LABEL}</span>
+              )
+            ) : (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, width: '100%', overflow: 'hidden' }}>
+                {mains.slice(0, visibleGroups).map((m, i) => (
+                  <span key={m.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 12, minWidth: 0, flex: '1 1 120px', maxWidth: 240, overflow: 'hidden' }}>
+                    {i > 0 && <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: color.hairline, flexShrink: 0 }} />}
+                    <GroupChip card={m} />
+                  </span>
+                ))}
+                {mains.length > visibleGroups && (
+                  <span style={{ fontSize: 12, lineHeight: '16px', color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    ＋{mains.length - visibleGroups} 组
+                  </span>
+                )}
+              </span>
+            )}
+          </span>
+        )}
+        <DownOutlined style={{ marginLeft: 'auto', fontSize: 10, color: color.mute, flexShrink: 0 }} />
       </button>
     </ProductPickerFlyout>
   );
@@ -331,6 +368,7 @@ export default function FilterBar({
               2026-11-13（Eason）：时间簇定宽 132、不再 flex-grow 抢位——唯一弹性列
               回归「选择产品」（chip 内部省略号兜底），其余筛选器全部定宽保一行 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, rowGap: 8, minHeight: 30, flexWrap: 'wrap' }}>
+            {/* 分析范围 = 国家（原产业槽位）；产业在「产业与产品」面板内切换 */}
             <ScopeFields />
             {/* 入口列弹性让位（第一百三十一轮波2收窄：basis 320→260、minWidth 240→200，
                 时间簇定宽 310 入列后 1280 视口仍单行；chip 内部省略号兜底） */}
@@ -346,12 +384,11 @@ export default function FilterBar({
             {(page === 'volume' || STABLE) && !marketProfile.granularityLocked && (
               <>
                 <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-                <div style={{ flexShrink: 0, width: 188 }}><Field label="平台"><ChannelScopeBox /></Field></div>
+                <div style={{ flexShrink: 0, width: 188 }}><ChannelScopeBox /></div>
               </>
             )}
             <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
-            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={labelStyle}>币种</span>
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
               <CurrencyBox />
             </div>
             {showTime && (
@@ -360,8 +397,7 @@ export default function FilterBar({
                   <>
                     <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />
                     {/* 粒度常驻（2026-11-04 Eason）：币种右侧直接可切，时间簇收窄让位 */}
-                    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={labelStyle}>粒度</span>
+                    <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
                       <GranularityBox />
                     </div>
                     <span aria-hidden style={{ width: 1, height: 20, background: color.hairline, flexShrink: 0 }} />

@@ -6,7 +6,7 @@
 // ============================================================
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
 import { LPL } from '../../state/lplKeys';
-import { cardQuota, MAINS_CAP, newCardId, selKey } from '../../state/mainSelection';
+import { newCardId, selKey } from '../../state/mainSelection';
 import { modelNameOf } from '../ProductCascader/tree';
 
 export interface StoredCombo {
@@ -99,36 +99,28 @@ export function defaultTemplateName(cards: MainProduct[]): string {
 }
 
 /** 「＋ 加入当前选择」增量计划（逐模板卡，纯函数；第一百三十一轮第二次修订）：
- *  ①模板卡主品不在当前选择 → 整卡追加（内容含对比区/auto 原样带入，新 id；
- *    卡数受 cap 封顶，放不下的计入 overflowCards）；
+ *  ①模板卡主品不在当前选择 → 整卡追加（内容含对比区/auto 原样带入，新 id）；
  *  ②模板卡主品已在当前选择 → 只把缺失的对比合并进现有卡（selKey 去重、与目标
- *    卡主品同组的跳过、卡配额封顶，放不下的计入 overflowCompares）；确有新增
- *    对比的卡由调用方经 setCardCompares 落地（该动作自带「手动改对比即关自动」
- *    的既有铁律）。同一张现有卡被多个模板对命中时合并累计、配额合并计算。 */
+ *    卡主品同组的跳过）；确有新增对比的卡由调用方经 setCardCompares 落地——
+ *    2026-11-27 起该动作不再关闭自动匹配，新增对比登记为手动补充、与矩阵产出并存
+ *    （同型号同配置已在对比区的不重复加）。同一张现有卡被多个模板对命中时合并累计。
+ *  2026-11-27：卡数与对比条数均不设上限（原 MAINS_CAP / 卡配额封顶与 overflow
+ *    计数随「取消 8 线 / 8 卡」退役——模板里的产品一律放得下）。 */
 export function planAppend(
   mains: MainProduct[],
   combo: StoredCombo,
-  cap: number = MAINS_CAP,
 ): {
   fresh: MainProduct[];
   merges: { cardId: string; compares: ProductSelection[] }[];
-  overflowCards: number;
-  overflowCompares: number;
 } {
   const fresh: MainProduct[] = [];
   const freshKeys = new Set<string>();
   const mergeMap = new Map<string, { adds: ProductSelection[]; have: Set<string> }>();
-  let overflowCards = 0;
-  let overflowCompares = 0;
   for (const t of combo.cards) {
     if (!t.main) continue;
     const k = selKey(t.main);
     const existing = mains.find((x) => x.main != null && selKey(x.main) === k);
     if (!existing) {
-      if (mains.length + fresh.length >= cap) {
-        overflowCards += 1;
-        continue;
-      }
       if (!freshKeys.has(k)) {
         freshKeys.add(k);
         fresh.push({ ...t, id: newCardId() });
@@ -143,19 +135,13 @@ export function planAppend(
     for (const cmp of t.compares) {
       const ck = selKey(cmp);
       if (entry.have.has(ck)) continue;
-      if (existing.compares.length + entry.adds.length >= cardQuota(existing)) {
-        overflowCompares += 1;
-        continue;
-      }
       entry.have.add(ck);
       entry.adds.push(cmp);
     }
   }
   return {
     fresh,
-    // 只产出确有新增对比的合并项（零新增的卡不进计划 → 不触发「退出自动」、tooltip 如实）
+    // 只产出确有新增对比的合并项（零新增的卡不进计划 → tooltip 如实）
     merges: [...mergeMap.entries()].flatMap(([cardId, m]) => (m.adds.length ? [{ cardId, compares: m.adds }] : [])),
-    overflowCards,
-    overflowCompares,
   };
 }

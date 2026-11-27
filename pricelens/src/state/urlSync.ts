@@ -18,7 +18,7 @@ import type { StoreType } from '../dataModel/types';
 import type { Page } from './PageContext';
 import { hiddenInStable } from '../appChannel';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
-import { cardsFromSelections, clampMains, firstLegalSelectionOfModel } from './mainSelection';
+import { cardsFromSelections, firstLegalSelectionOfModel, tidyMains } from './mainSelection';
 import { getCurrentCountry } from './currentScope';
 
 const norm = (s: string): string => s.replace(/\s+/g, '');
@@ -188,7 +188,8 @@ export function readUrlOverrides(): { page?: Page; filters: Partial<FiltersState
         .split(',')
         .map((k) => productSelectionOfSeriesKey(k.trim(), country))
         .filter((x): x is ProductSelection => x != null);
-      if (list.length > 0) out.filters.mains = clampMains(cardsFromSelections(list));
+      // 2026-11-27 起链接里的主分析结构不设卡数上限：只做结构整理（去重、剔与主品同组项）
+      if (list.length > 0) out.filters.mains = tidyMains(cardsFromSelections(list));
     }
     // 第一百三十八轮：时间范围 / 价格显示 / 汇总口径进链接——价格操盘最核心的上下文
     // 就是「看哪段时间、折后价还是含 RRP、平均还是最小」。rs/re = 手动范围（形状合法

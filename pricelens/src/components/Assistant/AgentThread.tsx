@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import { color, font, fontSize, motion, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../../theme/tokens';
 import ModelPicker from './ModelPicker';
+import { BRAND_NAME } from '../PriceAgentMark';
 import './agent-thread.css';
 
 export interface ThreadMessage {
@@ -262,7 +263,7 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
     data-agent-mode={full ? 'full' : controller.mode} data-agent-compact={compact || undefined} data-assistant-ui="true" role="dialog" aria-modal={modal || undefined}
     aria-labelledby="pricelens-agent-title" tabIndex={-1}>
     <header className="aui-header">
-      <div><h2 id="pricelens-agent-title">PriceLens Agent</h2><div className="aui-status" data-agent-live-status role="status" aria-live="polite" aria-atomic="true">{statusLabel}</div></div>
+      <div><h2 id="pricelens-agent-title">{BRAND_NAME}</h2><div className="aui-status" data-agent-live-status role="status" aria-live="polite" aria-atomic="true">{statusLabel}</div></div>
       <div className="aui-header-actions">
         <button type="button" className="aui-icon-button" aria-label="新对话" disabled={controller.running}
           title={controller.running ? '请先停止当前运行，再开始新对话' : '新对话'} onClick={() => { controller.newConversation(); focusComposer(); }}><PlusOutlined /></button>
@@ -287,7 +288,7 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
               const original = messages.find((entry) => entry.id === message.id);
               if (!original) return null;
               return <MessagePrimitive.Root className={`aui-message aui-message-${original.role}`} data-agent-message data-message-locked={original.actionsLocked || undefined}>
-                {original.role === 'assistant' && <div className="aui-message-heading"><strong>PriceLens</strong><div className="aui-message-meta">{renderHeader?.(original)}</div></div>}
+                {original.role === 'assistant' && <div className="aui-message-heading"><strong>{BRAND_NAME}</strong><div className="aui-message-meta">{renderHeader?.(original)}</div></div>}
                 <div className="aui-message-text" data-streaming-text={original.streaming || undefined}>
                   <MessagePrimitive.Parts components={{ Text: original.role === 'assistant' ? MarkdownText : undefined }} />
                 </div>
@@ -306,7 +307,7 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
         </ThreadPrimitive.Viewport>
         <div className="aui-composer-region">
           <ComposerPrimitive.Root className="aui-composer">
-            <ComposerPrimitive.Input ref={inputRef} className="aui-input" aria-label="向 PriceLens Agent 提问" placeholder="问价格、平台或预警…"
+            <ComposerPrimitive.Input ref={inputRef} className="aui-input" aria-label={`向 ${BRAND_NAME} 提问`} placeholder="问价格、平台或预警…"
               minRows={1} maxRows={6} submitMode={controller.running ? 'none' : 'enter'} cancelOnEscape={false}
               addAttachmentOnPaste={false} onChange={(event) => controller.setDraft(event.target.value)} />
             <div className="aui-composer-toolbar">

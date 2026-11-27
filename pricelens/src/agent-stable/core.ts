@@ -4,7 +4,7 @@ import { dimChannel, dimProduct, dimRegion, dimTime } from '../data';
 import { INDUSTRY_LABELS } from '../dataModel/scope';
 import { STABLE } from '../appChannel';
 import { platformLevelForChannel } from '../state/urlSync';
-import { buildCards, clampMains, flatSelections, remapSelectionForCountry, selKey, withAutoOn } from '../state/mainSelection';
+import { buildCards, tidyMains, flatSelections, remapSelectionForCountry, selKey, withAutoOn } from '../state/mainSelection';
 import type { FiltersState, MainProduct, ProductSelection } from '../state/filtersTypes';
 import type { SeriesQuery } from '../dataModel/types';
 import type { AgentActionTarget, AgentAlertRecord, AgentContextSnapshot, AgentIntent, AgentResponse, AgentResultCard, AgentStep, FilterPatch, FilterResultCard, ForecastContextInput, AgentSuggestion } from './contracts';
@@ -244,7 +244,7 @@ export function buildFilterPatch(text: string, state: FiltersState): FilterPatch
     // Keep natural-language filtering on the same card builder as header
     // search. This preserves the default own-product competitor matrix and
     // enforces the shared 8-card / 3-compare caps.
-    patch.mains = clampMains(buildCards(entities.selections, { auto: true, countryCode: entities.countryCode }));
+    patch.mains = tidyMains(buildCards(entities.selections, { auto: true, countryCode: entities.countryCode }));
   }
   return patch;
 }
@@ -479,10 +479,10 @@ function stateForPriceAdvantage(state: FiltersState, entities: AgentEntityResolu
     ? next.mains.flatMap((card) => card.main && !ownSelectionForAgent(card.main) ? [card.main] : [])
     : [];
   const withRequestedCompares = (cards: MainProduct[]): MainProduct[] => {
-    if (!requestedCompares.length) return clampMains(cards);
+    if (!requestedCompares.length) return tidyMains(cards);
     const ownerId = cards.find((card) => card.main && ownSelectionForAgent(card.main))?.id;
-    if (!ownerId) return clampMains(cards);
-    return clampMains(cards.map((card) => card.id === ownerId ? { ...card, compares: requestedCompares, auto: false } : card));
+    if (!ownerId) return tidyMains(cards);
+    return tidyMains(cards.map((card) => card.id === ownerId ? { ...card, compares: requestedCompares, auto: false } : card));
   };
   const ownCard = next.mains.find((card) => card.main && ownSelectionForAgent(card.main));
   if (ownCard) {
@@ -529,7 +529,7 @@ function scopePatchOf(state: FiltersState): FilterPatch {
   return {
     countryCode: state.countryCode,
     industry: state.industry,
-    mains: clampMains(state.mains.map((card) => ({
+    mains: tidyMains(state.mains.map((card) => ({
       ...card,
       main: card.main ? { ...card.main } : null,
       compares: card.compares.map((compare) => ({ ...compare })),
@@ -779,7 +779,7 @@ function alertFilterPatch(alert: AgentAlertRecord, state: FiltersState): FilterP
     rangeStart: alert.weekId,
     rangeEnd: alert.weekId,
   };
-  if (selection) patch.mains = clampMains(buildCards([selection], { auto: true, countryCode: state.countryCode }));
+  if (selection) patch.mains = tidyMains(buildCards([selection], { auto: true, countryCode: state.countryCode }));
   return patch;
 }
 

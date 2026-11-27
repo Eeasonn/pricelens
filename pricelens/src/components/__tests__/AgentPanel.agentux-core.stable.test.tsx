@@ -42,7 +42,7 @@ describe('agentux-core AgentPanel interaction', () => {
 
   it('agentux-core opens explicit core chips and renders the deterministic price advantage card', async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
     const panel = screen.getByRole('dialog');
     expect(within(panel).getByRole('button', { name: '价格优势' })).toBeTruthy();
     expect(within(panel).getByRole('button', { name: '价格预警' })).toBeTruthy();

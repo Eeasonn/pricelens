@@ -51,7 +51,7 @@ afterEach(cleanup);
 describe('stable Agent · 本地回退透明度', () => {
   it('运行中展开工具活动，完成后就近披露回退原因与明确工具终态', async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
     const panel = screen.getByRole('dialog');
     fireEvent.click(within(panel).getByRole('button', { name: '价格优势' }));
 

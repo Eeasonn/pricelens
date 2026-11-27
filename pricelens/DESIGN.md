@@ -194,11 +194,11 @@ Controls, inputs, and chips use 6px radius. Cards use 8px. Dialogs and large ove
 
 ### Cards, tables, and evidence
 
-Cards use the `card` contract. Tables use muted headers, hairline row rules, aligned numeric columns, and local horizontal scrolling when needed. Evidence is visible through source labels, capture time, coverage, fact rows, snapshots, or product links. Missing evidence is stated as “暂无快照” rather than represented by a decorative placeholder.
+Cards use the `card` contract. Tables use muted headers, hairline row rules, aligned numeric columns, and local horizontal scrolling when needed. Evidence is visible through source labels, capture time, coverage, fact rows, or current product links. Page snapshots and their modal are retired; missing evidence is stated plainly rather than represented by a decorative placeholder.
 
 ### Charts
 
-Price lines are the primary layer. Street price is the main series; RRP is a fine reference series. Promotion bands and event annotations are optional layers with explicit controls. Offers are text rights shown through amber icons or popovers and are never drawn as price lines. Missing weeks remain missing; use a dashed bridge only to show continuity without fabricating a point.
+Price lines are the primary layer. Street price is the main series; RRP is a fine reference series. Promotion bands and event annotations are optional layers with explicit controls. Offers are text rights shown through amber icons or popovers and are never drawn as price lines. Missing weeks remain missing; use a dashed bridge only to show continuity without fabricating a point. In `smooth` mode the bridge is a monotone geometric guide with endpoint-range clamping, never a business-value interpolation. Current product links use visible link-blue underlined text and an external-link icon.
 
 Use stable brand colors and a visually stronger Huawei series. In the forecast workbench, the weekly-sales bars (actual fill and forecast outline) use `brand-huawei`, the same chart identity as the Huawei price line — blue stays a UI semantic color (links, selected, favorable) and is never a volume-bar data color. Keep long explanations below the chart in summaries, event rows, tooltips, or detail cards. Provide a textual summary or table alternative for important chart information.
 

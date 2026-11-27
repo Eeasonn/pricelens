@@ -99,7 +99,7 @@ function mountedApp() {
 }
 
 async function submit(text: string): Promise<void> {
-  fireEvent.change(screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' }), { target: { value: text } });
+  fireEvent.change(screen.getByRole('textbox', { name: '向 PriceAgent 提问' }), { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: '发送' }));
 }
 

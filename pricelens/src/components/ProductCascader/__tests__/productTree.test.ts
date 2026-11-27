@@ -1,6 +1,5 @@
 // ============================================================
-// 统一产品树金测（第一百一十七轮）：品牌序（华为置顶+矩阵列序）、竞品系列层
-// （维表 series：多系列品牌按产品线成组、苹果按代际——第一百三十二轮口径）、
+// 统一产品树金测（第一百一十七轮）：品牌序（华为置顶+矩阵列序）、series 首字母排序、
 // 型号排序（在售在前、上市新→旧）、配置容量数值排序（TB=1024）、搜索剪枝。
 // 第一百二十三轮：+档位筛选（配置级 tier_by_country，同型号不同配置可跨档）
 // 与档位选项（该国该产业实际存在的档位，阶梯序高→低）。
@@ -74,7 +73,7 @@ describe('buildProductTree（统一产品树）', () => {
     expect(z.models.some((m) => /Fold/i.test(m.label))).toBe(true);
   });
 
-  it('系列与型号按上市新→旧排序；型号列配置容量升序', () => {
+  it('series 按首字母排序；型号仍按上市新→旧、配置容量升序', () => {
     for (const brand of tree) {
       for (const s of brand.series) {
         for (let i = 1; i < s.models.length; i++) {
@@ -88,6 +87,14 @@ describe('buildProductTree（统一产品树）', () => {
           expect(roms).toEqual(sorted);
         }
       }
+    }
+  });
+
+  it('series 列按首字母与自然数序排序（不再先排退市或上市时间）', () => {
+    for (const brand of tree) {
+      const titles = brand.series.map((s) => s.title);
+      const expected = [...titles].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      expect(titles).toEqual(expected);
     }
   });
 

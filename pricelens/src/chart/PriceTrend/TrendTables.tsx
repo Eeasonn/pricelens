@@ -5,7 +5,7 @@
 // 环比固定由上游周序列计算，月/季展示粒度不会把它变成 4 个月或 4 个季度。
 // 时间列与图上同一可见时间段（每桶一列，周号＋日期双行列头），时间正序排列
 // （早→晚从左到右，与图上时间轴同向；第一百九十三轮，Eason）。
-// 取证行 = 电商页面快照入口 + 最新时点商城现页链接；复制成功/失败均有短暂反馈。
+// 商品现页链接默认蓝色下划线 + 外链图标；复制成功/失败均有短暂反馈。
 // 窄视口只冻结产品首列，其余列随表滚动，保证时间列始终可见。
 // 第一百八十九轮（Eason 定版收敛）：窄屏（<640px）冻结产品列 236→168px；复制
 // 明细 TSV 的近 4 周环比从产品格拆出、独立成列（「类型」后，仅每个产品首行
@@ -16,7 +16,7 @@
 // ============================================================
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Button, Tooltip } from 'antd';
-import { CopyOutlined, ExportOutlined, PictureOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { CopyOutlined, ExportOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import BrandDot from '../../components/BrandMark';
 import { configTextOf } from '../../components/ProductCascader/tree';
 import { dimProduct } from '../../data';
@@ -40,7 +40,6 @@ import {
   type TableGroup,
 } from './tableModel';
 import { readAnomalyRule } from '../../dataModel/anomaly';
-import SnapshotModal, { type SnapshotInfo } from './SnapshotModal';
 
 export type { DetailBucket, TableGroup } from './tableModel';
 
@@ -68,27 +67,10 @@ const W_TIME = 100;
 /** 主分析产品行底色（浅蓝；第一百二十三轮按角色着色——主品行衬浅蓝、对比行白底，
  *  与图例带主品药丸同语言，不再按品牌归属着色） */
 const MAIN_TINT = '#f3f8ff';
-/** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / 记录 / offer）——2026-11-17 Eason：「取证」更名「记录」 */
-const DETAIL_SPAN = 6;
+/** 明细每产品行数（RRP / 折后价 / 折扣率 / 平台-店铺 / offer）——快照记录行已退役 */
+const DETAIL_SPAN = 5;
 /** ZA 运营商小册子明细行数（平台成交价 + 24/36/48 期分期价与总价 ×2 + 促销政策） */
 const ZA_DETAIL_SPAN = 8;
-
-/** 记录行小件样式：图标 + 文字，链接色（button / a 共用） */
-const EVID_STYLE: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 3,
-  fontSize: 11,
-  color: color.link,
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-  fontFamily: 'inherit',
-  lineHeight: '16px',
-  textDecoration: 'none',
-};
 
 /** TSV 进剪贴板：clipboard API 优先，失败回退隐藏 textarea + execCommand */
 async function copyText(text: string): Promise<boolean> {
@@ -155,19 +137,29 @@ export default function TrendTables(props: {
   fourWeekChanges: ReadonlyMap<string, number | null>; // 周序列独立计算，锚定当前窗口末周
   currency: CurrencyMode;
   granularity: Granularity;
+  /** 卡标题（缺省「价差与明细」；品牌全景传「品牌价格明细」） */
+  title?: string;
+  /** 明细区标题（缺省「核心信息明细」） */
+  detailCaption?: string;
+  /** 价差基准列的表头名（缺省「主分析产品」；品牌全景的临时基准传「价差基准」） */
+  baseCaption?: string;
 }) {
   // 异常守卫阈值（「疑」角标 title 用）：一次读取供全表单元格复用——
   // 原实现每个折后价单元格各读一次 localStorage（行×列量级），无谓重复解析
   const anomalyThresholdPct = readAnomalyRule().thresholdPct;
 
   const { groups, buckets, fourWeekChanges, currency, granularity } = props;
+  const title = props.title ?? '价差与明细';
+  const detailCaption = props.detailCaption ?? '核心信息明细';
+  const baseCaption = props.baseCaption ?? '主分析产品';
+  // 组名：品牌全景组带 label（品牌名）；产品对标卡 = 主品 品牌+型号+配置
+  const groupTitle = (b: Block): string => b.g.label ?? blockTitle(b);
   // 组别页签选中态（本轮）：值 = 组 id；组集变化后找不到时回落第一组
   const [activeGid, setActiveGid] = useState<string | null>(null);
   // 复制反馈（第一百八十五轮，外部 UX 审计）：成功「已复制」、失败「复制失败」
   // ——同为短暂态（1.6s 自动复位），失败不再静默
   const [copied, setCopied] = useState<'diff' | 'detail' | 'diff-fail' | 'detail-fail' | null>(null);
   const copiedTimer = useRef<number | null>(null);
-  const [snapInfo, setSnapInfo] = useState<SnapshotInfo | null>(null);
   // 窄视口只冻结产品首列，配置/类型随表横向滚动，避免冻区遮死时间列。
   // 检测改共享钩子（第一百九十轮）：与主图窄屏默认可见段同一来源，行为不变
   const narrowViewport = useNarrowViewport();
@@ -212,7 +204,7 @@ export default function TrendTables(props: {
 
   // ---- 复制为表格（TSV；列序与表头一致 = 时间正序，第一百九十三轮；多组时首列带组号） ----
   const onCopyDiff = async (): Promise<void> => {
-    const lines = [[...(multi ? ['组'] : []), '主分析产品', '产品', '配置', ...dates].join('\t')];
+    const lines = [[...(multi ? ['组'] : []), baseCaption, '产品', '配置', ...dates].join('\t')];
     for (const b of viewBlocks) {
       if (!b.base) continue;
       const base = b.base;
@@ -223,7 +215,7 @@ export default function TrendTables(props: {
           return pa != null && pb != null ? diffPct(pa, pb)?.text ?? '—' : '—';
         });
         lines.push(
-          [...(multi ? [groupOrdinal(b.ordinal)] : []), blockTitle(b), dedupeSpecText(s.label), configTextOf(b.specByKey.get(s.key)?.romram), ...cells].join('\t'),
+          [...(multi ? [b.g.label ?? groupOrdinal(b.ordinal)] : []), groupTitle(b), dedupeSpecText(s.label), configTextOf(b.specByKey.get(s.key)?.romram), ...cells].join('\t'),
         );
       }
     }
@@ -234,7 +226,7 @@ export default function TrendTables(props: {
     // 与表同列结构；只随每个产品首行（RRP 行）输出一次，其余行留空串
     const isZa = viewBlocks.some((b) => b.g.series.some((sr) => sr.financeLabel != null));
     const lines = [[...(multi ? ['组'] : []), '产品', '配置', '付费', ...(isZa ? ['促销政策'] : []), '类型', '近4周环比', ...dates].join('\t')];
-    const STD_TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', '记录', 'offer'] as const;
+    const STD_TYPES = ['RRP', '折后价', '折扣率', '平台-店铺', 'offer'] as const;
     const ZA_TYPES = ['平台成交价', '24期分期价', '24期总价', '36期分期价', '36期总价', '48期分期价', '48期总价', '促销政策'] as const;
     for (const b of viewBlocks) {
       for (const s of b.g.series) {
@@ -262,7 +254,6 @@ export default function TrendTables(props: {
                 return disc != null ? fmtPct(disc) : '—';
               }
               if (ty === '平台-店铺') return pt.channelName ?? '—';
-              if (ty === '记录') return pt.url || '—';
               return offerText(pt) || '—';
             }] as [string, (pt: (typeof s.points)[number]) => string]);
         for (const [ty, get] of rowsDef) {
@@ -273,7 +264,7 @@ export default function TrendTables(props: {
           });
           lines.push(
             [
-              ...(multi ? [groupOrdinal(b.ordinal)] : []),
+              ...(multi ? [b.g.label ?? groupOrdinal(b.ordinal)] : []),
               dedupeSpecText(s.label),
               configTextOf(b.specByKey.get(s.key)?.romram),
               s.financeLabel ?? '',
@@ -364,13 +355,14 @@ export default function TrendTables(props: {
               <a
                 href={prodUrl}
                 target="_blank"
-                rel="noreferrer"
-                title={`${name} · 打开商城页面`}
-                aria-label={`打开 ${name} 的商城页面`}
+                rel="noopener noreferrer"
+                title={`${name} · 打开商城现页 · 新标签页`}
+                aria-label={`打开 ${name} 的商城现页 · 新标签页`}
                 className="tt-prod-link"
-                style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: color.link, textDecoration: 'underline', textUnderlineOffset: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
                 {name}
+                <ExportOutlined aria-hidden style={{ fontSize: 10, flexShrink: 0 }} />
               </a>
             ) : (
               <span
@@ -578,26 +570,13 @@ export default function TrendTables(props: {
           </>
         )}
         {/* 核心信息明细：每产品 6 行；近 4 周环比随产品单元格跨行展示一次 */}
-        {captionRow('核心信息明细', `cap-detail-${b.g.id}`)}
+        {captionRow(detailCaption, `cap-detail-${b.g.id}`)}
         {headerRow(b.g.id, 'detail')}
         {b.g.series.map((s) => {
           const p = `t-${b.g.id}-${s.key}`;
           // 角色着色（第一百二十三轮）：主分析产品行衬浅蓝，对比产品行白底
           const main = b.base != null && s.key === b.base.key;
           const bg = main ? MAIN_TINT : undefined;
-          const latestIdx = latestIdxOf(s, n);
-          const openSnap = (i: number): void => {
-            const pt = s.points[i];
-            setSnapInfo({
-              seriesLabel: dedupeSpecText(s.label),
-              shopName: pt?.shopName ?? null,
-              bucketId: pt?.bucketId ?? buckets[i].id,
-              granularity,
-              dateText: bucketDateText(granularity, pt?.xLabel || buckets[i].xLabel),
-              priceText: moneyPlain(pt?.price ?? null, currency),
-              url: pt?.url ?? '',
-            });
-          };
           // 2026-11-11 Eason：ZA 运营商小册子口径的明细字段替换（平台成交价 /
           // 24·36·48 期分期价与总价 / 促销政策）；其他口径维持标准六行
           const isZaFinance = s.financeLabel != null && s.points.some((pt) => pt.finance != null);
@@ -697,33 +676,6 @@ export default function TrendTables(props: {
               );
             }),
           )
-          // 取证行：该时点页面快照入口 + 最新时点商城现页
-          rows.push(typeCell('记录', main, `${p}-evid`));
-          rows.push(
-            ...cols.map(({ bk, i }, ri) => {
-              const url = s.points[i]?.url || '';
-              return (
-                <div key={`${p}-evid-${bk.id}`} role="cell" style={{ ...cell(3 + ri), gridColumn: String(4 + ri), justifyContent: 'flex-end', gap: 8, background: bg }}>
-                  {url ? (
-                    <>
-                      <button type="button" className="tt-evi" title="查看该时点的电商页面快照" onClick={() => openSnap(i)} style={EVID_STYLE}>
-                        <PictureOutlined style={{ fontSize: 11 }} />
-                        快照
-                      </button>
-                      {i === latestIdx && (
-                        <a className="tt-evi" href={url} target="_blank" rel="noreferrer" title="打开商城现页" style={EVID_STYLE}>
-                          <ExportOutlined style={{ fontSize: 11 }} />
-                          现页
-                        </a>
-                      )}
-                    </>
-                  ) : (
-                    emptyCell
-                  )}
-                </div>
-              );
-            }),
-          )
           // offer 行（第一百六十二轮更名，原「权益」）：高度随内容自适应，全文完整显示
           rows.push(typeCell('offer', main, `${p}-offer`));
           rows.push(
@@ -808,7 +760,7 @@ export default function TrendTables(props: {
     <div>
       {/* 标题行：卡标题 + 两表复制（复制含全部组；页签只管看哪一组） */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>价差与明细</h2>
+        <h2 style={{ margin: 0, fontSize: fontSize.displaySm, fontWeight: 600, color: color.ink }}>{title}</h2>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {viewBlocks.some((b) => b.diffRows.length > 0) && (
             <Button size="small" icon={<CopyOutlined />} onClick={onCopyDiff}>
@@ -865,7 +817,7 @@ export default function TrendTables(props: {
                   transition: 'color 160ms ease, border-color 160ms ease, background-color 160ms ease',
                 }}
               >
-                {blockTitle(b)}
+                {groupTitle(b)}
               </button>
             );
           })}
@@ -877,7 +829,7 @@ export default function TrendTables(props: {
           读屏按行列关系朗读，冻结列与合并单元格经 aria-rowspan 表达 */}
       <div style={{ overflowX: 'auto', overflowY: 'hidden', paddingBottom: 2 }}>
         {active != null && (
-          <div role="table" aria-label="价差与明细" style={{ display: 'grid', gridTemplateColumns: gridCols, gridAutoFlow: 'row dense', minWidth: frozenW + n * W_TIME, alignItems: 'stretch' }}>
+          <div role="table" aria-label={title} style={{ display: 'grid', gridTemplateColumns: gridCols, gridAutoFlow: 'row dense', minWidth: frozenW + n * W_TIME, alignItems: 'stretch' }}>
             {groupBody(active)}
           </div>
         )}
@@ -885,11 +837,8 @@ export default function TrendTables(props: {
           <div style={{ padding: '14px 10px', fontSize: 12, color: color.mute }}>暂无可展示的数据</div>
         )}
       </div>
-      {/* 页面快照浮窗（居中小弹框） */}
-      <SnapshotModal info={snapInfo} onClose={() => setSnapInfo(null)} />
-      {/* 取证小件悬停态（内联样式无 :hover，工具类集中在此） */}
       <style>{`
-        .tt-evi:hover { text-decoration: underline; }
+        .tt-prod-link:hover { text-decoration: underline; }
       `}</style>
     </div>
   );

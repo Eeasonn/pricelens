@@ -55,7 +55,7 @@ function mountedApp() {
 }
 
 async function submit(text: string): Promise<void> {
-  fireEvent.change(screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' }), { target: { value: text } });
+  fireEvent.change(screen.getByRole('textbox', { name: '向 PriceAgent 提问' }), { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: '发送' }));
 }
 
@@ -125,7 +125,7 @@ describe('agentux Batch4 面板交互（empty 卡 / 药丸 / 降级文案）', (
     const view = mountedApp();
     fireEvent.click(screen.getByRole('button', { name: '打开 Agent' }));
     expect(screen.queryByRole('button', { name: '语音输入' })).toBeNull();
-    expect(screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' }).hasAttribute('disabled')).toBe(false);
+    expect(screen.getByRole('textbox', { name: '向 PriceAgent 提问' }).hasAttribute('disabled')).toBe(false);
     view.unmount();
   });
 });

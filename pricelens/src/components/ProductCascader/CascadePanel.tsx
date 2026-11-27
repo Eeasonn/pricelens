@@ -10,6 +10,11 @@
 // 第一百一十七轮二次迭代：fill 模式——面板填满父容器宽度，列按内容基础宽 +
 // 弹性权重分配剩余宽度，行文本不再省略号截断（窄容器时整面板横向滚动兜底），
 // 高度固定（height 透传，不随内容自适应跳变）。
+// 2026-11-27（修产品级联跳变）：①列按索引保持挂载（原 key 含首行 key，行集一变
+// 整列重挂、滚动位置归零）；②新增 sticky 模式——行激活不再触发「滚动到选中行」，
+// 只在 locateEpoch 变化（打开 / 当前路径失效重定位）时滚一次，勾选 / 搜索 / 换路径
+// 不动用户已滚到的位置；③frameColumnWidth：按给定标签集算定宽，供调用方在打开
+// 时刻按未过滤全量树冻结各列宽；④列可带 emptyText（固定列骨架下空列给出原因）。
 // ============================================================
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Checkbox, Tooltip } from 'antd';
@@ -59,24 +64,55 @@ export function measureText(s: string): number {
  *  第一百二十三轮起导出：选择产品浮窗按「四列自适应宽之和」定浮窗宽度，
  *  需在调用方拿到与面板一致的列宽计算。 */
 export function autoColumnWidth(items: CascadeRowItem[], opts: { min?: number; max?: number; extraW?: number; noMaxClip?: boolean }): number {
+  const textW = items.reduce((w, i) => Math.max(w, measureText(i.label) + (i.locked ? 14 : 0)), 0);
+  return columnWidthOf(textW, {
+    checkbox: items.some((i) => i.checkState),
+    leading: items.some((i) => i.leading),
+    extraW: opts.extraW ?? 0,
+    min: opts.min ?? 148,
+    max: opts.noMaxClip ? 1600 : (opts.max ?? 380),
+  });
+}
+
+/** 列宽公式单一来源（autoColumnWidth 与 frameColumnWidth 共用）：行左右 padding 20 +
+ *  文本前 gap 6 + 复选框 24 + 前置品牌点 18 + 行尾展开箭头 16 + 调用方行尾预留 extraW；
+ *  文本按 14px 实际字号折算（measureText 13px 基准）× 1.06 呼吸位，再留 8。 */
+function columnWidthOf(textW: number, opts: { checkbox: boolean; leading: boolean; extraW: number; min: number; max: number }): number {
   const chrome =
     2 * 10 + // 行左右 padding
     6 + // 文本前 gap
-    (items.some((i) => i.checkState) ? 24 : 0) + // 复选框
-    (items.some((i) => i.leading) ? 18 : 0) + // 前置品牌点
+    (opts.checkbox ? 24 : 0) + // 复选框
+    (opts.leading ? 18 : 0) + // 前置品牌点
     16 + // 父级行尾展开箭头（统一预留）
-    (opts.extraW ?? 0);
-  const textW = items.reduce((w, i) => Math.max(w, measureText(i.label) + (i.locked ? 14 : 0)), 0);
+    opts.extraW;
   // 行文字实际渲染字号 = fontSize.bodySm（14px），measureText 按 13px 基准测量 →
   // 折算到实际字号再计呼吸位（第一百二十三轮：label + 行尾必须完整可见）
-  const min = opts.min ?? 148;
-  const max = opts.noMaxClip ? 1600 : (opts.max ?? 380);
-  return Math.min(max, Math.max(min, Math.ceil(textW * (fontSize.bodySm / 13) * 1.06) + chrome + 8));
+  return Math.min(opts.max, Math.max(opts.min, Math.ceil(textW * (fontSize.bodySm / 13) * 1.06) + chrome + 8));
+}
+
+/** 固定骨架列宽（2026-11-27）：按调用方给定的全部候选标签取最长者，用与自适应
+ *  完全相同的公式算宽——调用方在打开时刻按未过滤全量树算一次并冻结，此后品牌 /
+ *  系列 / 型号 / 勾选 / 搜索 / 档位变化都不再改变列宽。 */
+export function frameColumnWidth(
+  labels: readonly string[],
+  opts: { checkbox?: boolean; leading?: boolean; extraW?: number; min?: number; max?: number } = {},
+): number {
+  const textW = labels.reduce((w, l) => Math.max(w, measureText(l)), 0);
+  return columnWidthOf(textW, {
+    checkbox: opts.checkbox === true,
+    leading: opts.leading === true,
+    extraW: opts.extraW ?? 0,
+    min: opts.min ?? 148,
+    max: opts.max ?? 1600,
+  });
 }
 
 export interface CascadeColumnSpec {
   /** 固定列宽；缺省 = 按内容自适应（第一百一十五轮） */
   width?: number;
+  /** 列无行时的空态文案（缺省「暂无数据」）；固定列骨架下用来区分「请先选择上级」
+   *  与「该层级无内容」 */
+  emptyText?: string;
   /** 列头（第一百六十二轮）：渲染在该列顶部、不随行滚动（如卖家列的「自动」胶囊） */
   header?: ReactNode;
   items: CascadeRowItem[];
@@ -89,7 +125,7 @@ export interface CascadeColumnSpec {
   flex?: number;
 }
 
-function Column({ items, width, last, open, fillFlex, height, header, rowHeight, fluid, showExpandArrow, scrollEpoch }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean; fillFlex?: number; height?: number; header?: ReactNode; rowHeight?: number; fluid?: boolean; showExpandArrow?: boolean; scrollEpoch?: number }) {
+function Column({ items, width, last, open, fillFlex, height, header, rowHeight, fluid, showExpandArrow, scrollEpoch, sticky, locateEpoch, emptyText }: { items: CascadeRowItem[]; width: number; last: boolean; open: boolean; fillFlex?: number; height?: number; header?: ReactNode; rowHeight?: number; fluid?: boolean; showExpandArrow?: boolean; scrollEpoch?: number; /** 2026-11-27：true = 滚动到选中行只随 locateEpoch 变化（见 CascadePanel sticky） */ sticky?: boolean; locateEpoch?: number; emptyText?: string }) {
   const noClip = fillFlex != null && !fluid;
   const rowH = rowHeight ?? ROW_H;
   const hasActive = items.some((item) => item.active);
@@ -97,6 +133,9 @@ function Column({ items, width, last, open, fillFlex, height, header, rowHeight,
   const columnRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open || scrollEpoch != null) return;
+    // sticky 模式：激活行变化不滚动（用户点到的行本就可见、勾选不动位置）；
+    // 仅 locateEpoch 变化（打开 / 当前路径失效重定位）时把选中行滚入视野
+    if (sticky && locateEpoch == null) return;
     const frame = requestAnimationFrame(() => {
       const column = columnRef.current;
       const selected = column?.querySelector<HTMLElement>('[aria-selected="true"]');
@@ -107,7 +146,9 @@ function Column({ items, width, last, open, fillFlex, height, header, rowHeight,
       else if (row.bottom > bounds.bottom) column.scrollTop += row.bottom - bounds.bottom;
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeKey, open, scrollEpoch]);
+    // sticky 模式依赖 locateEpoch 而非 activeKey：行激活不触发重定位
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sticky ? locateEpoch : activeKey, open, scrollEpoch, sticky]);
   useEffect(() => {
     if (!open || scrollEpoch == null) return;
     const column = columnRef.current;
@@ -251,7 +292,7 @@ function Column({ items, width, last, open, fillFlex, height, header, rowHeight,
         );
       })}
       {!items.length && (
-        <div style={{ padding: space.md, fontSize: fontSize.caption, color: color.mute }}>暂无数据</div>
+        <div style={{ padding: space.md, fontSize: fontSize.caption, color: color.mute }}>{emptyText ?? '暂无数据'}</div>
       )}
     </div>
   );
@@ -377,6 +418,8 @@ export function CascadePanel({
   stepped = false,
   levelLabels,
   rowHeight,
+  sticky,
+  locateEpoch,
 }: {
   columns: CascadeColumnSpec[];
   open?: boolean;
@@ -386,6 +429,11 @@ export function CascadePanel({
   levelLabels?: string[];
   /** 非逐级模式的行高。窄屏搜索结果不是逐级面板，但仍要 44px 触达。 */
   rowHeight?: number;
+  /** 2026-11-27：true = 各列保留用户滚动位置，激活行变化不滚动到选中行；仅
+   *  locateEpoch 变化时重定位。缺省 false = 原行为（激活行变化即滚入视野） */
+  sticky?: boolean;
+  /** sticky 模式的重定位纪元：调用方在打开 / 当前路径失效重定位时 +1 */
+  locateEpoch?: number;
 }) {
   if (stepped) return <SteppedCascade columns={columns} open={open} height={height} levelLabels={levelLabels} />;
   return (
@@ -403,7 +451,9 @@ export function CascadePanel({
     >
       {columns.map((c, i) => (
         <Column
-          key={`${i}-${c.items[0]?.key ?? ''}`}
+          // 按列序保持挂载（2026-11-27）：原 key 含首行 key，行集一变（搜索 / 换品牌 /
+          // 勾选）整列重挂、滚动位置归零
+          key={i}
           width={c.width ?? autoColumnWidth(c.items, { ...c, noMaxClip: fill })}
           items={c.items}
           header={c.header}
@@ -412,6 +462,9 @@ export function CascadePanel({
           fillFlex={fill ? (c.flex ?? 1) : undefined}
           height={height}
           rowHeight={rowHeight}
+          sticky={sticky}
+          locateEpoch={locateEpoch}
+          emptyText={c.emptyText}
         />
       ))}
     </div>

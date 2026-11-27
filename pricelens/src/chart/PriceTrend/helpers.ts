@@ -64,10 +64,9 @@ export const MIN_PX_PER_SERIES = 40;
  *  段像素需求下限按 max(MIN_PX_PER_SERIES, 此值) 取，多产品时自动把段抬到
  *  n×52px，名称药丸之间不再拥挤（真实高度不足的段才生长，否则旧口径）。 */
 export const NAME_PX_PER_SERIES = 52;
-/** 段像素需求的系列数上限：16 × 52 = 832px，覆盖 23 个单行名称药丸的纵向容量
- *  （第八十九轮 12→16：名称带加宽后药丸恒单行 36px，16 系列名称塔 576px 已在
- *  旧上限 624 内，但 20+ 系列全选时仍会溢出绘图域下缘） */
-export const SERIES_PX_CAP = 16;
+/** （2026-11-27）段像素需求的系列数上限 SERIES_PX_CAP = 16 退役：单图折线条数
+ *  不再设上限后，绘图区高度须随实际系列数自然生长（n × 52px），否则 17 条以上
+ *  的名称药丸会溢出绘图域下缘——「标签 / 图体适应」取代「只画前 N 条」。 */
 
 /** §6.5 刷选窗口最小 4 个桶 */
 export const MIN_WINDOW = 4;
@@ -577,7 +576,8 @@ export function computeYAxis(params: {
     for (const r of ranges) {
       if (r.lo <= d.max && r.hi >= d.min) n++;
     }
-    const need = Math.min(n, SERIES_PX_CAP) * Math.max(MIN_PX_PER_SERIES, NAME_PX_PER_SERIES) * scale;
+    // 2026-11-27：需求按实际系列数计（原钳到 SERIES_PX_CAP = 16），图体随线数适应
+    const need = n * Math.max(MIN_PX_PER_SERIES, NAME_PX_PER_SERIES) * scale;
     return Math.round(need) > segBaseH[i] ? Math.round(need) : segBaseH[i];
   });
   const grown = segFinalH.some((h, i) => h > segBaseH[i]);
@@ -1154,6 +1154,9 @@ export interface AvoidItem {
   nameText?: string;
   brandWord?: string | null;
   cfgText?: string;
+  /** 线型样例（2026-11-27 品牌全景）：名称药丸前的线段样条按此虚线节律画——同品牌
+   *  多条线同色，靠线型辨认；仅系列带 lineDash 时携带（金测序列化不受影响） */
+  lineDash?: number[];
 }
 
 export interface AvoidResult {
@@ -1184,6 +1187,8 @@ export interface AvoidResult {
     nameText?: string;
     brandWord?: string | null;
     cfgText?: string;
+    /** 线型样例（2026-11-27 品牌全景）：见 AvoidItem.lineDash */
+    lineDash?: number[];
   }[];
 }
 
@@ -1225,7 +1230,9 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: 
     // 金测「盒互不相交」钉此契约）
     const clampBottom = bottom != null && (it.kind === 'price' || it.zone === true);
     let saturated = false;
-    for (let guard = 0; guard < 64; guard++) {
+    // 向下找位的步数上限随已放置盒数走（2026-11-27）：原固定 64 步在几十条系列 +
+    // 价格标签同带时不够走完堆叠，药丸会叠在一起；步数 ≥ 已放置盒数即保证能找到空位
+    for (let guard = 0; guard < placed.length + 8; guard++) {
       const hit = placed.find(
         (q) =>
           it.left < q.right && q.left < it.right && top < q.top + q.h + GAP && top + it.h + GAP > q.top,
@@ -1268,6 +1275,8 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: 
               ...(it.cfgText ? { cfgText: it.cfgText } : {}),
             }
           : {}),
+        // 线型样例（2026-11-27）：仅系列带 lineDash 时携带，其余调用方输出不变
+        ...(it.lineDash ? { lineDash: it.lineDash } : {}),
       });
     }
   }

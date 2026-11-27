@@ -73,7 +73,7 @@ function resetTo(path: string): void {
 
 async function openPanelAndRunPriceAdvantage(): Promise<HTMLElement> {
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+  fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
   const panel = screen.getByRole('dialog');
   fireEvent.click(within(panel).getByRole('button', { name: '价格优势' }));
   await waitFor(() => expect(within(panel).getByText('价格优势对比')).toBeTruthy(), { timeout: 4000 });
@@ -82,7 +82,7 @@ async function openPanelAndRunPriceAdvantage(): Promise<HTMLElement> {
 
 async function openPanelAndRunAlerts(): Promise<HTMLElement> {
   render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+  fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
   const panel = screen.getByRole('dialog');
   fireEvent.click(within(panel).getByRole('button', { name: '价格预警' }));
   await waitFor(() => expect(within(panel).getByText(/价格预警 · /)).toBeTruthy(), { timeout: 4000 });
@@ -122,9 +122,9 @@ describe('t428u AgentPanel · 结果卡固定结构与证据', () => {
 
   it('无证据的结果卡（筛选预览）诚实显示暂无快照，不渲染链接或数字', async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
     const panel = screen.getByRole('dialog');
-    const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+    const input = within(panel).getByLabelText('向 PriceAgent 提问');
     fireEvent.change(input, { target: { value: '只看本币' } });
     fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
     await waitFor(() => expect(within(panel).getByText('筛选预览（尚未应用）')).toBeTruthy(), { timeout: 4000 });
@@ -175,7 +175,7 @@ describe('t428u AgentPanel · running 可取消，cancelled 可重试', () => {
 
   it('运行中点「停止运行」→ 已取消提示 + 按当前范围重试入口', async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
     const panel = screen.getByRole('dialog');
     fireEvent.click(within(panel).getByRole('button', { name: '价格优势' }));
     fireEvent.click(within(panel).getByRole('button', { name: '停止运行' }));
@@ -257,7 +257,7 @@ describe('t428u 返修 R3 · 终态后不残留「运行中」工具卡', () => 
 
   it('取消后工具卡收敛为「已取消」，不显示运行中', async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
     const panel = screen.getByRole('dialog');
     fireEvent.click(within(panel).getByRole('button', { name: '价格优势' }));
     // 等流事件先产生至少一张工具活动卡，再取消——终态必须把它收敛掉
@@ -278,7 +278,7 @@ describe('assistant-ui · 同名动作跨消息的交易归属', () => {
     fireEvent.click(within(panel).getByRole('button', { name: '打开价格预警' }));
     fireEvent.click(within(panel).getByRole('button', { name: '确认并继续' }));
     await waitFor(() => expect(document.title).toContain('预警'));
-    const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+    const input = within(panel).getByLabelText('向 PriceAgent 提问');
     fireEvent.change(input, { target: { value: '价格优势' } });
     fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
     await waitFor(() => expect(within(panel).getAllByText('价格优势对比')).toHaveLength(2), { timeout: 4000 });
@@ -294,10 +294,10 @@ describe('t428u 返修 R5 · 跨国回看导航带请求国家', () => {
 
   it('AE 页问「RU 价格优势」→ 点回看切到 RU 价格走势', async () => {
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
     const panel = screen.getByRole('dialog');
     await waitFor(() => expect(within(panel).getAllByText(/^AE · /).length).toBeGreaterThan(0), { timeout: 4000 });
-    const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+    const input = within(panel).getByLabelText('向 PriceAgent 提问');
     fireEvent.change(input, { target: { value: 'RU 价格优势' } });
     fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
     await waitFor(() => expect(within(panel).getByText('价格优势对比')).toBeTruthy(), { timeout: 4000 });
@@ -317,14 +317,14 @@ describe('t428u 返修 R5（二轮）· 跨国回看保留结果卡的主品口�
     // 与迭代版同契约；跨国回看仍保留同一产品与配置。
     const novaChip = '口径 · nova 14 Pro · 12+512 GB';
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
     const panel = screen.getByRole('dialog');
     // 起始口径：AE 页、主品 nova 14 Pro（URL 指定，真实 FiltersProvider 载入）
     await waitFor(() => {
       expect(within(panel).getAllByText('AE · 手机').length).toBeGreaterThan(0);
       expect(within(panel).getAllByText(novaChip).length).toBeGreaterThan(0);
     }, { timeout: 4000 });
-    const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+    const input = within(panel).getByLabelText('向 PriceAgent 提问');
     fireEvent.change(input, { target: { value: 'RU 价格优势' } });
     fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
     await waitFor(() => expect(within(panel).getByText('价格优势对比')).toBeTruthy(), { timeout: 4000 });
@@ -368,9 +368,9 @@ describe('t428u 返修 R7 · 预警展开行动作在判断边界之后', () => 
     localStorage.setItem(LPL.filters, JSON.stringify({ ...defaultFilters, alertSubs: [seriesKey], v: 12 }));
     // 有订阅时挂载即产生主动预警消息，建议词条区不渲染——直接输入提问
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: /打开 PriceLens Agent/ }));
+    fireEvent.click(screen.getByRole('button', { name: /打开 PriceAgent/ }));
     const panel = screen.getByRole('dialog');
-    const input = within(panel).getByLabelText('向 PriceLens Agent 提问');
+    const input = within(panel).getByLabelText('向 PriceAgent 提问');
     fireEvent.change(input, { target: { value: '查看价格预警' } });
     fireEvent.click(within(panel).getByRole('button', { name: '发送' }));
     await waitFor(() => expect(within(panel).getByText(/价格预警 · \d+ 条最新事件/)).toBeTruthy(), { timeout: 4000 });

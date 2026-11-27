@@ -9,7 +9,7 @@ vi.mock('../../appChannel', () => ({
   resolveAppChannel: (): 'stable' => 'stable',
 }));
 import { defaultFilters } from '../../state/FiltersContext';
-import { autoComparesFor, MAINS_CAP } from '../../state/mainSelection';
+import { autoComparesFor } from '../../state/mainSelection';
 import { buildFilterPatch } from '../core';
 import { isAgentResponse, validateFilterPatch, type ToolCallCard } from '../contracts';
 
@@ -19,7 +19,8 @@ describe('agentux P1-5 deterministic filter cards', () => {
     const patch = buildFilterPatch('RU Pura 90s Pro', { ...defaultFilters, countryCode: 'RU', industry: 'phone' });
     expect(patch.countryCode).toBe('RU');
     expect(patch.mains?.length).toBeGreaterThan(0);
-    expect(patch.mains?.length).toBeLessThanOrEqual(MAINS_CAP);
+    // 2026-11-27 取消 8 张主品卡上限：该型号全部配置逐配置成卡、每卡都有主品
+    expect(patch.mains?.every((card) => card.main != null)).toBe(true);
     const own = patch.mains?.find((card) => card.main?.modelId === 'own-huawei-pura-90s-pro');
     expect(own?.auto).toBe(true);
     expect(own?.compares).toEqual(own ? autoComparesFor(own) : []);

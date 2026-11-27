@@ -88,7 +88,7 @@ const readableText = (node: Element): string => {
   clone.querySelectorAll('[aria-hidden="true"]').forEach((child) => child.remove());
   return clone.textContent ?? '';
 };
-const composer = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: '向 PriceLens Agent 提问' }) as HTMLTextAreaElement;
+const composer = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: '向 PriceAgent 提问' }) as HTMLTextAreaElement;
 const menuItem = (name: string | RegExp): HTMLElement => screen.getByRole('menuitem', { name });
 
 describe('⑦ 渲染门控', () => {

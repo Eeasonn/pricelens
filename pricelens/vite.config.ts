@@ -34,7 +34,7 @@ export default defineConfig({
           ? html
           : html.replace('</head>', `${marker}</head>`);
         return channel === 'iterate'
-          ? marked.replace('<title>PriceLens</title>', '<title>PriceLens · 演进版</title>')
+          ? marked.replace('<title>PriceAgent</title>', '<title>PriceAgent · 演进版</title>')
           : marked;
       },
     },

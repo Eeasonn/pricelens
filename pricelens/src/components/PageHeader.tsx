@@ -1,7 +1,13 @@
 // ============================================================
-// 共享页头（预警中心重构）：四页统一 64px 铬架——左 = PriceLens · 单国家分析
-// 徽标 + 国家选择器（从各页筛选条收除，全站唯一入口在页签组）；右 = 管理页签
-// （配置/预警）。价格/量价/定价推演改由筛选栏下的图表页签承接。
+// 共享页头（预警中心重构）：四页统一 64px 铬架——左 = 品牌标记 + 快捷搜索；
+// 右 = 管理页签（配置/预警）。价格/量价/定价推演改由筛选栏下的图表页签承接。
+// 2026-11-27（PriceAgent 改造）：
+// · 品牌名 PriceLens → PriceAgent，品牌标记 = 墨色圆角方块 + 白色 P
+//   （PriceAgentMark，与 favicon 同造型）；
+// · 「单国家分析」徽标退役（入口不再重复口径文字，国家口径由筛选栏国家选择器表达）；
+// · 国家选择器（地区部 → 国家）从页头下移到筛选栏原「产业」槽位——产业不再作为
+//   独立筛选控件，并入「产业与产品」选择面板作全局范围开关（见 FilterBar /
+//   ProductPickerModal）。
 // + 页签当前页墨色下划线指示。配置页的「保存配置」走 extra 插槽。
 // 第一百三十七轮：右上角新增问号入口 → 数据口径说明弹窗（取价/默认店铺/
 // 比价/销量估算/数据质量等全部处理规则的业务语言说明）。
@@ -19,14 +25,14 @@ import { QuestionCircleOutlined } from '@ant-design/icons';
 import { hiddenInStable } from '../appChannel';
 import { usePage, type Page } from '../state/PageContext';
 import { filterBarTheme } from './FilterBar';
-import CountryBox from './FilterBar/CountryBox';
 import DataHelpModal from './DataHelpModal';
+import PriceAgentMark, { BRAND_NAME } from './PriceAgentMark';
 import AgentLauncher from './Copilot/AgentLauncher';
 import AgentLauncherStable from './CopilotStable/AgentLauncher';
 import PriceTrendSearch from './PriceTrendSearch';
 import PriceTrendSearchStable from './PriceTrendSearchStable';
 import { STABLE } from '../appChannel';
-import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk, shadow, space } from '../theme/tokens';
+import { color, fontSize, radius, shadow, space } from '../theme/tokens';
 
 /** 页头只留管理页签。图表内容的切换在筛选栏下方（ChartContentBar）。
  *  量价预测页签已退役（WP6 集成 8.1 Step 3）：预测页入分析壳后，其入口
@@ -82,9 +88,13 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
                 color: color.ink,
                 cursor: 'pointer',
                 transition: 'color 160ms ease',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
               }}
             >
-              PriceLens
+              <PriceAgentMark size={22} />
+              {BRAND_NAME}
             </button>
             {/* 第一百八十五轮（外部 UX 审计落地）：可见的返回文字——徽标可点但
                 不表意，补一枚轻量文字按钮（与徽标同行为）；文字本身即可访问名，
@@ -110,25 +120,24 @@ export default function PageHeader({ extra }: { title?: string; extra?: ReactNod
             </button>
           </>
         ) : (
-          <span style={{ fontSize: fontSize.bodyMd, fontWeight: 600, color: color.ink }}>PriceLens</span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: fontSize.bodyMd,
+              fontWeight: 600,
+              color: color.ink,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <PriceAgentMark size={22} />
+            {BRAND_NAME}
+          </span>
         )}
-        {/* 分析范围徽标：国家口径并入此处，各页筛选条不再重复国家框。
-            不换行不收缩（189 轮窄屏：禁止「单国家分 / 析」词内断行） */}
-        <span
-          style={{
-            display: 'inline-flex', alignItems: 'center', height: 28, padding: '0 12px',
-            borderRadius: radius.pill, fontSize: fontSize.caption, fontWeight: 600,
-            color: selectSoftInk, background: selectSoft, border: `1px solid ${selectAccent}`,
-            whiteSpace: 'nowrap', flexShrink: 0,
-          }}
-        >
-          单国家分析
-        </span>
-        <span aria-hidden style={{ width: 1, height: 22, background: color.hairline }} />
+        {/* 2026-11-27：「单国家分析」徽标与页头国家选择器退役——国家选择器移至筛选栏
+            原「产业」槽位（FilterBar），此处只保留快捷搜索 */}
         <ConfigProvider theme={filterBarTheme}>
-          <div style={{ width: 190, maxWidth: '100%' }}>
-            <CountryBox />
-          </div>
           {STABLE ? <PriceTrendSearchStable /> : <PriceTrendSearch />}
         </ConfigProvider>
       </div>

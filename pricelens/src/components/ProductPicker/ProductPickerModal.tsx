@@ -29,7 +29,8 @@
 //   上限 min(视口-48, 1100)，超限才横向滚动。
 // 主品空缺 = 空组（仅历史数据可能出现；空态不提供先加对比入口）。
 // 型号行勾选（原「全部型号」）= 每配置一张卡 / 每配置一条对比（不再并卡）；单图含主品
-// 最多 8 条折线，在选择时收口，配满后「添加对比产品」置灰并提示，卡数 ≤ 8；即改即存。
+// 即改即存。（2026-11-27 起单图折线数与卡数不再设上限——原「单图最多 8 条折线、
+// 卡数 ≤ 8」在选择时收口的规则退役。）
 // 添加主分析产品 = 最后一个组框向下延长的底边正中的显性大按钮。
 // 破坏性动作轻确认：删整组、清空全部。
 // 模板（第一百三十一轮增强、第一百三十三轮改纯插入）：顶栏与卡级「＋模板」
@@ -53,10 +54,19 @@
 //   guard（修复内层 ✎ 的 Enter 被外壳截走的潜伏问题）；③dialog 语义——
 //   浮窗根容器 role="dialog" aria-modal + 可访问名「选择产品」，打开时焦点
 //   移入、关闭（含 Esc/外点）时经 captureFocusRestore 还给页内触发器。
+// 2026-11-27（PriceAgent 改造 · 一个产业与产品入口、两种分析结构）：
+// · 面板顶栏 = 产业选择（全局范围开关，原筛选栏「产业」下拉退役并入）+「产品对标 |
+//   品牌全景」模式切换；入口 chip 显示产业与当前模式的选择摘要；两套草稿分别保存。
+// · 切产业先确认：当前产业的已选（产品对标 + 品牌全景）按产业分别保留，切回恢复，
+//   不无提示丢失。
+// · 取消单图 8 线 / 8 张主品卡上限：对比区与卡数不再截断；手动增删对比不再退出
+//   「自动匹配竞品」——矩阵产出与手动 / 同档推荐并存为并集（见 state/mainSelection）。
+// · 主品卡新增「同档位推荐」弹窗（TierRecommendModal）。
+// · 树浮窗固定骨架（修「Huawei 切 Samsung 弹层整体收窄」，见 LevelSwitchPopover 注）。
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { Dropdown, Input, message, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
+import { ConfigProvider, Dropdown, Input, message, Modal, Popconfirm, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
   CheckOutlined,
   DeleteOutlined,
@@ -68,13 +78,15 @@ import {
 } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
-import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
+import { filterBarTheme } from '../FilterBar';
+import { INDUSTRY_LABELS, INDUSTRY_ORDER, industriesOfCountry } from '../../dataModel/scope';
+import type { Industry } from '../../dataModel/types';
+import type { AnalysisMode, MainProduct, ProductSelection } from '../../state/filtersTypes';
 import BrandDot, { brandLabelOf } from '../BrandMark';
 import {
   brandOfModel,
   defaultColorSkuIds,
   filterProductTreeByTier,
-  modelEntryInfo,
   modelNameOf,
   ownBrand,
   searchProductTree,
@@ -86,7 +98,7 @@ import {
   type ModelSortMode,
   type RomramNode,
 } from '../ProductCascader/tree';
-import { autoColumnWidth, CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
+import { CascadePanel, type CascadeColumnSpec, type CascadeRowItem } from '../ProductCascader';
 import {
   AddPill,
   ColorChip,
@@ -110,6 +122,8 @@ import {
   textW,
   useTopEscClose,
   useTreeData,
+  cascadeFrameOf,
+  modelTagText,
   PICKER_EDGE,
   ROW_GAP,
 } from './pickerBits';
@@ -124,6 +138,8 @@ import {
   type StoredCombo,
 } from './combos';
 import TemplateEditorFlyout from './TemplateEditorFlyout';
+import TierRecommendModal from './TierRecommendModal';
+import PanoramaPicker from './PanoramaPicker';
 import {
   appendTierCards, configsInTier,
 } from '../../state/tierSelection';
@@ -131,10 +147,7 @@ import { TIER_LABELS } from '../../dataModel/aggregate';
 import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 import { color, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import {
-  cardQuota,
-  COMPARE_CAP_HINT,
   isHuaweiModel,
-  MAINS_CAP,
   newCardId,
   remapSelection,
   selKey,
@@ -272,7 +285,19 @@ function TierBatchPill({ text, disabled, onClick }: { text: string; disabled?: b
  *  每次 Esc 只关最上层并归还触发器焦点；②落位翻转——动态宽浮层固定
  *  bottomLeft 在锚点靠右时整体顶出视口右缘（antd 只平移不翻转），打开时
  *  量测锚点、cascadePlacementOf 决定锚左缘或右缘；fit 控制触发器外壳的
- *  布局占位（fill = 主品整框 flex:1，row = 对比条整行，其余 = 内容宽）。 */
+ *  布局占位（fill = 主品整框 flex:1，row = 对比条整行，其余 = 内容宽）。
+ *  2026-11-27（修产品级联跳变，Eason 已复现「Huawei 切 Samsung 时弹层整体收窄」）：
+ *  ① 固定骨架——打开时刻按**未过滤全量树**量一次四列宽（cascadeFrameOf）与外框宽、
+ *     落位；品牌 / 系列 / 型号 / 勾选 / 搜索 / 档位变化都不改外框位置与宽高、四列
+ *     列宽，仅视口变化重算（此前四列按当前内容自适应，切到系列名与型号名更短的
+ *     品牌时四列同时收窄 → 外框整体收窄）；
+ *  ② 固定四列——无配置层级的型号不再删第四列（留空并说明原因）；
+ *  ③ 列按列序保持挂载、滚动位置保留——仅在打开 / 当前路径失效重定位时才把选中行
+ *     滚入视野（CascadePanel sticky + locateEpoch；勾选不重排、不滚动）；
+ *  ④ 档位批量动作带常驻定高——选 / 不选档位只换内容，外框高度不变；
+ *  ⑤ 落位钳制改用布局值量测（offsetWidth / style.left），不受入场动画 transform
+ *     缩放影响；并以 MutationObserver 在 rc-trigger 每次重写定位后立即重新钳制，
+ *     动画结束不再出现「自写位置 → antd 落位 → 再钳回」的跳变（动画不改变布局）。 */
 function LevelSwitchPopover({
   ctx,
   initialModelId,
@@ -295,6 +320,16 @@ function LevelSwitchPopover({
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState<string | null>(null); // null = 全部档位；关窗即回默认
   const [modelSort, setModelSort] = useState<ModelSortMode>('default'); // 型号列排序
+  // ---- 固定骨架（2026-11-27）：视口宽 + 按未过滤全量树冻结的四列宽 ----
+  // 视口宽只在 resize 时更新（不随渲染读取 window.innerWidth）；骨架只依赖全量树 /
+  // 币种 / 对比上下文——与当前路径、搜索、档位、勾选无关
+  const [viewportW, setViewportW] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth));
+  const comparesCtx = ctx.kind === 'compares';
+  const replaceCompareCtx = ctx.kind === 'replace-compare';
+  const frame = useMemo(
+    () => cascadeFrameOf(fullTree, currency, { compareCtx: comparesCtx }),
+    [fullTree, currency, comparesCtx],
+  );
   // 关闭守卫（2026-11-17 Eason「点击产品点了又立马退出」）：树浮层在人手输入下
   // 开窗 ~250ms 后被无事件背书的关闭请求闪关（自动化单击/双击/事件重放均无法
   // 复现，仅真实长按/连点抖动触发，且同一环境受控点击稳定）。守卫 =
@@ -339,6 +374,7 @@ function LevelSwitchPopover({
     const measure = (): void => {
       const r = triggerRef.current?.getBoundingClientRect();
       if (r) setTrigX({ left: r.left, right: r.right });
+      setViewportW(window.innerWidth); // 仅视口变化可重算骨架
     };
     measure();
     window.addEventListener('resize', measure);
@@ -361,10 +397,19 @@ function LevelSwitchPopover({
   );
   const tree = useMemo(() => searchProductTree(scopedTree, search), [scopedTree, search]);
 
-  // 打开/搜索/换档位时定位：优先当前条目的型号路径，否则首个结果
+  // 定位（2026-11-27）：打开时定位——优先当前条目的型号路径，否则首个结果；此后
+  // 搜索 / 换档位时**当前路径仍有效则原样保留**（各列滚动位置不动），仅当前路径
+  // 失效（品牌 / 系列 / 型号被筛掉）才重定位并令各列把新选中行滚入视野
+  // （locateEpoch +1）。此前每次搜索 / 换档位都无条件重定位，勾选与筛选都会让列跳动。
   const [path, setPath] = useState<[string, string, string] | null>(null);
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  const [locateEpoch, setLocateEpoch] = useState(0);
   useEffect(() => {
     if (!open) return;
+    const pathValid = (t: BrandNode[], p: [string, string, string] | null): boolean =>
+      !!p && t.some((b) => b.key === p[0] && b.series.some((s) => s.key === p[1] && s.models.some((m) => m.modelId === p[2])));
+    if (pathValid(tree, pathRef.current)) return; // 当前路径仍有效：不重定位
     const locate = (t: BrandNode[]): [string, string, string] | null => {
       if (initialModelId) {
         for (const b of t) {
@@ -379,6 +424,7 @@ function LevelSwitchPopover({
       return b && s && m ? [b.key, s.key, m.modelId] : null;
     };
     setPath(locate(tree));
+    setLocateEpoch((e) => e + 1); // 仅当前路径失效才重定位
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, search, tier]);
 
@@ -386,8 +432,6 @@ function LevelSwitchPopover({
   const series = brand?.series.find((s) => s.key === path?.[1]) ?? brand?.series[0];
   const model = series?.models.find((m) => m.modelId === path?.[2]) ?? series?.models[0];
   const activeCard = 'cardId' in ctx ? mains.find((c) => c.id === ctx.cardId) ?? null : null;
-  const comparesCtx = ctx.kind === 'compares';
-  const replaceCompareCtx = ctx.kind === 'replace-compare';
 
   /** 主品落位：add-main 建卡；set-main 补选；replace-main 整卡替换（颜色同色优先） */
   const pickConfig = (r: RomramNode): void => {
@@ -426,10 +470,7 @@ function LevelSwitchPopover({
         message.info('已在看板中');
         return;
       }
-      if (mains.length >= MAINS_CAP) {
-        message.info(`最多 ${MAINS_CAP} 组，请先删除组`);
-        return;
-      }
+      // 2026-11-27 起卡数不设上限（原「最多 8 组」拦截退役）
       // 第一百三十一轮：建卡即默认「匹配竞品」（华为主品 = 对比区按矩阵填充
       // 并保持驱动）；非华为主品无矩阵可依，保持手动
       actions.setMains([...mains, withAutoOn({ id: newCardId(), main: sel, compares: [] })]);
@@ -451,11 +492,8 @@ function LevelSwitchPopover({
     // 与主品同型号同配置才拦（selKey 级，与编辑浮窗/自动匹配矩阵同口径）；
     // 同型号不同配置允许对比，不按整型号拦
     if (card.main && selKey(card.main) === nodeSelKey(r)) return;
-    // 单图折线上限：达到上限后明确提示，不再按 3 款对比拦截
-    if (card.compares.length >= cardQuota(card)) {
-      message.info(COMPARE_CAP_HINT);
-      return;
-    }
+    // 2026-11-27 起对比区不设条数上限（原单图 8 线拦截退役）；自动匹配不关，
+    // 新增项由 setCardCompares 登记为手动补充、与矩阵产出并存
     actions.setCardCompares(card.id, [...card.compares, { modelId: r.modelId, romram: r.romram, skuIds: defaultColorSkuIds(r) }]);
   };
 
@@ -508,21 +546,15 @@ function LevelSwitchPopover({
       const base = replaceCompareCtx ? card.compares.filter((c) => c !== ctx.sel) : card.compares;
       const seen = new Set(base.map(selKey));
       const added = [...base];
-      let capped = false;
       for (const sel of sels) {
         // 与主品同型号同配置才跳过（selKey 级）；同型号不同配置可进对比区
         if (card.main && selKey(card.main) === selKey(sel)) continue;
         const k = selKey(sel);
         if (seen.has(k)) continue;
-        if (added.length >= cardQuota(card)) {
-          capped = true;
-          break;
-        }
         seen.add(k);
         added.push(sel);
       }
-      // 批量命中每组对比上限：与组数上限同口径提示，不静默截断
-      if (capped) message.info(`${COMPARE_CAP_HINT}，其余配置未加入`);
+      // 2026-11-27 起不设条数上限：当前结果全量加入（原超配额截断 + 提示退役）
       actions.setCardCompares(card.id, added);
       if (replaceCompareCtx) setOpen(false);
       return;
@@ -533,24 +565,18 @@ function LevelSwitchPopover({
     }
     const seen = new Set(list.flatMap((c) => (c.main ? [selKey(c.main)] : [])));
     const cards: MainProduct[] = [];
-    let capped = false;
     for (const sel of sels) {
       const k = selKey(sel);
       if (seen.has(k)) continue;
-      if (list.length + cards.length >= MAINS_CAP) {
-        capped = true;
-        break;
-      }
       seen.add(k);
       // 第一百三十一轮：逐配置成卡同样默认「匹配竞品」（华为主品 = 矩阵填充）
       cards.push(withAutoOn({ id: newCardId(), main: sel, compares: [] }));
     }
     if (!cards.length) {
-      // 批量命中上限 / 全部重复：不再静默，与单点路径同口径提示
-      message.info(capped ? `最多 ${MAINS_CAP} 组，请先删除组` : '已在看板中');
+      // 全部重复：不再静默，与单点路径同口径提示（2026-11-27 起卡数无上限，不再有「命中上限」分支）
+      message.info('已在看板中');
       return;
     }
-    if (capped) message.info(`已达 ${MAINS_CAP} 组上限，其余配置未加入`);
     // 第一百二十五轮（K2）：批量落卡不再静默丢弃当前卡对比区——对齐单点路径
     // pickConfig→withMain 的沿用口径：首张新卡继承（剔同 selKey、截配额），
     // 其余新卡保持空、由 setMains 的自动匹配按需补。
@@ -563,7 +589,7 @@ function LevelSwitchPopover({
         cards[0] = {
           ...first,
           auto: undefined,
-          compares: activeCard.compares.filter((c) => selKey(c) !== selKey(first.main!)).slice(0, cardQuota(first)),
+          compares: activeCard.compares.filter((c) => selKey(c) !== selKey(first.main!)),
         };
       }
     }
@@ -621,7 +647,7 @@ function LevelSwitchPopover({
       if (firstNew && !firstNew.compares.length) {
         next = next.map((c) =>
           c === firstNew
-            ? { ...c, auto: undefined, compares: inherit.filter((x) => selKey(x) !== selKey(c.main!)).slice(0, cardQuota(c)) }
+            ? { ...c, auto: undefined, compares: inherit.filter((x) => selKey(x) !== selKey(c.main!)) }
             : c,
         );
       }
@@ -637,31 +663,17 @@ function LevelSwitchPopover({
     const base = replaceCompareCtx ? card.compares.filter((c) => c !== ctx.sel) : card.compares;
     const seen = new Set(base.map(selKey));
     const added = [...base];
-    let capped = false;
     for (const sel of tierAllConfigs) {
       // 与主品同型号同配置才跳过（selKey 级）；同型号不同配置可进对比区
       if (card.main && selKey(card.main) === selKey(sel)) continue;
       const k = selKey(sel);
       if (seen.has(k)) continue;
-      if (added.length >= cardQuota(card)) {
-        capped = true;
-        break;
-      }
       seen.add(k);
       added.push(sel);
     }
-    if (capped) message.info(`${COMPARE_CAP_HINT}，其余配置未加入`);
+    // 2026-11-27 起不设条数上限：该档全部配置全量加入（原超配额截断 + 提示退役）
     actions.setCardCompares(card.id, added);
     if (replaceCompareCtx) setOpen(false);
-  };
-
-  /** 型号行尾「档位缩写 · 现价」灰字（现价 = 入门配置默认色最新价，币种随筛选）；
-   *  首末档的「入门 · 」「旗舰 · 」前缀只在档位下拉里保留，行尾去掉以免与现价的 · 连成三段 */
-  const modelTagText = (m: ModelNode): string => {
-    const { tierCode, price } = modelEntryInfo(m, currency);
-    const tier = tierCode ? tierLabelShort((TIER_LABELS[tierCode] ?? tierCode).replace(/^(入门|旗舰) · /, '')) : '';
-    const priceText = price != null ? formatPrice(Math.round(price), currency) : '';
-    return [tier, priceText].filter(Boolean).join(' · ');
   };
 
   const columns: CascadeColumnSpec[] = useMemo(() => {
@@ -701,8 +713,8 @@ function LevelSwitchPopover({
         const inCompares = card.compares.some((c) => selKey(c) === key);
         // 与主品同型号同配置才算撞主品（selKey 级，拦截/提示/tooltip 同一口径）
         const sameAsMain = card.main != null && selKey(card.main) === key;
-        const quotaFull = card.compares.length >= cardQuota(card);
-        const disabled = !inCompares && (sameAsMain || quotaFull);
+        // 2026-11-27 起对比区不设条数上限：未选中行只在「与主品同组」时禁用
+        const disabled = !inCompares && sameAsMain;
         return {
           key: r.key,
           label: r.romram,
@@ -719,11 +731,9 @@ function LevelSwitchPopover({
               title={
                 sameAsMain && !inCompares
                   ? '主分析产品不对比自身配置'
-                  : quotaFull && !inCompares
-                    ? COMPARE_CAP_HINT
-                    : inCompares
-                      ? '移除该对比'
-                      : '加入对比区'
+                  : inCompares
+                    ? '移除该对比'
+                    : '加入对比区'
               }
             >
               <span
@@ -784,7 +794,7 @@ function LevelSwitchPopover({
       } satisfies CascadeRowItem;
     };
     const modelItems: CascadeRowItem[] = sortedModels.map((m) => {
-      const tag = modelTagText(m);
+      const tag = modelTagText(m, currency);
       // 第一百五十三轮：无配置层级的产品（可用配置只有 '—'，如 Watch Ultimate 2）
       // 型号行即选择叶——复用配置行的选择/对比交互与行尾状态，不再出现「—」叶子
       const usable = usableRomrams(m.romrams);
@@ -833,39 +843,31 @@ function LevelSwitchPopover({
     const modelDegenerate = drilledUsable.length === 1 && drilledUsable[0].romram === '—';
     const romramItems: CascadeRowItem[] = model && !modelDegenerate ? model.romrams.map(romramRowOf) : [];
 
-    // 行尾内容宽度预留（第一百二十三轮：列宽必须容纳 label + 行尾，四列信息完整
-    // 可见、无省略号）——按各列行尾实际文案折算，autoColumnWidth 计入 chrome
-    const brandExtra = tree.reduce((w, b) => Math.max(w, textW(`${b.modelCount} 型号`, 10)), 0) + ROW_GAP;
-    const eolPillW = textW('退市', 10) + 8; // 文本 + padding 0 6px + 边框 2px
-    const seriesExtra = (brand?.series ?? []).some((s) => s.eol) ? eolPillW + ROW_GAP : 0;
-    const modelTagW = (series?.models ?? []).reduce((w, m) => Math.max(w, textW(modelTagText(m), 10)), 0);
-    const modelExtra = ((series?.models ?? []).some((m) => m.eol) ? eolPillW + 6 : 0)
-      + modelTagW + ROW_GAP;
-    // 对比 pill = 图标 + 文案（图标 11 + 间隙 3 计入预留）
-    const romramExtra = (comparesCtx
-      ? pillW('对比', 11) + 14
-      : Math.max(textW('当前', 10), textW('已选', 10))) + ROW_GAP;
-
+    // 固定四列骨架（2026-11-27）：列宽取打开时刻按未过滤全量树冻结的 frame，与当前
+    // 路径 / 搜索 / 档位 / 勾选无关（信息不截断——frame 已按全量最长行预留行尾）；
+    // 无配置层级的型号不再删列：第四列留空并说明原因
+    const romramEmptyText = !model
+      ? '暂无可选型号'
+      : modelDegenerate
+        ? '该型号无配置层级，点型号行即选'
+        : '该型号暂无可选配置';
     return [
-      { items: brandItems, width: autoColumnWidth(brandItems, { extraW: brandExtra, noMaxClip: true }) },
-      { items: seriesItems, width: autoColumnWidth(seriesItems, { extraW: seriesExtra, noMaxClip: true }) },
-      { items: modelItems, width: autoColumnWidth(modelItems, { extraW: modelExtra, noMaxClip: true }) },
-      // 无配置层级的型号（唯一配置为 '—'）整列不渲染：叶子已上提到型号行，
-      // 不出现「—」叶子行，也不留「暂无数据」空列
-      ...(modelDegenerate
-        ? []
-        : [{ items: romramItems, width: autoColumnWidth(romramItems, { extraW: romramExtra, noMaxClip: true }) }]),
+      { items: brandItems, width: frame.brand },
+      { items: seriesItems, width: frame.series },
+      { items: modelItems, width: frame.model },
+      { items: romramItems, width: frame.romram, emptyText: romramEmptyText },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tree, brand, series, model, ctx, mains, activeCard, modelSort, currency]);
+  }, [tree, brand, series, model, ctx, mains, activeCard, modelSort, currency, frame]);
 
-  // 浮窗宽 = 四列自适应宽之和 + 内边距（搜索/档位筛选改变列内容时随之变化）；
-  // 上限 = min(视口 - 48, 1100)，超限由面板内横向滚动兜底
-  const panelW = columns.reduce((w, c) => w + (c.width ?? 0), 0);
-  const widthCap = Math.min(typeof window === 'undefined' ? 1148 : window.innerWidth - 48, 1100);
-  const bodyW = narrow ? Math.max(280, widthCap) : Math.max(360, Math.min(panelW + 20, widthCap));
+  // 浮窗宽 = 固定骨架四列宽之和 + 内边距；上限 = min(视口 - 48, 1100)，超限由面板内
+  // 横向滚动兜底（列宽不压缩、信息不截断）。一次打开期间不随搜索 / 档位 / 路径 / 勾选
+  // 变化，仅视口变化重算（2026-11-27 修跳变：此前按当前列内容自适应，Huawei 切
+  // Samsung 时系列与型号文案变短 → 四列同时收窄 → 外框整体收窄）
+  const widthCap = Math.min(viewportW - 48, 1100);
+  const bodyW = narrow ? Math.max(280, widthCap) : Math.max(360, Math.min(frame.total + 20, widthCap));
   // 落位翻转（第一百九十轮）：锚点左侧放不下浮层宽 → 改锚右缘向左展开
-  const placement = trigX ? cascadePlacementOf(trigX.left, bodyW, typeof window === 'undefined' ? 1280 : window.innerWidth) : 'bottomLeft';
+  const placement = trigX ? cascadePlacementOf(trigX.left, bodyW, viewportW) : 'bottomLeft';
   // 浮层钳进视口（2026-11-13 Eason「产品筛选框被遮挡」）：浮层宽 = 四列自适应和，
   // 可逼近视口宽（上限 min(vw-48, 1100)）——antd 对超宽浮层的自动平移会把左缘
   // 推出屏幕外（vw=1000、宽 957、锚点居中时实测 left -202，品牌列整列不可达）。
@@ -883,36 +885,67 @@ function LevelSwitchPopover({
       const el = document.querySelector<HTMLElement>(`.${popCls}`);
       if (!el) return;
       if ((el.style.left || '').includes('vw')) return; // antd 隐藏态不判定
-      const r = el.getBoundingClientRect();
+      // 2026-11-27：量测改用布局值（offsetWidth / offsetLeft / offsetTop）——不受入场
+      // 动画 transform 缩放影响（此前取 getBoundingClientRect：动画中宽偏小、位置偏移，
+      // 会被误判越界并按缩放中的宽重写定位，动画结束后再改回 = 弹层跳一下）。
+      // 视觉位置必须用布局值而不是 style.left：右对齐落位（bottomRight）时 rc-trigger
+      // 写的是 left:auto + right，读 style.left 得不到数值，钳制会整段落空、品牌列被
+      // 推出屏幕左侧（真机复现 x = −180）。offsetLeft 同时覆盖 left:auto 落位与残差
+      // 污染（style.left 混入 -1000vw 时与布局位置不符）。
       const vw = window.innerWidth;
       const EDGE = 24;
-      const declared = parseFloat(el.style.left || '0');
-      const clean = Math.abs(declared - r.left) < 2 && r.left >= EDGE - 2 && r.right <= vw - EDGE + 2;
+      if (el.style.left === '' && el.style.right === '') return; // rc-trigger 尚未落位
+      const popW = el.offsetWidth || Math.round(bodyW);
+      const popH = el.offsetHeight;
+      const x = el.offsetLeft;
+      const declaredText = el.style.left;
+      const residual = declaredText !== '' && declaredText !== 'auto' && Math.abs(Number.parseFloat(declaredText) - x) >= 2;
+      // 落在 24px 安全边距内且无残差 = 干净，不干预（rc-trigger 自己的翻转 / 平移结果照用）；
+      // 越界或有残差才按触发器位置重写干净的 fixed 定位
+      const clean = !residual && x >= EDGE - 2 && x + popW <= vw - EDGE + 2;
       if (clean) return;
       const trig = triggerRef.current?.getBoundingClientRect();
       if (!trig || trig.width === 0) return;
-      const popW = Math.round(r.width) || Math.round(bodyW);
       let left = trig.right + 8; // 默认锚触发器右缘右侧
       if (left + popW > vw - EDGE) left = trig.left - popW - 8; // 放不下 → 左侧展开
       left = Math.max(EDGE, Math.min(left, vw - EDGE - popW));
-      const top = Math.max(EDGE, Math.min(trig.bottom + 8, window.innerHeight - r.height - 24));
+      const top = Math.max(EDGE, Math.min(trig.bottom + 8, window.innerHeight - popH - 24));
       el.style.position = 'fixed';
       el.style.left = `${Math.round(left)}px`;
       el.style.top = `${Math.round(top)}px`;
       el.style.marginLeft = '';
     };
+    // rc-trigger 每次重写定位（入场动画结束的再对齐、滚动 / 尺寸变化）后立即重新
+    // 钳制：此前只靠 350ms 兜底那一次，动画结束到兜底之间会出现「自写位置 →
+    // antd 落位 → 再钳回」的可见跳变。钳制写入后判为 clean，不会自激。
+    let observer: MutationObserver | null = null;
+    const watch = (): void => {
+      const el = document.querySelector<HTMLElement>(`.${popCls}`);
+      if (!el || typeof MutationObserver === 'undefined') return;
+      observer?.disconnect();
+      observer = new MutationObserver(clamp);
+      observer.observe(el, { attributes: true, attributeFilter: ['style'] });
+    };
     clamp();
-    const t = window.setTimeout(clamp, 350); // antd 落位/入场动画稳定后再兜一次
+    const frameId = window.requestAnimationFrame(() => {
+      clamp();
+      watch();
+    });
+    const t = window.setTimeout(() => {
+      clamp();
+      watch();
+    }, 350); // antd 落位 / 入场动画稳定后再兜一次
     window.addEventListener('resize', clamp);
     return () => {
+      window.cancelAnimationFrame(frameId);
       window.clearTimeout(t);
+      observer?.disconnect();
       window.removeEventListener('resize', clamp);
     };
   }, [open, bodyW, popCls]);
-  // set-main 的空组卡在批量动作中会被移除，封顶判定按移除后的基数算
-  const tierBase = ctx.kind === 'set-main' && activeCard ? mains.filter((c) => c.id !== activeCard.id) : mains;
-  const tierGroupDisabled = tierBase.length >= MAINS_CAP || tierOwnConfigs.length === 0;
-  const tierCompareDisabled = !activeCard || (activeCard.compares.length >= cardQuota(activeCard) && !replaceCompareCtx);
+  // 2026-11-27 起卡数与对比条数无上限：批量动作只在「该档无可加配置」时禁用
+  const tierGroupDisabled = tierOwnConfigs.length === 0;
+  const tierCompareDisabled = !activeCard;
 
   return (
     <Popover
@@ -975,37 +1008,47 @@ function LevelSwitchPopover({
               ]}
             />
           </div>
-          {tier && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginBottom: 8,
-                padding: '4px 10px',
-                borderRadius: radius.control,
-                background: selectSoft,
-                fontSize: 12,
-                color: selectSoftInk,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span className="tnum">
-                {tierBatchCtx
-                  ? `该档位 ${brandLabelOf(ownBrand())} 共 ${tierOwnConfigs.length} 个配置`
-                  : `该档位共 ${tierAllConfigs.length} 个配置`}
-              </span>
-              {tierBatchCtx ? (
-                <Tooltip title={tierGroupDisabled ? `最多 ${MAINS_CAP} 组` : '该档位全部配置逐配置成组，各按对标矩阵带出对比区'} zIndex={TIP_Z}>
-                  <TierBatchPill text="全部各成一组" disabled={tierGroupDisabled} onClick={tierGroupAll} />
-                </Tooltip>
-              ) : (
-                <Tooltip title={tierCompareDisabled ? COMPARE_CAP_HINT : '该档位全部配置加入本组对比区'} zIndex={TIP_Z}>
-                  <TierBatchPill text="全部加入对比" disabled={tierCompareDisabled} onClick={tierCompareAll} />
-                </Tooltip>
-              )}
-            </div>
-          )}
+          {/* 档位批量动作带：常驻定高 28（2026-11-27 固定骨架——选 / 不选档位只换内容，
+              外框高度不变）；未选档位时给一句引导 */}
+          <div
+            data-lpl-tier-band={tier ? 'on' : 'off'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              marginBottom: 8,
+              height: 28,
+              padding: '4px 10px',
+              boxSizing: 'border-box',
+              borderRadius: radius.control,
+              background: tier ? selectSoft : color.canvasSoft,
+              fontSize: 12,
+              color: tier ? selectSoftInk : color.mute,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+            }}
+          >
+            {tier ? (
+              <>
+                <span className="tnum">
+                  {tierBatchCtx
+                    ? `该档位 ${brandLabelOf(ownBrand())} 共 ${tierOwnConfigs.length} 个配置`
+                    : `该档位共 ${tierAllConfigs.length} 个配置`}
+                </span>
+                {tierBatchCtx ? (
+                  <Tooltip title={tierGroupDisabled ? '该档位没有可成组的配置' : '该档位全部配置逐配置成组，各按对标矩阵带出对比区'} zIndex={TIP_Z}>
+                    <TierBatchPill text="全部各成一组" disabled={tierGroupDisabled} onClick={tierGroupAll} />
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="该档位全部配置加入本组对比区（与矩阵匹配并存，可继续手动增删）" zIndex={TIP_Z}>
+                    <TierBatchPill text="全部加入对比" disabled={tierCompareDisabled} onClick={tierCompareAll} />
+                  </Tooltip>
+                )}
+              </>
+            ) : (
+              <span>选择档位后可把该档配置批量成组或加入对比</span>
+            )}
+          </div>
           <div style={{ display: 'flex', minWidth: 0 }}>
             <CascadePanel
               columns={columns}
@@ -1013,6 +1056,9 @@ function LevelSwitchPopover({
               height={POPOVER_H}
               stepped={narrow}
               levelLabels={['品牌', '系列', '型号', '配置']}
+              // 2026-11-27：各列保留滚动位置，仅打开 / 当前路径失效重定位时滚到选中行
+              sticky={!narrow}
+              locateEpoch={locateEpoch}
             />
           </div>
         </div>
@@ -1211,15 +1257,58 @@ function AutoMatchInline({ card }: { card: MainProduct }) {
   );
 }
 
+/** 「同档位推荐」入口（2026-11-27，主品卡组头，「自动匹配竞品」之外）：打开
+ *  TierRecommendModal——按主品配置在当前国家的同档位推荐对比产品，加入后与矩阵
+ *  匹配并存为并集。无主品时置灰（没有档位可依）。 */
+function TierRecommendInline({ card }: { card: MainProduct }) {
+  const [open, setOpen] = useState(false);
+  const can = card.main != null;
+  return (
+    <>
+      <Tooltip title={can ? '按主品配置在当前国家的同档位推荐对比产品（与自动匹配并存，可多选）' : '先选择主分析产品，再按档位推荐'} zIndex={TIP_Z}>
+        <button
+          type="button"
+          aria-label={`同档位推荐${card.main ? ` ${modelNameOf(card.main.modelId)}` : ''}`}
+          aria-disabled={!can || undefined}
+          className="lpl-pk-ghost"
+          data-testid="tier-recommend-entry"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (can) setOpen(true);
+          }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 3,
+            height: 20,
+            padding: '0 8px',
+            borderRadius: radius.pill,
+            fontSize: 11,
+            fontWeight: 600,
+            color: can ? color.body : color.mute,
+            background: color.canvas,
+            border: `1px solid ${color.hairline}`,
+            cursor: can ? 'pointer' : 'not-allowed',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          同档位推荐
+        </button>
+      </Tooltip>
+      {open && card.main && <TierRecommendModal card={card} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 /** 对比区「＋ 添加对比产品」（点开完整树浮窗连点加；位置由外层决定——
  *  无对比时在格内正中，有对比时在已选条目下方居中） */
 function AddCompareTrigger({ card }: { card: MainProduct }) {
-  const quota = cardQuota(card);
-  const full = card.compares.length >= quota;
+  // 2026-11-27 起对比区不设条数上限：入口不再因「配满」置灰
   return (
-    <Tooltip title={full ? COMPARE_CAP_HINT : '挑选对比产品（可连续添加）'} zIndex={TIP_Z}>
+    <Tooltip title="挑选对比产品（可连续添加；与矩阵匹配并存）" zIndex={TIP_Z}>
       <LevelSwitchPopover ctx={{ kind: 'compares', cardId: card.id }} initialModelId={card.main?.modelId}>
-        <AddPill label="添加对比产品" disabled={full} />
+        <AddPill label="添加对比产品" />
       </LevelSwitchPopover>
     </Tooltip>
   );
@@ -1364,7 +1453,7 @@ export default function ProductPickerFlyout({
                * 2026-11-13 翻上方态用 bottom 锚定（面板向上长，底边贴触发器顶 6px 缝） */
               role="dialog"
               aria-modal="true"
-              aria-label="选择产品"
+              aria-label="产业与产品"
               tabIndex={-1}
               style={{
                 position: 'fixed',
@@ -1438,7 +1527,69 @@ function SaveTemplateDialog({
   );
 }
 
+/** 「产业与产品」面板外壳（2026-11-27「一个产业与产品入口、两种分析结构」）：
+ *  顶栏 = 产业选择（整个面板的全局范围开关，原筛选栏「产业」下拉退役并入；不作为
+ *  产品树的一级）+「产品对标 | 品牌全景」模式切换；主体按模式渲染两套草稿各自的
+ *  编辑区（两套草稿分别保存，来回切换不丢）。
+ *  切产业 = 直接执行；各产业的已选按产业分别保留（会话快照），切回即恢复，
+ *  不再弹确认条。 */
 function PickerPanel() {
+  const { state, actions } = useFilters();
+  const narrow = useNarrowViewport();
+  const industry = state.industry;
+  const mode = state.analysisMode ?? 'compare';
+  const available = useMemo(() => new Set<Industry>(industriesOfCountry(state.countryCode)), [state.countryCode]);
+  const industryOptions = INDUSTRY_ORDER.map((ind) => ({
+    label: INDUSTRY_LABELS[ind],
+    value: ind,
+    disabled: !available.has(ind),
+  }));
+
+  return (
+    <>
+      {/* 顶栏：产业（全局范围开关）+ 模式切换 */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: narrow ? 'column' : 'row',
+          alignItems: narrow ? 'stretch' : 'center',
+          gap: 8,
+          marginBottom: 8,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
+          <span id="lpl-picker-industry-label" style={{ fontSize: 12, color: color.mute, flexShrink: 0 }}>产业</span>
+          <ConfigProvider theme={filterBarTheme}>
+            <Segmented
+              aria-labelledby="lpl-picker-industry-label"
+              value={industry}
+              onChange={(v) => actions.set({ industry: v as Industry })}
+              options={industryOptions}
+              size="small"
+            />
+          </ConfigProvider>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span id="lpl-picker-mode-label" style={{ fontSize: 12, color: color.mute }}>分析结构</span>
+          <Segmented
+            aria-labelledby="lpl-picker-mode-label"
+            value={mode}
+            onChange={(v) => actions.setAnalysisMode(v as AnalysisMode)}
+            options={[
+              { label: '产品对标', value: 'compare' },
+              { label: '品牌全景', value: 'panorama' },
+            ]}
+            size="small"
+          />
+        </div>
+      </div>
+      {mode === 'panorama' ? <PanoramaPicker /> : <ComparePanelBody />}
+    </>
+  );
+}
+
+/** 产品对标编辑区（原 PickerPanel 主体：模板行 + 主分析卡列表） */
+function ComparePanelBody() {
   const { state, actions } = useFilters();
   const mains = state.mains;
   const narrow = useNarrowViewport();
@@ -1538,21 +1689,19 @@ function PickerPanel() {
 
   /** 模板卡入看板前的数据收口：模板可能落后于数据换代（SKU 空间已更换），
    *  主品已不在当前国家+产业的整卡丢弃（卡必须有主品，与存储侧约束一致），
-   *  对比项失效逐条剔除、按卡配额收口——死型号不再入卡成空线，
-   *  超配额的模板卡不再直进 */
+   *  对比项失效逐条剔除——死型号不再入卡成空线。
+   *  2026-11-27 起不按卡配额截断（对比区无条数上限）。 */
   const sanitizeFresh = (cards: MainProduct[]): MainProduct[] =>
     cards
       .filter((c) => c.main != null && selectionValidFor(c.main, state.countryCode, state.industry, state.financingType, state.financingTerms))
       .map((c) => ({
         ...c,
-        compares: c.compares
-          .filter((s) => selectionValidFor(s, state.countryCode, state.industry, state.financingType, state.financingTerms))
-          .slice(0, cardQuota(c)),
+        compares: c.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry, state.financingType, state.financingTerms)),
       }));
 
-  /** 「＋ 加入当前选择」执行：整卡追加（auto 随模板带入）+ 缺失对比合并进
-   *  现有卡。合并经 setCardCompares 落地 = 确有新增的卡按既有铁律退出自动
-   *  （手动改对比即关）。计划/文案见 combos.planAppend。 */
+  /** 「＋ 加入当前选择」执行：整卡追加（auto 随模板带入）+ 缺失对比合并进现有卡。
+   *  合并经 setCardCompares 落地——2026-11-27 起不再关闭自动匹配：新增对比登记为
+   *  手动补充、与矩阵产出并存。计划见 combos.planAppend。 */
   const appendCombo = (c: StoredCombo): void => {
     const { fresh, merges } = planAppend(mains, c);
     const usable = sanitizeFresh(fresh);
@@ -1560,7 +1709,7 @@ function PickerPanel() {
     for (const m of merges) {
       const existing = mains.find((x) => x.id === m.cardId);
       if (!existing) continue;
-      // 合并的对比项同样剔除失效条目；全失效不落地（不为此白退自动）
+      // 合并的对比项同样剔除失效条目；全失效不落地
       const adds = m.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry, state.financingType, state.financingTerms));
       if (adds.length) actions.setCardCompares(m.cardId, [...existing.compares, ...adds]);
     }
@@ -1568,25 +1717,21 @@ function PickerPanel() {
 
   /** 「＋ 加入当前选择」气泡文案：与实际将发生的内容逐项对应，如实反映 */
   const appendTip = (c: StoredCombo): string => {
-    const { fresh, merges, overflowCards, overflowCompares } = planAppend(mains, c);
+    const { fresh, merges } = planAppend(mains, c);
     const usable = sanitizeFresh(fresh);
     const totalAdds = merges.reduce(
       (n, m) => n + m.compares.filter((s) => selectionValidFor(s, state.countryCode, state.industry, state.financingType, state.financingTerms)).length,
       0,
     );
     if (!usable.length && !totalAdds) {
-      if (overflowCards > 0) return `当前已选 ${MAINS_CAP} 组（上限），模板放不下`;
-      if (overflowCompares > 0) return `各组对比产品已满（${COMPARE_CAP_HINT}），没有可补充的对比`;
       if (fresh.length || merges.length) return '模板内产品在当前范围已无数据，没有可加入的内容';
       return '模板内产品对均已在当前选择中';
     }
     const parts: string[] = [];
     if (usable.length) parts.push(`新增 ${usable.length} 组`);
     if (totalAdds) parts.push(`补充 ${totalAdds} 个对比`);
-    let tip = `加入当前选择：${parts.join('、')}`;
-    if (overflowCards) tip += `；受 ${MAINS_CAP} 组上限所限，${overflowCards} 组放不下`;
-    if (overflowCompares) tip += `；${overflowCompares} 个对比超出单图折线上限放不下`;
-    return tip;
+    // 2026-11-27 起卡数与对比条数无上限，不再有「放不下」的说明
+    return `加入当前选择：${parts.join('、')}`;
   };
 
   // 模板 chip 单行收纳：量出一行能放下几个 chip，放不下的收进行尾「更多」
@@ -1973,6 +2118,7 @@ function PickerPanel() {
                   <span style={{ paddingLeft: 10, fontSize: 11, fontWeight: 700, color: color.mute, letterSpacing: 0.2 }}>对比产品</span>
                   <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <AutoMatchInline card={card} />
+                    <TierRecommendInline card={card} />
                     {card.main && (
                       <Tooltip title={`把该组存为模板（默认名 = ${modelNameOf(card.main.modelId)}）`} zIndex={TIP_Z}>
                         <button
@@ -2185,10 +2331,10 @@ function PickerPanel() {
               background: color.canvas,
             }}
           >
-            <Tooltip title={mains.length >= MAINS_CAP ? `最多 ${MAINS_CAP} 组` : '再选一款主分析产品，多组自动分图'} zIndex={TIP_Z}>
+            <Tooltip title="再选一款主分析产品，多组自动分图" zIndex={TIP_Z}>
               <span style={{ display: 'inline-flex' }}>
                 <LevelSwitchPopover ctx={{ kind: 'add-main' }} initialModelId={lastModelId}>
-                  <AddPill label="添加主分析产品" big disabled={mains.length >= MAINS_CAP} />
+                  <AddPill label="添加主分析产品" big />
                 </LevelSwitchPopover>
               </span>
             </Tooltip>

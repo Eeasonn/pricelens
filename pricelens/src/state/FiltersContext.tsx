@@ -16,6 +16,8 @@ import type {
   AlertProductRule,
   AlertThresholds,
   AlertTypeSwitches,
+  BrandPanorama,
+  CompareSource,
   FiltersActions,
   FiltersState,
   MainProduct,
@@ -37,7 +39,8 @@ import { marketDataProfileOf, type FinancingPlan, type FinancingTerm, type Finan
 import { publishedMonthlyRangeOf } from '../dataModel/monthlyFacts';
 import { convertRangeBuckets } from '../components/FilterBar/timeUtils';
 import { modelIdOf, invalidateLatestPriceCache, productHasDataInCountry } from '../components/ProductCascader/tree';
-import { clampMains, autoComparesFor, expandV11Cards, filterMainsByFinancingTerm, migrateV10, mainsValidFor, newCardId, remapMainsForScope, restoreAutoOn, selKey, toggleAllAuto, toggleCardAuto, withAutoOn } from './mainSelection';
+import { autoComparesFor, expandV11Cards, filterMainsByFinancingTerm, migrateV10, mainsValidFor, newCardId, remapMainsForScope, restoreAutoOn, selKey, tidyMains, toggleAllAuto, toggleCardAuto, withAutoOn, withCompares, withComparesAdded } from './mainSelection';
+import { EMPTY_PANORAMA, isPanorama, sanitizePanorama } from './panorama';
 import { readUrlOverrides, writeUrlPatch, normalizePlatformSelection, platformUrlParamsOf, platformLevelForChannel } from './urlSync';
 import { normalizeDataScope } from '../dataModel/scope';
 
@@ -73,6 +76,8 @@ export const defaultFilters: FiltersState = {
   countryCode: 'RU',
   industry: 'phone',
   mains: [],
+  analysisMode: 'compare', // 分析结构默认 = 产品对标；品牌全景草稿与 mains 分别保存
+  panorama: EMPTY_PANORAMA, // 品牌全景：无默认品牌 / 主品 / 基准
   platform: DEFAULT_PLATFORM_SELECTION, // null = 该国默认电渠
   granularity: 'week', // 第四十二轮：默认周（迪总「时间默认取周」）
   adaptive: true, // 2026-11-13 时间筛选单值化：true = 默认近段窗口（周12/月6/季4）跟产品；手动改时间置 false 固定。「自动时间」按钮已退役，字段仅作状态壳（旧持久化/Agent 补丁兼容）
@@ -149,7 +154,15 @@ function isMainProduct(value: unknown): value is MainProduct {
   return typeof value.id === 'string'
     && (value.main === null || isProductSelection(value.main))
     && isProductSelectionArray(value.compares)
-    && (value.auto === undefined || typeof value.auto === 'boolean');
+    && (value.auto === undefined || typeof value.auto === 'boolean')
+    // 2026-11-27 来源并集：登记（selKey → manual|tier）与排除清单（selKey）形状校验——
+    // 坏形状由调用方当作旧卡（无登记）处理，不作废整包
+    && (value.compareSources === undefined || isCompareSources(value.compareSources))
+    && (value.excluded === undefined || isStringArray(value.excluded));
+}
+
+function isCompareSources(value: unknown): value is Record<string, CompareSource> {
+  return isRecord(value) && Object.values(value).every((v) => v === 'manual' || v === 'tier');
 }
 
 /** v11 旧卡形（modelId + configs[]）——读入后 expandV11Cards 展开 */
@@ -295,6 +308,10 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       ['alertTypes', isAlertTypes(parsed.alertTypes)],
       ['alertThresholds', isAlertThresholds(parsed.alertThresholds)],
       ['alertProducts', isAlertProducts(parsed.alertProducts)],
+      // 2026-11-27 分析结构 + 品牌全景草稿：可缺省（旧载荷无此键 = 产品对标 + 空草稿）；
+      // 坏形状跳过该字段（不入 required，不作废整包）
+      ['analysisMode', parsed.analysisMode === 'compare' || parsed.analysisMode === 'panorama'],
+      ['panorama', isPanorama(parsed.panorama)],
     ];
     const required = checks.filter(([key]) =>
       key !== 'alertTypes' && key !== 'alertThresholds' && key !== 'alertProducts'
@@ -302,6 +319,7 @@ function readPersistedState(raw: string | null): PersistedPayload | null {
       // R7-M1：归一说明是可再生物质（口径本身可重新归一），坏形状/缺失只跳过字段
       && key !== 'platformScopeNotice'
       && key !== 'financingType' && key !== 'financingTerms'
+      && key !== 'analysisMode' && key !== 'panorama'
       // v10/v11 复用的 platform 键形随数据换代漂移（渠道 id 空间两度更换）：
       // 不再因它作废整包——无效时跳过该字段回落默认电渠（与 countryCode 同等
       // 宽限，可迁移的用户选择不陪葬）；v12 载荷 platform 仍在 required
@@ -560,7 +578,7 @@ function applyScopeDefaultsStable(s: FiltersState, force: boolean): FiltersState
 /** 口径切换（国家/产业变化）+ 按国快照。R4-m1 普通换国优先级：
  *  0) 切走前无条件存离建国快照（含显式清空的空数组）；
  *  1) 目标国存在仍合法的会话快照 → 优先还原（R4-S2：对比区同口径校验/剥离、
- *     封 MAX_LINES_PER_CHART，保留合法手动搭配与 auto 模式）；
+ *     不按条数截断，保留合法手动搭配与 auto 模式）；
  *  2) 无快照 → 旧选择同型号映射目标国首个合法配置（RU Mate X6 12+512 →
  *     ID 16+512），绝不把继承口径误当显式选择写回来源国快照；
  *  3) 同型号也无 → 目标国默认重算。
@@ -624,7 +642,7 @@ function scopeFallbackStable(
       if (mains && mainsValidFor(mains, applied.countryCode, applied.industry, applied.financingType, applied.financingTerms)) {
         // R4-S2：快照还原同样过整组合法化——主品逐 SKU 过滤，手动对比区按目标
         // 口径校验/剥离（型号缺席剔除、配置漂移同型号映射）、selKey 去重、对比区
-        // 封 MAX_LINES_PER_CHART；auto 标记与合法手动搭配保留
+        // 不按条数截断；auto 标记与合法手动搭配保留
         const restored = remapMainsForScope(mains, applied.countryCode, applied.industry);
         if (restored) {
           return { ...applied, mains: restored.map((c) => (c.auto && c.main ? withAutoOn(c, applied.countryCode) : c)) };
@@ -652,12 +670,38 @@ function scopeFallbackStable(
 // ------------------------------------------------------------
 function applyScopeDefaults(s: FiltersState, force: boolean): FiltersState {
   const scoped = STABLE ? applyScopeDefaultsStable(s, force) : applyScopeDefaultsIterate(s, force);
-  return applyMarketDataProfile(scoped);
+  // 品牌全景草稿同口径收口：不在当前 国家×产业×付费口径 有数据的产品剔除、
+  // 空品牌移除、失效基准清空（无默认主品 / 基准，不回填）
+  const panorama = sanitizePanorama(scoped.panorama ?? EMPTY_PANORAMA, scoped.countryCode, scoped.industry, scoped.financingType, scoped.financingTerms);
+  return applyMarketDataProfile(panorama === scoped.panorama ? scoped : { ...scoped, panorama });
 }
 
 function switchScope(prev: FiltersState, next: FiltersState, explicitMains = false, explicitTime = false): FiltersState {
   const scoped = STABLE ? switchScopeStable(prev, next, explicitMains) : switchScopeIterate(prev, next, explicitMains);
-  return swapRangeSnapshot(prev, scoped, explicitTime);
+  return swapRangeSnapshot(prev, swapPanoramaSnapshot(prev, scoped), explicitTime);
+}
+
+// 品牌全景草稿按 国家×产业 会话快照隔离（与 mainsOf 同思路，2026-11-27）：切走前把
+// 当前草稿存该口径快照；目标口径有本会话快照 → 还原（按目标口径收口），否则沿用
+// 当前草稿里在目标口径仍有效的产品（同型号同配置有数据的留下，其余剔除、空品牌移除）。
+// 与 mains 快照同一存储级别：会话级（关页即清），不跨会话复活旧选择。
+const panoramaSnapKeyOf = (cc: string, industry: string) => `${LPL.filters}.panoramaOf.${cc}.${industry}`;
+function swapPanoramaSnapshot(prev: FiltersState, scoped: FiltersState): FiltersState {
+  let snap: BrandPanorama | null = null;
+  try {
+    // 无条件落盘（含空草稿：空 = 该口径尚未选择，回切时不该复活别的口径的选择）
+    sessionStorage.setItem(panoramaSnapKeyOf(prev.countryCode, prev.industry), JSON.stringify({ panorama: prev.panorama ?? EMPTY_PANORAMA }));
+    const raw = sessionStorage.getItem(panoramaSnapKeyOf(scoped.countryCode, scoped.industry));
+    if (raw) {
+      const parsed = JSON.parse(raw) as { panorama?: unknown };
+      if (isPanorama(parsed.panorama)) snap = parsed.panorama;
+    }
+  } catch {
+    /* 存储不可用 / 坏 JSON：跳过快照，走沿用 + 收口 */
+  }
+  const inherited = scoped.panorama ?? prev.panorama ?? EMPTY_PANORAMA;
+  const panorama = snap ?? sanitizePanorama(inherited, scoped.countryCode, scoped.industry, scoped.financingType, scoped.financingTerms);
+  return { ...scoped, panorama };
 }
 
 // 2026-11-09 用户反馈「自动时间不按逻辑来」根因②：手动范围/自动态此前是全局
@@ -795,7 +839,8 @@ function loadBaseState(): FiltersState {
     // v12 主路径同样收口卡数/对比配额（与 v10/v11/URL 三条入口对称，
     // 手工编辑过的存储不至于把超限卡直接喂给图表）
     if (parsed.v === 12) {
-      restored.mains = clampMains(restored.mains);
+      // 2026-11-27 起无卡数 / 对比条数上限：只做结构整理（去重、剔与主品同组项），不截断
+      restored.mains = tidyMains(restored.mains);
     }
     // 2026-11-26 Eason：自动匹配竞品 = 默认逻辑——刷新/重开把持久化的华为主品卡
     // 强制回 auto=true（对比区由随后 applyScopeDefaults 末尾的 withAutoOn 按当前
@@ -850,6 +895,8 @@ function applyUrlOverrides(base: FiltersState): FiltersState {
       ...restored,
       ...url.filters,
       mains: merged,
+      // 链接显式声明了产品对标的主分析结构 = 以产品对标呈现（品牌全景草稿原样保留）
+      analysisMode: 'compare',
     };
   } else if (Object.keys(url.filters).length > 0) {
     restored = { ...restored, ...url.filters };
@@ -876,7 +923,7 @@ interface FiltersCtx {
 
 const Ctx = createContext<FiltersCtx>({
   state: defaultFilters,
-  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, autoMatchCard: () => {}, autoMatchAll: () => {}, setSelectionPlatform: () => {}, setGranularity: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
+  actions: { set: () => {}, reset: () => {}, setMains: () => {}, setCardCompares: () => {}, addCardCompares: () => {}, autoMatchCard: () => {}, autoMatchAll: () => {}, setAnalysisMode: () => {}, setPanorama: () => {}, setSelectionPlatform: () => {}, setGranularity: () => {}, toggleAlertSub: () => {}, setAlertSubs: () => {}, setAlertTypes: () => {}, setAlertThresholds: () => {}, setAlertProductRule: () => {} },
 });
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
@@ -982,6 +1029,13 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
           // 非 mains 数组的坏值整体忽略（防御 Agent/undo 之外的 JS 调用方）
           if (clean.mains !== undefined && !Array.isArray(clean.mains)) delete clean.mains;
           let next: FiltersState = { ...s, ...clean };
+          // 2026-11-27：补丁显式携带 mains（Agent 结果卡回看 / 页头快搜 / 预警与总览
+          // 下钻等「产品对标」选择写入）= 明确要看产品对标结构——当前若停在品牌全景
+          // 则切回产品对标，屏上所见即补丁所写（两套草稿各自保留，不丢）。
+          // 同补丁显式给了 analysisMode 时以补丁为准。
+          if (clean.mains !== undefined && clean.analysisMode === undefined && next.analysisMode === 'panorama') {
+            next = { ...next, analysisMode: 'compare' };
+          }
           if (clean.countryCode != null && clean.countryCode !== s.countryCode) {
             const profile = marketDataProfileOf(next.countryCode);
             const publishedRange = profile.granularityLocked
@@ -1060,12 +1114,29 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       setMains: (list) =>
         setState((s) => ({ ...s, mains: list })),
 
-      /** 手动改某卡对比区：直接写入，并关闭该卡「自动匹配竞品」（退出矩阵驱动） */
+      /** 手动改某卡对比区（增删 / 调色 / 换条目 / 换序）。2026-11-27 起不再关闭
+       *  「自动匹配竞品」：与矩阵产出按新旧键集对账（withCompares）——新增项登记为
+       *  手动补充、移除的矩阵项记入 excluded、保留项来源不变。 */
       setCardCompares: (cardId, compares) =>
         setState((s) => ({
           ...s,
-          mains: s.mains.map((c) => (c.id === cardId ? { ...c, compares, auto: false } : c)),
+          mains: s.mains.map((c) => (c.id === cardId ? withCompares(c, compares) : c)),
         })),
+
+      /** 加入对比（用户补充：手动 / 同档推荐）：与矩阵产出并存为并集、去重、不改开关 */
+      addCardCompares: (cardId, sels, source) =>
+        setState((s) => ({
+          ...s,
+          mains: s.mains.map((c) => (c.id === cardId ? withComparesAdded(c, sels, source) : c)),
+        })),
+
+      /** 切换分析结构：只换「看哪一套草稿」，产品对标与品牌全景两套选择各自保留 */
+      setAnalysisMode: (mode) =>
+        setState((s) => (s.analysisMode === mode ? s : { ...s, analysisMode: mode })),
+
+      /** 写入品牌全景草稿（选择 / Y 轴共享 / 临时基准），产品对标草稿（mains）不动 */
+      setPanorama: (next) =>
+        setState((s) => ({ ...s, panorama: next })),
 
       /** 单卡「自动匹配竞品」开关：开 = 按矩阵重算并保持驱动；关 = 保留转手动 */
       autoMatchCard: (cardId) =>

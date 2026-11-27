@@ -139,7 +139,8 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     render(<App />);
     const bar = document.querySelector('.lpl-fb');
     expect(bar).not.toBeNull();
-    const entry = document.querySelector('button[aria-label="选择产品"]');
+    // 2026-11-27：入口更名「产业与产品」（产业并入面板 + 两种分析结构）；位置断言不变
+    const entry = document.querySelector('button[aria-label="产业与产品"]');
     const plat = scopeTrigger();
     expect(entry).not.toBeNull();
     expect(plat).not.toBeNull();
@@ -147,8 +148,8 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     expect(bar!.contains(plat!)).toBe(true);
     // 平台在产品入口之后
     expect((entry!.compareDocumentPosition(plat!) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);
-    // 平台在币种（标签 span）之前
-    const currency = [...bar!.querySelectorAll('span')].find((el) => el.textContent === '币种');
+    // 平台在币种控件之前（外部文字标题已删，改锚控件自身的可访问名）
+    const currency = bar!.querySelector('[aria-label="币种"]');
     expect(currency).not.toBeNull();
     expect((plat!.compareDocumentPosition(currency!) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true);
     // 未选时触发器占位呈现解析后的默认平台（RU 默认 = DNS；取价 = 该平台池每周最低价店铺）
@@ -255,11 +256,11 @@ describe('量价页 · 全局平台筛选器（2026-11-05 Eason 指令）', () =
     render(<App />);
     const bar = document.querySelector('.lpl-fb');
     expect(bar).not.toBeNull();
-    expect(bar!.textContent ?? '').not.toContain('平台');
+    expect(document.querySelector('[data-testid="channel-scope-trigger"]')).toBeNull();
     // 量价走势页仍渲染（对照，防门控误杀）
     cleanup();
     window.history.replaceState(null, '', '/?p=volume');
     render(<App />);
-    expect(document.querySelector('.lpl-fb')?.textContent ?? '').toContain('平台');
+    expect(document.querySelector('[data-testid="channel-scope-trigger"]')).not.toBeNull();
   });
 });

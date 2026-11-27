@@ -1,30 +1,36 @@
 // ============================================================
-// 主分析卡纯函数金测（第一百二十轮）：配额、自动匹配填充、v10/v11 迁移、
-// 逐配置成卡、换层颜色映射。卡形 = { id, main: ProductSelection | null, compares }。
+// 主分析卡纯函数金测（第一百二十轮）：自动匹配填充、v10/v11 迁移、逐配置成卡、
+// 换层颜色映射。卡形 = { id, main: ProductSelection | null, compares }。
+// 2026-11-27（取消上限 + 来源并集）：原「卡配额 7/8 条、卡数封顶 8、clampMains
+// 截断、开关开启即整体替换对比区」等断言与确认目标正面冲突——按新契约改写为
+// 「不截断 / 并集保留」（用例保留、断言换向），并新增来源并集专项用例。
 // ============================================================
 import { describe, expect, it } from 'vitest';
 import { dimProduct, dimBenchmark, dimChannel } from '../../data';
 import type { MainProduct, ProductSelection } from '../filtersTypes';
+import { groupsFromBenchmark } from '../configStore';
 import {
   autoComparesFor,
   buildCards,
-  cardQuota,
   cardsFromSelections,
-  clampMains,
+  compareSourcesOf,
   expandV11Cards,
   flatSelections,
   isHuaweiModel,
-  MAINS_CAP,
-  MAX_LINES_PER_CHART,
   migrateV10,
   remapMainsForScope,
   remapSelection,
   remapSelectionForCountry,
+  restoreAutoOn,
   selKey,
   selectionValidFor,
+  tidyMains,
   toggleAllAuto,
   toggleCardAuto,
+  userCompareSourcesOf,
   withAutoOn,
+  withCompares,
+  withComparesAdded,
   withMain,
 } from '../mainSelection';
 import { buildProductTree, type RomramNode } from '../../components/ProductCascader/tree';
@@ -65,30 +71,32 @@ const distinctComps = (n: number): ProductSelection[] => {
   return out;
 };
 
-describe('cardQuota（取消每组 3 款对比限制，只保留单图折线上限）', () => {
-  it('有主品可带 7 款对比，空组可带 8 款对比', () => {
-    expect(cardQuota({ main: ownSel })).toBe(7);
-    expect(cardQuota({ main: null })).toBe(8);
-    expect(1 + cardQuota({ main: ownSel })).toBe(MAX_LINES_PER_CHART);
-    expect(cardQuota({ main: null })).toBe(MAX_LINES_PER_CHART);
+describe('对比区无条数上限（2026-11-27：单图 8 线上限退役）', () => {
+  it('空对挂满 8 条以上对比后补主品 → 全部保留，不再截到 7 条', () => {
+    const comps12 = distinctComps(12);
+    expect(comps12).toHaveLength(12);
+    const out = withMain(card(null, comps12), ownSel);
+    expect(out.main).toEqual(ownSel);
+    expect(out.compares).toHaveLength(12);
+    expect(out.compares).toEqual(comps12);
   });
 });
 
-describe('withMain（空对补选 / 换主品：对比区随新配额收口）', () => {
-  it('空对选满 8 条对比后补主品 → 保留前 7 条，不再截到 3 条', () => {
+describe('withMain（空对补选 / 换主品：剔除与新主品同组项，条数不截断）', () => {
+  it('空对选满 8 条对比后补主品 → 8 条全部保留（原截到 7 条）', () => {
     const comps8 = distinctComps(8);
     expect(comps8).toHaveLength(8);
     const out = withMain(card(null, comps8), ownSel);
     expect(out.main).toEqual(ownSel);
-    expect(out.compares).toHaveLength(7);
-    expect(out.compares).toEqual(comps8.slice(0, 7));
+    expect(out.compares).toHaveLength(8);
+    expect(out.compares).toEqual(comps8);
   });
 
-  it('对比区含与新主品同型号同配置的项 → 剔除后保留其余 7 条', () => {
+  it('对比区含与新主品同型号同配置的项 → 剔除后其余 8 条全部保留', () => {
     const comps = distinctComps(8);
     const out = withMain(card(null, [ownSel, ...comps]), ownSel);
     expect(out.compares.some((c) => selKey(c) === selKey(ownSel))).toBe(false);
-    expect(out.compares).toEqual(comps.slice(0, 7));
+    expect(out.compares).toEqual(comps);
   });
 
   it('换主品：与新主品同配置的旧对比项不再重复占线', () => {
@@ -113,7 +121,7 @@ describe('withMain（空对补选 / 换主品：对比区随新配额收口）',
   });
 });
 
-describe('buildCards（跨页建卡正源：去重 / 封顶 / 首卡对比继承）', () => {
+describe('buildCards（跨页建卡正源：去重 / 不封顶 / 首卡对比继承）', () => {
   const synth = (i: number): ProductSelection => ({ modelId: `bm${i}`, romram: '8+128 GB', skuIds: [`bm${i}__8+128`] });
 
   it('按 selKey 去重、保序', () => {
@@ -122,27 +130,29 @@ describe('buildCards（跨页建卡正源：去重 / 封顶 / 首卡对比继承
     expect(cards.map((c) => c.main?.modelId)).toEqual(['bm1', 'bm2']);
   });
 
-  it('超过 MAINS_CAP 的 selection → 封顶 MAINS_CAP 张卡', () => {
-    expect(buildCards(Array.from({ length: MAINS_CAP + 4 }, (_, i) => synth(i)))).toHaveLength(MAINS_CAP);
+  it('任意数量的 selection → 全部成卡（2026-11-27 不封顶，原截到 8 张）', () => {
+    expect(buildCards(Array.from({ length: 12 }, (_, i) => synth(i)))).toHaveLength(12);
   });
 
-  it('首卡继承 firstCompares：9+1 条 → 截到卡配额，与主品同组者剔除；其余卡落空（无自动跟随，autoMatch 选项已退役）', () => {
+  it('首卡继承 firstCompares：全部并入不截断、与主品同组者剔除并登记为手动补充；其余卡落空（无自动跟随，autoMatch 选项已退役）', () => {
     const comps9 = distinctComps(9);
     const cards = buildCards([ownSel, synth(1)], { firstCompares: [...comps9, ownSel] });
     expect(cards).toHaveLength(2);
-    expect(cards[0].compares).toHaveLength(cardQuota(cards[0]));
+    expect(cards[0].compares).toHaveLength(9);
+    expect(cards[0].compares).toEqual(comps9);
     expect(cards[0].compares.some((c) => selKey(c) === selKey(ownSel))).toBe(false);
+    expect(userCompareSourcesOf(cards[0])[selKey(comps9[0])]).toBe('manual');
     expect(cards[1].compares).toEqual([]);
     expect(buildCards([ownSel, synth(1)])[1].compares).toEqual([]);
   });
 });
 
-describe('autoComparesFor（矩阵 → 剔除自身 → 配额截断）', () => {
-  it('华为主品卡产出矩阵对比且 ≤ 配额、不含主品自身配置', () => {
+describe('autoComparesFor（矩阵 → 剔除自身 → 全量不截断）', () => {
+  it('华为主品卡产出矩阵对比全量（不按卡配额截断）、不含主品自身配置', () => {
     const c = card(ownSel);
     const comps = autoComparesFor(c);
     expect(comps.length).toBeGreaterThan(0);
-    expect(comps.length).toBeLessThanOrEqual(cardQuota(c));
+    expect(comps).toEqual(groupsFromBenchmark([ownSel], 'RU').filter((g) => selKey(g) !== selKey(ownSel)));
     expect(comps.every((x) => selKey(x) !== selKey(ownSel))).toBe(true);
     // 首个对比 = 该国矩阵 sort 序的主对标（country_code 过滤，与 benchmarkSkuIdsFor 同口径）
     const rows = dimBenchmark
@@ -163,12 +173,14 @@ describe('自动匹配开关（withAutoOn/Off + toggleCardAuto/toggleAllAuto，�
   const compModel = comp.sku_id.split('__')[0];
   const compSel: ProductSelection = { modelId: compModel, romram: comp.romram, skuIds: [comp.sku_id] };
 
-  it('开：对比区按矩阵重算并置 auto；再点关：对比区保留转手动', () => {
+  it('开：矩阵产出并入且原手动对比保留为并集（2026-11-27 起不再整体替换）；再点关：对比区保留转手动', () => {
     expect(isHuaweiModel(ruOwnModel)).toBe(true);
     expect(isHuaweiModel(compModel)).toBe(false);
     const on = toggleCardAuto(card(ownSel, [compSel]));
     expect(on.auto).toBe(true);
-    expect(on.compares).toEqual(autoComparesFor(on));
+    expect(on.compares.map(selKey)).toEqual(expect.arrayContaining([...autoComparesFor(on).map(selKey), selKey(compSel)]));
+    expect(new Set(on.compares.map(selKey)).size).toBe(on.compares.length); // 重复项去重
+    expect(userCompareSourcesOf(on)[selKey(compSel)]).toBe('manual'); // 原手动项来源保留
     const off = toggleCardAuto(on);
     expect(off.auto).toBe(false);
     expect(off.compares).toEqual(on.compares);
@@ -207,7 +219,9 @@ describe('自动匹配开关（withAutoOn/Off + toggleCardAuto/toggleAllAuto，�
     };
     const switched = withMain(autoCard, own2Sel);
     expect(switched.auto).toBe(true);
-    expect(switched.compares).toEqual(autoComparesFor(switched));
+    // 新主品的矩阵产出全部并入；换主品前卡上的手动补充不因换主品丢失（2026-11-27 并集）
+    expect(switched.compares.map(selKey)).toEqual(expect.arrayContaining(autoComparesFor(switched).map(selKey)));
+    expect(switched.compares.map(selKey)).toContain(selKey(compSel));
     const toComp = withMain(autoCard, compSel);
     expect(toComp.auto).toBe(false);
   });
@@ -231,13 +245,10 @@ describe('migrateV10（own/competitors → 逐配置卡，对比区按现行矩�
     expect(cards[0].compares.length).toBeGreaterThan(0);
   });
 
-  it('纯竞品视角（own 空）：竞品逐组成卡、无对比、卡数封顶', () => {
-    const compSels: ProductSelection[] = dimProduct
-      .filter((p) => !p.is_own && p.countries.includes('RU'))
-      .slice(0, 12)
-      .map((p) => ({ modelId: p.sku_id.split('__')[0], romram: p.romram, skuIds: [p.sku_id] }));
+  it('纯竞品视角（own 空）：竞品逐组成卡、无对比、卡数不封顶（2026-11-27）', () => {
+    const compSels: ProductSelection[] = distinctComps(12);
     const cards = migrateV10([], compSels);
-    expect(cards.length).toBeLessThanOrEqual(MAINS_CAP);
+    expect(cards).toHaveLength(12);
     expect(cards.every((c) => c.compares.length === 0)).toBe(true);
     expect(cards.every((c) => c.main != null)).toBe(true);
   });
@@ -272,14 +283,14 @@ describe('expandV11Cards（v11 卡 configs[] → 逐配置卡）', () => {
     expect(cards.every((c) => c.main != null)).toBe(true);
   });
 
-  it('首配置卡继承对比区时剔除与主品同型号同配置项并截配额（与 withMain / buildCards 同口径）', () => {
+  it('首配置卡继承对比区时剔除与主品同型号同配置项、条数不截断（与 withMain / buildCards 同口径；2026-11-27）', () => {
     // 旧 v11 对比区里混进与首配置同组的项（空格变体也算同组）
     const sameAsMain: ProductSelection = { ...configs[0], romram: configs[0].romram.replace(/\s+/g, ' ') + ' ' };
-    const extras = Array.from({ length: MAX_LINES_PER_CHART + 2 }, (_, i) => ({ modelId: `x${i}`, romram: '8+128 GB', skuIds: [`x${i}__8+128`] }));
+    const extras = Array.from({ length: 12 }, (_, i) => ({ modelId: `x${i}`, romram: '8+128 GB', skuIds: [`x${i}__8+128`] }));
     const cards = expandV11Cards([{ modelId: multiModel, configs, compares: [sameAsMain, keep, ...extras] }]);
     expect(cards[0].compares.some((c) => selKey(c) === selKey(configs[0]))).toBe(false);
     expect(cards[0].compares[0]).toEqual(keep);
-    expect(cards[0].compares).toHaveLength(cardQuota(cards[0]));
+    expect(cards[0].compares).toHaveLength(13); // keep + 12 条全部保留（原截到 7）
   });
 
   it('同配置去重；其余配置卡一律落空', () => {
@@ -290,13 +301,13 @@ describe('expandV11Cards（v11 卡 configs[] → 逐配置卡）', () => {
     expect(cards[1].compares).toEqual([]);
   });
 
-  it('卡数封顶 MAINS_CAP', () => {
-    const many = Array.from({ length: MAINS_CAP + 4 }, (_, i) => ({ modelId: `m${i}`, romram: '8+128 GB', skuIds: [`m${i}__8+128`] }));
-    expect(expandV11Cards(many.map((sel) => ({ modelId: sel.modelId, configs: [sel], compares: [] })))).toHaveLength(MAINS_CAP);
+  it('卡数不封顶（2026-11-27，原截到 8 张）', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ modelId: `m${i}`, romram: '8+128 GB', skuIds: [`m${i}__8+128`] }));
+    expect(expandV11Cards(many.map((sel) => ({ modelId: sel.modelId, configs: [sel], compares: [] })))).toHaveLength(12);
   });
 });
 
-describe('cardsFromSelections / flatSelections / clampMains', () => {
+describe('cardsFromSelections / flatSelections / tidyMains', () => {
   it('勾选组逐组成卡（同组去重、保序）', () => {
     const comp2 = dimProduct.find((p) => !p.is_own && p.countries.includes('RU') && p.sku_id !== dimProduct.find((q) => !q.is_own)!.sku_id)!;
     const cards = cardsFromSelections([ownSel, { modelId: comp2.sku_id.split('__')[0], romram: comp2.romram, skuIds: [comp2.sku_id] }, ownSel]);
@@ -315,13 +326,193 @@ describe('cardsFromSelections / flatSelections / clampMains', () => {
     expect(compareSels).toHaveLength(0); // 都已作为主品出现
   });
 
-  it('clampMains 保留第 4～7 条对比，只截断单图折线超配部分', () => {
-    const comps = distinctComps(8);
-    const clamped = clampMains([card(ownSel, comps)]);
-    expect(clamped[0].main).toEqual(ownSel);
-    expect(clamped[0].compares).toEqual(comps.slice(0, 7));
-    const many = Array.from({ length: MAINS_CAP + 3 }, () => card(ownSel));
-    expect(clampMains(many)).toHaveLength(MAINS_CAP);
+  it('tidyMains 不截断（2026-11-27，原 clampMains 截到 7 条对比 / 8 张卡）：12 条对比全保留、11 张卡全保留', () => {
+    const comps = distinctComps(12);
+    const tidied = tidyMains([card(ownSel, comps)]);
+    expect(tidied[0].main).toEqual(ownSel);
+    expect(tidied[0].compares).toEqual(comps);
+    const many = distinctComps(11).map((sel, i) => ({ ...card(sel), id: `m${i}` }));
+    expect(tidyMains(many)).toHaveLength(11);
+  });
+
+  it('tidyMains 结构收口：对比区内同型号同配置去重、剔除与主品同组项、同主品的重复卡合并', () => {
+    const comps = distinctComps(2);
+    const dup: MainProduct = { id: 'd', main: comps[0], compares: [comps[1], comps[1], { ...comps[0] }] };
+    const out = tidyMains([dup, { id: 'd2', main: comps[0], compares: [] }]);
+    expect(out).toHaveLength(1); // 同主品重复卡合并
+    expect(out[0].compares.map(selKey)).toEqual([selKey(comps[1])]); // 去重 + 剔除与主品同组
+  });
+});
+
+/** n 个互不同组的该国手机产业竞品勾选（口径合法化用例要求同产业） */
+const distinctPhoneComps = (n: number): ProductSelection[] => {
+  const out: ProductSelection[] = [];
+  const seen = new Set<string>();
+  for (const p of dimProduct) {
+    if (p.is_own || p.industry !== 'phone' || !p.countries.includes('RU')) continue;
+    const key = `${p.sku_id.split('__')[0]}|${p.romram.replace(/\s+/g, '')}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ modelId: p.sku_id.split('__')[0], romram: p.romram, skuIds: [p.sku_id] });
+    if (out.length >= n) break;
+  }
+  return out;
+};
+
+describe('对比区来源并集（2026-11-27：矩阵匹配与手动 / 同档推荐并存）', () => {
+  const comps = distinctPhoneComps(12);
+  const autoCard = (): MainProduct => withAutoOn(card(ownSel));
+  const matrixKeys = (c: MainProduct): string[] => autoComparesFor(c).map(selKey);
+
+  it('自动匹配开时加入同档推荐：不改开关、去重、剔除与主品同组者，并登记来源 tier', () => {
+    const base = autoCard();
+    const [t1, t2] = comps.filter((c) => !matrixKeys(base).includes(selKey(c))).slice(0, 2);
+    const next = withComparesAdded(base, [t1, t2, t1, ownSel], 'tier');
+    expect(next.auto).toBe(true);
+    expect(next.compares.map(selKey)).toEqual([...base.compares.map(selKey), selKey(t1), selKey(t2)]);
+    expect(userCompareSourcesOf(next)[selKey(t1)]).toBe('tier');
+    expect(userCompareSourcesOf(next)[selKey(t2)]).toBe('tier');
+    // 矩阵产出项无登记（来源由矩阵动态判定）
+    expect(userCompareSourcesOf(next)[matrixKeys(base)[0]]).toBeUndefined();
+    expect(compareSourcesOf(next, matrixKeys(base)[0])).toEqual(['matrix']);
+    expect(compareSourcesOf(next, selKey(t1))).toEqual(['tier']);
+  });
+
+  it('矩阵重算不删用户补充；已不在矩阵的旧矩阵项退出；excluded 的矩阵项不带回', () => {
+    const base = autoCard();
+    const [t1] = comps.filter((c) => !matrixKeys(base).includes(selKey(c)));
+    const withTier = withComparesAdded(base, [t1], 'tier');
+    // 用户移除一条矩阵产出 → 记入 excluded
+    const removedKey = matrixKeys(withTier)[0];
+    const afterRemove = withCompares(withTier, withTier.compares.filter((c) => selKey(c) !== removedKey));
+    expect(afterRemove.auto).toBe(true); // 手动增删不再整体退出自动匹配
+    expect(afterRemove.excluded).toEqual([removedKey]);
+    // 模拟矩阵更新 / 刷新恢复：重算后 tier 补充仍在、被移除的矩阵项不复活
+    const recomputed = withAutoOn(restoreAutoOn([afterRemove])[0]);
+    expect(recomputed.compares.map(selKey)).toContain(selKey(t1));
+    expect(recomputed.compares.map(selKey)).not.toContain(removedKey);
+    // 用户把该矩阵项手动加回 → 解除排除、登记为手动
+    const back = withComparesAdded(recomputed, [withTier.compares.find((c) => selKey(c) === removedKey)!], 'manual');
+    expect(back.excluded).toBeUndefined();
+    expect(userCompareSourcesOf(back)[removedKey]).toBe('manual');
+    expect(compareSourcesOf(back, removedKey)).toEqual(['matrix', 'manual']);
+  });
+
+  it('withCompares（手动改对比区）：新增登记 manual、调色 / 换序保留来源、顺序以传入为准', () => {
+    const base = autoCard();
+    const [m1] = comps.filter((c) => !matrixKeys(base).includes(selKey(c)));
+    const added = withCompares(base, [...base.compares, m1]);
+    expect(added.auto).toBe(true);
+    expect(userCompareSourcesOf(added)[selKey(m1)]).toBe('manual');
+    const [tier1] = comps.filter((c) => !matrixKeys(base).includes(selKey(c)) && selKey(c) !== selKey(m1));
+    const withTier = withComparesAdded(added, [tier1], 'tier');
+    // 换序：手动项挪到最前，来源不变
+    const reordered = withCompares(withTier, [withTier.compares.find((c) => selKey(c) === selKey(tier1))!, ...withTier.compares.filter((c) => selKey(c) !== selKey(tier1))]);
+    expect(reordered.compares[0]).toEqual(withTier.compares.find((c) => selKey(c) === selKey(tier1)));
+    expect(userCompareSourcesOf(reordered)[selKey(tier1)]).toBe('tier');
+    // 调色：同键不同 skuIds → 来源不变
+    const recolored = withCompares(reordered, reordered.compares.map((c) => (selKey(c) === selKey(m1) ? { ...c, skuIds: ['another-color-sku'] } : c)));
+    expect(userCompareSourcesOf(recolored)[selKey(m1)]).toBe('manual');
+  });
+
+  it('刷新恢复（restoreAutoOn + withAutoOn）：自动匹配被关的卡重新开启时，手动 / 同档推荐补充保留并并回矩阵', () => {
+    const base = autoCard();
+    const [t1] = comps.filter((c) => !matrixKeys(base).includes(selKey(c)));
+    const withTier = withComparesAdded(base, [t1], 'tier');
+    const off = withAutoOn(withTier); // 仍开
+    expect(off.auto).toBe(true);
+    const closed = toggleCardAuto(withTier); // 用户关闭：对比区整体转手动持有
+    expect(closed.auto).toBe(false);
+    // 持久化读回后强制回 auto=true（默认开逻辑）并重算
+    const reloaded = withAutoOn(restoreAutoOn([closed])[0]);
+    expect(reloaded.auto).toBe(true);
+    expect(reloaded.compares.map(selKey)).toContain(selKey(t1));
+    expect(userCompareSourcesOf(reloaded)[selKey(t1)]).toBe('tier'); // 同档推荐不因刷新丢失
+    expect(reloaded.compares.map(selKey)).toEqual(expect.arrayContaining(matrixKeys(reloaded)));
+  });
+
+  it('换主品：旧主品的排除清单失效；非华为主品无矩阵可依 → 只剩用户补充', () => {
+    const base = autoCard();
+    const removedKey = matrixKeys(base)[0];
+    const afterRemove = withCompares(base, base.compares.filter((c) => selKey(c) !== removedKey));
+    expect(afterRemove.excluded).toEqual([removedKey]);
+    const compSel = comps[0];
+    const toComp = withMain(afterRemove, compSel);
+    expect(toComp.auto).toBe(false);
+    expect(toComp.excluded).toBeUndefined();
+    expect(toComp.compares.map(selKey)).not.toContain(selKey(compSel));
+  });
+
+  it('口径合法化（remapMainsForScope）：用户补充登记与排除清单随映射保留', () => {
+    const base = autoCard();
+    const [t1] = comps.filter((c) => !matrixKeys(base).includes(selKey(c)));
+    const withTier = withComparesAdded(base, [t1], 'tier');
+    const removedKey = matrixKeys(withTier).find((k) => k !== selKey(t1))!;
+    const edited = withCompares(withTier, withTier.compares.filter((c) => selKey(c) !== removedKey));
+    const out = remapMainsForScope([edited], 'RU', 'phone')!;
+    expect(out).toHaveLength(1);
+    expect(out[0].auto).toBe(true);
+    expect(userCompareSourcesOf(out[0])[selKey(t1)]).toBe('tier');
+    expect(out[0].excluded).toContain(removedKey);
+  });
+
+  it('移除一条不在矩阵里的手动补充：只注销该项，不进排除清单、自动匹配保持开启、矩阵产出不动', () => {
+    const base = autoCard();
+    const [m1] = comps.filter((c) => !matrixKeys(base).includes(selKey(c)));
+    const withManual = withComparesAdded(base, [m1], 'manual');
+    const after = withCompares(withManual, withManual.compares.filter((c) => selKey(c) !== selKey(m1)));
+    expect(after.auto).toBe(true);
+    expect(after.compares.map(selKey)).toEqual(base.compares.map(selKey)); // 回到纯矩阵产出
+    expect(userCompareSourcesOf(after)[selKey(m1)]).toBeUndefined();
+    expect(after.excluded).toBeUndefined(); // 非矩阵项被移除不产生排除记录
+  });
+
+  it('withComparesAdded 重复项去重但保留来源：已在对比区的未登记项补登来源（不重复占线）；已登记 / 与主品同组 / 空入参 = 原引用返回', () => {
+    const base = autoCard();
+    const existing = base.compares[0]; // 未登记的矩阵产出
+    const registered = withComparesAdded(base, [existing], 'tier');
+    expect(registered.compares.map(selKey)).toEqual(base.compares.map(selKey)); // 不重复占线
+    expect(userCompareSourcesOf(registered)[selKey(existing)]).toBe('tier');
+    // 此后矩阵重算把它移出矩阵，它作为用户补充仍在
+    expect(withAutoOn(registered).compares.map(selKey)).toContain(selKey(existing));
+    expect(withComparesAdded(registered, [existing], 'manual')).toBe(registered); // 已登记 = 不改写来源
+    expect(withComparesAdded(base, [ownSel], 'tier')).toBe(base);
+    expect(withComparesAdded(base, [], 'tier')).toBe(base);
+  });
+
+  it('全局开关（toggleAllAuto）遇用户补充：关 = 全部保留并转手动（同档推荐标签不丢）；再开 = 并回矩阵', () => {
+    const base = autoCard();
+    const [t1] = comps.filter((c) => !matrixKeys(base).includes(selKey(c)));
+    const withTier = withComparesAdded(base, [t1], 'tier');
+    const [off] = toggleAllAuto([withTier]);
+    expect(off.auto).toBe(false);
+    expect(off.compares.map(selKey)).toEqual(withTier.compares.map(selKey));
+    expect(userCompareSourcesOf(off)[selKey(t1)]).toBe('tier');
+    const [onAgain] = toggleAllAuto([off]);
+    expect(onAgain.auto).toBe(true);
+    expect(onAgain.compares.map(selKey)).toEqual(expect.arrayContaining([...matrixKeys(onAgain), selKey(t1)]));
+    expect(new Set(onAgain.compares.map(selKey)).size).toBe(onAgain.compares.length);
+  });
+
+  it('矩阵重算保持用户换过的顺序：既有条目相对顺序不变，新出现的矩阵项按矩阵序追加在后', () => {
+    const base = autoCard();
+    expect(base.compares.length).toBeGreaterThanOrEqual(2); // 该主品矩阵至少两条对标
+    const reordered = withCompares(base, [...base.compares].reverse());
+    // 模拟矩阵更新 / 刷新后的重算：顺序沿用用户现状，不被矩阵序覆盖
+    const recomputed = withAutoOn(restoreAutoOn([reordered])[0]);
+    expect(recomputed.compares.map(selKey)).toEqual(reordered.compares.map(selKey));
+    // 新增的补充排在既有条目之后
+    const [t1] = comps.filter((c) => !matrixKeys(base).includes(selKey(c)));
+    expect(withComparesAdded(recomputed, [t1], 'tier').compares.slice(-1)[0]).toEqual(t1);
+  });
+
+  it('来源展示（compareSourcesOf）：矩阵 + 手动并存项同时标出两种来源；自动匹配关后矩阵项不再标「矩阵」', () => {
+    const base = autoCard();
+    const matrixKey = matrixKeys(base)[0];
+    const both = withComparesAdded(base, [base.compares.find((c) => selKey(c) === matrixKey)!], 'manual');
+    expect(both.compares.map(selKey).filter((k) => k === matrixKey)).toHaveLength(1); // 不重复占线
+    expect(compareSourcesOf(both, matrixKey)).toEqual(['matrix', 'manual']);
+    expect(compareSourcesOf(toggleCardAuto(both), matrixKey)).toEqual(['manual']);
   });
 });
 

@@ -18,16 +18,22 @@ import { CloseOutlined, PlusOutlined, SwapOutlined } from '@ant-design/icons';
 import { useFilters } from '../../state/FiltersContext';
 import ColorFlyout from '../ProductCascader/ColorFlyout';
 import { brandLabelOf } from '../BrandMark';
-import { color, radius, selectSoftInk } from '../../theme/tokens';
+import { color, formatPrice, radius, selectSoftInk } from '../../theme/tokens';
+import { frameColumnWidth } from '../ProductCascader/CascadePanel';
 import {
   brandOfModel,
   buildProductTree,
   configTextOf,
   defaultColorSkuIds,
   measureText,
+  modelEntryInfo,
   modelNameOf,
+  type BrandNode,
+  type ModelNode,
   type RomramNode,
 } from '../ProductCascader';
+import { TIER_LABELS } from '../../dataModel/aggregate';
+import { tierLabelShort } from '../../chart/PriceTrend/helpers';
 
 // ---------------- 层级 ----------------
 
@@ -452,6 +458,48 @@ export function StateTag({ text }: { text: string }) {
 
 /** 13px 基准测量 → 实际字号折算（行尾内容宽度预留用） */
 export const textW = (s: string, px: number): number => measureText(s) * (px / 13);
+
+/** 型号行尾「档位缩写 · 现价」灰字（现价 = 入门配置默认色最新价，币种随筛选）；
+ *  首末档的「入门 · 」「旗舰 · 」前缀只在档位下拉里保留，行尾去掉以免与现价的 · 连成三段 */
+export const modelTagText = (m: ModelNode, currency: 'usd' | 'local'): string => {
+  const { tierCode, price } = modelEntryInfo(m, currency);
+  const tier = tierCode ? tierLabelShort((TIER_LABELS[tierCode] ?? tierCode).replace(/^(入门|旗舰) · /, '')) : '';
+  const priceText = price != null ? formatPrice(Math.round(price), currency) : '';
+  return [tier, priceText].filter(Boolean).join(' · ');
+};
+
+/** 树浮窗四列固定骨架（2026-11-27，纯函数）：按**未过滤全量树**取各列最大行宽——
+ *  品牌 = 最长品牌名 + 最大「N 型号」行尾；系列 = 最长系列名（任一退市则留退市
+ *  胶囊位）；型号 = 最长型号名 + 行尾（退市胶囊 + 「档位 · 现价」，对比上下文再留
+ *  对比胶囊）；配置 = 最长配置名 + 对比胶囊 / 「当前」状态位。各列用与自适应列宽
+ *  完全相同的公式（frameColumnWidth）。调用方在打开时刻算一次并冻结：品牌 / 系列 /
+ *  型号 / 勾选 / 搜索 / 档位变化都不改变列宽，外框宽 = 四列和（超上限才横向滚动）。 */
+export function cascadeFrameOf(
+  tree: readonly BrandNode[],
+  currency: 'usd' | 'local',
+  opts: { compareCtx: boolean; modelTag?: boolean },
+): { brand: number; series: number; model: number; romram: number; total: number } {
+  const seriesAll = tree.flatMap((b) => b.series);
+  const modelsAll = seriesAll.flatMap((s) => s.models);
+  const romramsAll = modelsAll.flatMap((m) => m.romrams);
+  const eolPillW = textW('退市', 10) + 8; // 文本 + padding 0 6px + 边框 2px
+  const maxW = (texts: readonly string[]): number => texts.reduce((w, t) => Math.max(w, textW(t, 10)), 0);
+  const brandExtra = maxW(tree.map((b) => `${b.modelCount} 型号`)) + ROW_GAP;
+  const seriesExtra = seriesAll.some((s) => s.eol) ? eolPillW + ROW_GAP : 0;
+  // modelTag = false：型号行尾不带「档位 · 现价」（模板编辑浮窗的树）
+  const tagW = opts.modelTag === false ? 0 : maxW(modelsAll.map((m) => modelTagText(m, currency)));
+  // 配置列 / 无配置层级型号行的行尾：对比上下文 = 对比胶囊（图标 11 + 间隙 3 计入）；
+  // 其余上下文 = 「当前」/「已选」状态位
+  const leafW = opts.compareCtx ? pillW('对比', 11) + 14 : maxW(['当前', '已选']);
+  const modelExtra = (modelsAll.some((m) => m.eol) ? eolPillW + 6 : 0)
+    + Math.max(tagW, leafW + 6 + tagW) + ROW_GAP;
+  const romramExtra = leafW + ROW_GAP;
+  const brand = frameColumnWidth(tree.map((b) => brandLabelOf(b.key)), { checkbox: true, leading: true, extraW: brandExtra });
+  const series = frameColumnWidth(seriesAll.map((s) => s.title), { checkbox: true, extraW: seriesExtra });
+  const model = frameColumnWidth(modelsAll.map((m) => m.label), { checkbox: true, leading: true, extraW: modelExtra });
+  const romram = frameColumnWidth(romramsAll.map((r) => r.romram), { checkbox: true, extraW: romramExtra });
+  return { brand, series, model, romram, total: brand + series + model + romram };
+}
 /** 行尾小 pill 宽（文本 + padding 0 8px + 边框 2px） */
 export const pillW = (s: string, px: number): number => textW(s, px) + 18;
 export const ROW_GAP = 8; // 级联行内 label ↔ 行尾间距（space.sm）

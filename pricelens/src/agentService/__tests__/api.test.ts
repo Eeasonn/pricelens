@@ -101,7 +101,7 @@ describe('接口 · 非 2xx 与网络失败一律给人话', () => {
   it('fetch 抛错（Failed to fetch）→ 连不上本机服务器，不带原始报错', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     const error = await rejection(agentServiceApi.getState());
-    expect(error.message).toBe('连不上本机服务器，请确认 PriceLens 服务器正在运行');
+    expect(error.message).toBe('连不上本机服务器，请确认 PriceAgent 服务器正在运行');
     expect(error.status).toBeNull();
   });
 
@@ -113,7 +113,7 @@ describe('接口 · 非 2xx 与网络失败一律给人话', () => {
     vi.stubGlobal('fetch', fetchMock);
     const read = rejection(agentServiceApi.getState());
     await vi.advanceTimersByTimeAsync(10_001);
-    expect((await read).message).toBe('服务器响应超时，请确认本机 PriceLens 服务器仍在运行后重试');
+    expect((await read).message).toBe('服务器响应超时，请确认本机 PriceAgent 服务器仍在运行后重试');
     const test = rejection(agentServiceApi.testConnection({ provider: 'zhipu', model: 'glm-5.3-flash' }));
     await vi.advanceTimersByTimeAsync(64_999);
     // 还没到点：请求仍在等（没有提前判超时）
