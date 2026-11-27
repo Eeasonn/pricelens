@@ -600,7 +600,7 @@ export default function PriceTrend(props: {
   const splitActive = multiCards && !mergeView;
   // 分离模式一行可见面板数：按面板数量自适应，最多 3 个；不再提供手动 2/3 切换。
   const splitColumns = Math.min(3, Math.max(1, effMains.length));
-  // 图例可见系列（图例药丸取消选中的不画线；Y 轴自适应随之收缩；药丸/促销表仍显示全部）
+  // 图例取消选中的系列不画线、不占名称带；Y 轴自适应随之收缩，图例与促销表仍保留全集。
   const chartSeries: Series[] = useMemo(
     () => visSeries.filter((s) => !hiddenKeys.has(s.key)),
     [visSeries, hiddenKeys],
@@ -1362,8 +1362,8 @@ export default function PriceTrend(props: {
   // 「名称 + 配置」比两行的任一行都宽——带宽仍按两行预留会横向溢出名称带压进
   // 绘图区）。2026-11-19 起判定走共享函数 nameZoneTwoRowDegraded（与
   // buildLabelPlan 同一函数同一条件，含生命周期行精确计高，原 18px 保守余量
-  // 退役）。分离模式按面板独立判定（候选 = p.all 含隐藏药丸，与 plan 候选集合
-  // 一致；面板共享同一 plotH），带宽取面板最大 = 每个面板都装得下。
+  // 退役）。分离模式按面板独立判定（候选 = p.vis，仅可见产品参与布局；
+  // 面板共享同一 plotH），带宽取面板最大 = 每个面板都装得下。
   const nameZoneW = useMemo(() => {
     const zoneScale = splitActive ? splitYFinal : yFinal;
     const zonePlotH = zoneScale?.plotHeight ?? Number.POSITIVE_INFINITY;
@@ -1379,8 +1379,8 @@ export default function PriceTrend(props: {
         degraded ? pills.map((p) => (p.cfg ? { ...p, name: `${p.name} ${p.cfg}`.trim(), cfg: '' } : p)) : pills,
       );
     };
-    return Math.max(...(splitActive ? panelViews.map((p) => widthOf(p.all)) : [widthOf(visSeries)]));
-  }, [splitActive, panelViews, visSeries, splitYFinal, yFinal, state.granularity]);
+    return Math.max(...(splitActive ? panelViews.map((p) => widthOf(p.vis)) : [widthOf(chartSeries)]));
+  }, [splitActive, panelViews, chartSeries, splitYFinal, yFinal, state.granularity]);
   const gridLeft = estGridLeft(state.currency, showYTicks, showTiers, yAxisTickTexts, nameZoneW);
 
   const splitVolH = splitVolPlan && volumeOn ? splitVolPlan.volH : 0;

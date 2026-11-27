@@ -66,8 +66,8 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Popover, Popconfirm } from 'antd';
 import { TagOutlined, CloseOutlined, ExportOutlined } from '@ant-design/icons';
-// 按需注册（第十八轮）：全量 'echarts' → core + Line/Scatter + Grid + Canvas，
-// bundle 约省 500KB；本图只画 line/scatter（RRP step、缺采虚线桥均 line），tooltip 已禁用
+// 按需注册（第十八轮）：core + Line/Scatter + Grid + Canvas；平滑折后价线体走共享控制点 SVG，
+// ECharts 保留标签、阶梯线、RRP 与阶梯模式缺采桥。
 import * as echarts from 'echarts/core';
 import { LineChart, ScatterChart } from 'echarts/charts';
 import { GridComponent } from 'echarts/components';
@@ -83,6 +83,7 @@ import { lifecycleDeltaOf, type LifecycleDelta } from '../../dataModel/aggregate
 // 区间量尺（2026-11-06 Eason 拍板）：读数 / 量尺几何 / 量带细档上限（纯计算见 rangeRuler）
 import { rulerLayerOf, rulerSummaryOf, volumeBandMaxOf, type RangeMode, type RulerLayerSide } from './rangeRuler';
 import RangeRulerLayer from './RangeRulerLayer';
+import { buildSmoothPriceSegments } from './smoothPricePaths';
 // 第196轮整改4（销毛小卡）：只 import 量价侧销毛模型类型（数据由 index 层计算传入）
 import type { MarginCostPoint } from '../../pages/volume/marginCost';
 import { salesSourceBadge, salesSourceNote, salesSourceOf } from '../../dataModel/volume';
@@ -248,11 +249,11 @@ export interface ChartProps {
    *  否则勾选恒为开、点击无效）。 */
   showTiers?: boolean;
   onShowTiers?: (v: boolean) => void;
-  /** 第八十二轮：名称药丸全集（含已屏蔽系列——药丸仍渲染为虚线置灰态）；缺省 = series */
+  /** 图例与联动查询使用的系列全集；名称带只渲染其中可见且属于本图的项 */
   nameSeries?: Series[];
-  /** 屏蔽中的系列 key 集（与 nameSeries 搭配；药丸点击 → onToggleHidden 切换） */
+  /** 隐藏系列 key 集；隐藏项不生成图内名称药丸 */
   hiddenKeys?: Set<string>;
-  /** 名称药丸点击的显隐切换回调；缺省 = 药丸不可切换 */
+  /** 名称药丸点击的隐藏回调；恢复统一走图例 */
   onToggleHidden?: (seriesKey: string) => void;
   /** 第一百一十五轮：顶部品牌图例带悬停的产品（受控入站）——图内高亮该系列，
    *  并在其价格线起点画竖向指引虚线；null = 无悬停（图内名称药丸悬停态不受影响） */
@@ -541,10 +542,9 @@ function MiniDiscountBadge({ discount, dim }: { discount: number; dim?: boolean 
   );
 }
 
-/** 系列名称小药丸（第八十二轮再版；第九十轮删来源链接行）：顶部图例页签同款样式
- *  ——统一灰字不取品牌色，点击 = 切换该系列折线显隐（屏蔽态 = 虚线置灰，同页签语言）。
+/** 系列名称小药丸：统一灰字不取品牌色，点击隐藏该产品，恢复统一走图例。
  *  悬停药丸 = 显示该系列的起点指引线（默认全部隐藏）。
- *  避让盒 = 渲染盒（药丸 行高16×行数+内边距6 + 生命周期14）。 */
+ *  避让盒 = 渲染盒（药丸行高 + 配置行 + 生命周期行）。 */
 /** 名称药丸的识别标记：缺省 = 品牌色点；系列带线型（2026-11-27 品牌全景：同品牌
  *  多条线同色、靠虚线节律区分）时改为「同色线段样条」——药丸直接给出该线的线型，
  *  便于对线辨认（直接标签 + 线型双重辨认，不新增色板） */
@@ -563,7 +563,6 @@ function ZoneNamePill(props: {
   romramByKey: ReturnType<typeof useTreeData>['romramByKey'];
   brand: string;
   deltaPct: { pct: number } | null;
-  hidden: boolean;
   dimmed: boolean;
   onToggle: (seriesKey: string) => void;
   onHover: (seriesKey: string | null) => void;
@@ -588,14 +587,13 @@ function ZoneNamePill(props: {
         flexDirection: 'column',
         alignItems: 'flex-start',
         gap: 1,
-        opacity: props.hidden ? 0.45 : props.dimmed ? 0.2 : undefined,
+        opacity: props.dimmed ? 0.2 : undefined,
         zIndex: 9,
       }}
     >
       <button
         type="button"
-        aria-pressed={props.hidden}
-        title={props.hidden ? '点击恢复显示该产品' : '点击隐藏该产品'}
+        title="点击隐藏该产品"
         onClick={(e) => {
           e.stopPropagation();
           props.onToggle(nm.seriesKey);
@@ -607,7 +605,7 @@ function ZoneNamePill(props: {
         style={{
           ...NAME_PILL_BOX,
           maxWidth: nm.maxW ?? 200,
-          border: `1px ${props.hidden ? 'dashed' : 'solid'} ${props.hidden ? color.hairlineStrong : color.hairline}`,
+          border: `1px solid ${color.hairline}`,
           cursor: 'pointer',
         }}
       >
@@ -669,7 +667,7 @@ function ZoneNamePill(props: {
       {/* 方案 B 切换入口迁移（2026-11-17 Eason）：名称带药丸不再外挂「量」直切按钮
           （多我司产品时一排「量」chip 视觉噪）；切换统一收敛到量带归属药丸的候选菜单 */}
       {delta && (
-        <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap', opacity: props.hidden ? 0.45 : undefined }}>
+        <span style={{ paddingLeft: 13, fontSize: 11, lineHeight: '13px', whiteSpace: 'nowrap' }}>
           <span style={{ color: color.mute, fontWeight: 500 }}>
             生命周期{' '}
           </span>
@@ -883,6 +881,7 @@ export default function Chart(props: ChartProps) {
   //      右缘让出量轴列（VOL_AXIS_RIGHT_W），价格区与量带之间无分界线 ----
   const volOn = props.volumeOn === true;
   const volumeGradId = useId(); // 量层面积渐变 id（多面板实例防冲突）
+  const priceClipId = useId();
   // volumeInline：量柱并入绘图区——独立量带高度归零，柱高映射改为绘图区底部 30%
   const volBandH = volOn && props.volumeInline !== true
     ? Math.max(40, Math.round(props.volumeHeight ?? (gridTop + scale.plotHeight + GRID.bottom) * 0.3))
@@ -1097,7 +1096,7 @@ export default function Chart(props: ChartProps) {
   const nameZoneWProp = props.nameZoneWidth;
 
   // 名称带两行药丸元信息（2026-11-13 Eason 名称带改版）：brand_inline 品牌词 +
-  // 配置拆行。series ∪ nameAll（屏蔽态药丸走 nameOnly）统一查表，缺行回落单行
+  // 配置拆行。series ∪ nameAll 统一查表，名称带只渲染可见项，缺行回落单行
   const pillMetaByKey = useMemo(() => {
     const m = new Map<string, NameZonePillSpec>();
     for (const s of nameAll) m.set(s.key, seriesPillMetaOf(s));
@@ -1114,7 +1113,6 @@ export default function Chart(props: ChartProps) {
         priceTypes,
         endpointMarks,
         lifecycleRow: (key) => lifecycleDeltas.get(key) != null,
-        nameOnlySeries: nameAll.filter((s) => !series.some((v) => v.key === s.key)),
         hiddenKeys: props.hiddenKeys,
         hideNames: props.hideNamePills === true, // 第一百一十三轮：量价面板禁画名称药丸
         labelMode, // 第一百一十四轮：精简 = 仅最高/最低/最新三价
@@ -1157,6 +1155,21 @@ export default function Chart(props: ChartProps) {
 
   // 选区态只留量尺两端的数字：全局价格标签（三价 / 详细）整体撤下，名称药丸保留
   const labelPlanView = useMemo(() => (rangeActive ? { ...labelPlan, dy: {}, pos: {} } : labelPlan), [labelPlan, rangeActive]);
+
+  const smoothPriceLines = useMemo(() => {
+    if (!geom || lineShape !== 'smooth' || !priceTypes.discounted) return [];
+    return series.map((s) => ({
+      key: s.key,
+      color: s.color,
+      lineDash: s.lineDash,
+      dim: litKeys != null && !litKeys.includes(s.key),
+      segments: buildSmoothPriceSegments(s.points.map((pt, i) => ({
+        x: xPxOf(geom, i),
+        y: pt.price != null && pt.suspect !== 'quarantined' ? yPxOf(geom, pt.price) : null,
+        missing: pt.missing,
+      }))),
+    })).filter((line) => line.segments.length > 0);
+  }, [geom, series, lineShape, priceTypes.discounted, litKeys]);
 
   // ---- ECharts option（值轴隐藏，数据喂归一化伪值；纯构建见 chartModel.buildOption）----
   // focusKey（第三十二轮聚焦模式）：非聚焦系列降透明 0.15、数值标签隐藏
@@ -1685,7 +1698,37 @@ export default function Chart(props: ChartProps) {
           <path d={costLine} fill="none" stroke={hexToRgba(costColor, 0.45)} strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         </svg>
       )}
-      {/* ECharts 挂载层（第一百一十四轮：高度不含 tipBox 预留框——canvas 网格仍止于底边距） */}
+      {geom && smoothPriceLines.length > 0 && (
+        <svg
+          aria-hidden
+          data-testid="smooth-price-lines"
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: chartH, pointerEvents: 'none', zIndex: 1 }}
+        >
+          <defs>
+            <clipPath id={priceClipId}>
+              <rect x={geom.plotLeft} y={geom.plotTop} width={geom.plotWidth} height={geom.plotHeight} />
+            </clipPath>
+          </defs>
+          <g clipPath={`url(#${priceClipId})`}>
+            {smoothPriceLines.flatMap((line) => line.segments.map((segment) => (
+              <path
+                key={`${line.key}:${segment.from}:${segment.to}`}
+                data-bridge={segment.bridge ? 'true' : 'false'}
+                d={segment.d}
+                fill="none"
+                stroke={line.color}
+                strokeWidth={2}
+                strokeDasharray={segment.bridge ? '4 4' : line.lineDash?.join(' ')}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={line.dim ? 0.15 : segment.bridge ? 0.9 : 1}
+                vectorEffect="non-scaling-stroke"
+              />
+            )))}
+          </g>
+        </svg>
+      )}
+      {/* ECharts 挂载层：平滑折后价的线体已在下方 SVG 统一绘制，这里保留标签与坐标。 */}
       <div ref={chartDivRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: chartH, zIndex: 1 }} />
       {/* 第196轮整改5（量层，Eason 领导要求）：价格绘图区下方的销量带——量 Y=0 贴带底、
           最高柱顶 = 价格绘图区底缘，中间无分界线（x 轴线已随 buildOption bottomExtra 隐藏，
@@ -3604,11 +3647,9 @@ export default function Chart(props: ChartProps) {
               </div>
             );
           })}
-          {/* 系列名称小药丸（第八十二轮再版）：顶部图例页签同款（统一灰字不取品牌色），
-              点击 = 切换折线显隐（屏蔽态虚线置灰），取代上方图例页签职能；来源链接
-              斜体挂药丸下方；指引线默认隐藏、悬停药丸才显示该系列的起点引线。
-              zIndex 9 = 全图层最上。聚焦模式不再隐藏药丸（它们承担显隐开关职能），
-              悬停折线聚焦时非聚焦药丸降透明。 */}
+          {/* 系列名称小药丸：统一灰字不取品牌色，点击隐藏该产品，恢复统一走图例。
+              指引线默认隐藏，悬停药丸才显示该系列的起点引线；隐藏项不生成药丸或引线。
+              zIndex 9 = 全图层最上；悬停折线聚焦时非聚焦药丸降透明。 */}
           {(() => {
             return (
               <>
@@ -3627,7 +3668,7 @@ export default function Chart(props: ChartProps) {
                   {labelPlan.names
                     // 引线只属于悬停名称药丸；量带悬停借同一高亮通道时不画（否则从名称带拉出一条
                     // 横穿绘图区的长线，真机可见）
-                    .filter((nm) => !nm.hidden && nm.seriesKey === hoverNameKey && volHover == null)
+                    .filter((nm) => nm.seriesKey === hoverNameKey && volHover == null)
                     .map((nm) => (
                       <line
                         key={`ld-${nm.seriesKey}`}
@@ -3649,7 +3690,6 @@ export default function Chart(props: ChartProps) {
                     romramByKey={romramByKey}
                     brand={brandByKey.get(nm.seriesKey) ?? ''}
                     deltaPct={lifecycleDeltas.get(nm.seriesKey) ?? null}
-                    hidden={nm.hidden ?? false}
                     dimmed={litKeys != null && !litKeys.includes(nm.seriesKey)}
                     onToggle={(k) => props.onToggleHidden?.(k)}
                     onHover={setHoverNameKey}
@@ -3686,7 +3726,7 @@ export default function Chart(props: ChartProps) {
             // 二轮重排（Eason「位置有点奇怪」）：节头不再浮在层边缘——
             // 价格节头贴最高那颗名称药丸上方（成为药丸组的组头）；
             // 销量节头贴销量带顶，销量归属药丸移到节头同一行右侧（成组，不再悬空带中）。
-            const zonePills = labelPlan.names.filter((nm) => nm.zone && !(props.hiddenKeys ?? new Set()).has(nm.seriesKey));
+            const zonePills = labelPlan.names.filter((nm) => nm.zone);
             const priceHeaderY = head
               ? paneTitleTopOf(geom.plotTop)
               : zonePills.length

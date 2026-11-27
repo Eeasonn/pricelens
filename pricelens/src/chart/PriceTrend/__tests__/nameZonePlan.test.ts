@@ -340,6 +340,16 @@ describe('2026-11-18 Eason「不能出现卡片重叠」：两行药丸放不下
     });
     expect(planFit.names.every((nm) => nm.cfgText === '12+256 GB')).toBe(true);
   });
+
+  it('仅显示一条时隐藏候选不占布局，名称带保留两行配置', () => {
+    const hiddenKeys = new Set(series6.slice(1).map((s) => s.key));
+    const isolated = buildLabelPlan({
+      geom: g6, series: series6, granularity: 'week', priceTypes, endpointMarks: marks,
+      hiddenKeys, nameZone: { width: 188 }, pillSpecOf: pillOf,
+    });
+    expect(isolated.names.map((nm) => nm.seriesKey)).toEqual(['OWN__0']);
+    expect(isolated.names[0].cfgText).toBe('12+256 GB');
+  });
 });
 
 describe('2026-11-19 同源化：降级判定唯一入口 nameZoneTwoRowDegraded（buildLabelPlan 与带宽 memo 共用）', () => {

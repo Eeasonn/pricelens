@@ -326,10 +326,7 @@ export function buildLabelPlan(p: {
   endpointMarks: Map<string, SeriesMark>;
   /** 该系列是否渲染「生命周期 −X%」第二行（季粒度；第三十二轮起计入名称避让盒） */
   lifecycleRow?: (seriesKey: string) => boolean;
-  /** 第八十二轮：折线已屏蔽、但仍需名称药丸的系列（只生成名称项，无数值标签）；
-   *  与 series 中的同 key 项以后者为准 */
-  nameOnlySeries?: Series[];
-  /** 第八十二轮：隐藏态 key 集（名称药丸虚线置灰） */
+  /** 隐藏系列不生成名称药丸；恢复入口统一在图例 */
   hiddenKeys?: Set<string>;
   /** 第一百一十三轮（评审）：true = 不生成任何名称药丸（量价看板面板头已带产品名，
    *  面板内折线起点旁的药丸撤掉，空间留给绘图区） */
@@ -485,8 +482,8 @@ export function buildLabelPlan(p: {
       }
     }
   }
-  // 系列名称小药丸（第八十二轮再版）：品牌点+型号名，统一灰字；点击 = 切换折线
-  // 显隐（取代上方页签）。第九十轮：来源链接行删除（跳转入口收编）。
+  // 系列名称小药丸：品牌点+型号名，统一灰字；点击隐藏，恢复统一走图例。
+  // 隐藏系列不进入候选，也不参与两行降级与碰撞避让。
   // 第一百一十五轮：名称带（forceNameZone 等距分布）随「名称上移顶部品牌图例带」
   // 整体退役；第196轮整改3（Eason）恢复 zone 模式；2026-11-05 复检双改：
   // ① 位置 = Y 轴刻度标签右侧、绘图区左缘之间（带右缘贴绘图区，视觉顺序
@@ -502,7 +499,6 @@ export function buildLabelPlan(p: {
   // 药丸会溢出绘图区底部、落进量带与量带归属药丸叠置（真机复现）。
   interface NameCandidate {
     s: Series;
-    hidden: boolean;
     pillSpec: NameZonePillSpec | undefined;
     cfgText: string;
     fullH: number;
@@ -513,7 +509,7 @@ export function buildLabelPlan(p: {
     nw: number;
   }
   const nameCandidates: NameCandidate[] = [];
-  const collectNameItem = (s: Series, hidden: boolean): void => {
+  const collectNameItem = (s: Series): void => {
     if (p.hideNames === true) return; // 第一百一十三轮：整体禁画名称药丸
     const pts = s.points;
     const valIdx: number[] = [];
@@ -532,11 +528,10 @@ export function buildLabelPlan(p: {
     const pillSpec = p.pillSpecOf?.(s);
     const cfgText = pillSpec?.cfg || '';
     const fullH = nameZonePillH(cfgText, p.lifecycleRow?.(s.key) ?? false);
-    nameCandidates.push({ s, hidden, pillSpec, cfgText, fullH, fi, px, py, nameText, nw });
+    nameCandidates.push({ s, pillSpec, cfgText, fullH, fi, px, py, nameText, nw });
   };
-  for (const s of series) collectNameItem(s, p.hiddenKeys?.has(s.key) ?? false);
-  for (const s of p.nameOnlySeries ?? []) {
-    if (!series.some((v) => v.key === s.key)) collectNameItem(s, true);
+  for (const s of series) {
+    if (!p.hiddenKeys?.has(s.key)) collectNameItem(s);
   }
   // 带内两行药丸装得下判定（2026-11-19 抽共享函数 nameZoneTwoRowDegraded——与
   // index.tsx 带宽 memo 同一条件；盒高 16+4=20，配置并进名称行；两行字段不再携带
@@ -550,7 +545,7 @@ export function buildLabelPlan(p: {
     }
   }
   for (const c of nameCandidates) {
-    const { s, hidden, pillSpec, cfgText, fullH, fi, px, py, nameText, nw } = c;
+    const { s, pillSpec, cfgText, fullH, fi, px, py, nameText, nw } = c;
     if (zone) {
       // 名称带内：盒固定带宽（药丸行内 nowrap，带宽按名称自适应预留，见 nameZoneWidthOf）；
       // 期望位 = 首桶 y 居中，钳在带内（带 = 绘图区同高）——重叠避让交给 resolveCollisions
@@ -572,7 +567,6 @@ export function buildLabelPlan(p: {
         maxW: zoneBoxW,
         anchorX: px,
         anchorY: py,
-        hidden: hidden || undefined,
         zone: true,
         // 两行字段仅在传了 pillSpecOf 且带配置行时携带（降级单行 = cfgText 空 →
         // 渲染走单行路径、显示 nm.text 全名）
@@ -603,7 +597,6 @@ export function buildLabelPlan(p: {
       color: s.color,
       anchorX: px,
       anchorY: py,
-      hidden: hidden || undefined,
       // 线型样例（2026-11-27 品牌全景）：锚定模式与名称带同口径——系列带 lineDash 才携带
       ...(s.lineDash ? { lineDash: s.lineDash } : {}),
     });
@@ -655,48 +648,6 @@ export function flipLabelDxOf(p: { v: number; i: number; geom: Geom }): number {
   const w = priceLabelW(fmtInt(v));
   if (xPxOf(geom, i) + w / 2 <= geom.plotLeft + geom.plotWidth - LABEL_RIGHT_PAD) return 0;
   return -w / 2;
-}
-
-export function smoothGapBridgeValues(values: readonly (number | null)[], a: number, b: number): (number | null)[] {
-  const out: (number | null)[] = [...values];
-  const leftIndex = a - 1;
-  const rightIndex = b + 1;
-  const p0 = values[leftIndex];
-  const p1 = values[rightIndex];
-  if (p0 == null || p1 == null || rightIndex <= leftIndex) return out;
-  const h = rightIndex - leftIndex;
-  const secant = (p1 - p0) / h;
-  const nearest = (from: number, dir: -1 | 1): { index: number; value: number } | null => {
-    for (let i = from; i >= 0 && i < values.length; i += dir) {
-      const value = values[i];
-      if (value != null) return { index: i, value };
-    }
-    return null;
-  };
-  const left = nearest(leftIndex - 1, -1);
-  const right = nearest(rightIndex + 1, 1);
-  const cap = Math.abs(secant) * 3;
-  const clampSlope = (v: number): number => Math.max(-cap, Math.min(cap, v));
-  const m0 = clampSlope(left ? (p0 - left.value) / (leftIndex - left.index) : secant);
-  const m1 = clampSlope(right ? (right.value - p1) / (right.index - rightIndex) : secant);
-  const lo = Math.min(p0, p1);
-  const hi = Math.max(p0, p1);
-  const steps = Math.max(2, (b - a + 1) * 4);
-  out[leftIndex] = p0;
-  out[rightIndex] = p1;
-  for (let j = 1; j < steps; j++) {
-    const t = j / steps;
-    const t2 = t * t;
-    const t3 = t2 * t;
-    const value = (2 * t3 - 3 * t2 + 1) * p0
-      + (t3 - 2 * t2 + t) * h * m0
-      + (-2 * t3 + 3 * t2) * p1
-      + (t3 - t2) * h * m1;
-    const index = Math.round(leftIndex + h * t);
-    if (index === leftIndex || index === rightIndex) continue;
-    out[index] = Math.max(lo, Math.min(hi, value));
-  }
-  return out;
 }
 
 export function buildOption(p: {
@@ -794,35 +745,37 @@ export function buildOption(p: {
         // 数据点圆点删除（第三十八轮）：悬停浮窗承担点检视，线面更干净；
         // symbolSize 0 而非 symbol 'none'（第二十轮教训：'none' 会吞数值标签）
         symbolSize: 0,
-        // 线型（2026-11-27 品牌全景）：系列带 lineDash 时按节律画虚线——同品牌多条线
-        // 同色，靠线型区分；缺省实线，既有调用方输出不变。缺采跨接段另走下方固定
-        // [4, 4] 短虚线桥，与线型字段无关
-        lineStyle: { color: s.color, width: 2, ...(s.lineDash?.length ? { type: s.lineDash } : {}), ...(dim ? { opacity: 0.15 } : {}) },
+        // 线型：品牌全景按系列 lineDash 区分同品牌产品。平滑模式的线体透明，
+        // 这里只保留真实点标签；阶梯模式仍由本系列与下方固定 [4,4] 缺采桥描边。
+        lineStyle: {
+          color: s.color,
+          width: 2,
+          ...(s.lineDash?.length ? { type: s.lineDash } : {}),
+          ...(p.lineShape === 'smooth' ? { opacity: 0 } : dim ? { opacity: 0.15 } : {}),
+        },
         z: 12,
         silent: true,
       });
-      // 缺采跨接段：仅虚线桥接（第二十四轮：撤销空心插值点——未抓取的周不再展示
-      // 数据点，跨接语义完全由虚线承担；曲线自然跨接不中断）
-      for (const [a, b] of gapRuns(s.points)) {
-        const vp = s.points[a - 1].price;
-        const vn = s.points[b + 1].price;
-        if (vp == null || vn == null) continue;
-        const bridge = p.lineShape === 'smooth'
-          ? smoothGapBridgeValues(s.points.map((pt) => (pt.price != null ? yNormOf(geom, pt.price) : null)), a, b)
-            .map((value, i) => (i >= a - 1 && i <= b + 1 ? value : null))
-          : s.points.map((_, i) =>
-              i === a - 1 ? yNormOf(geom, vp) : i === b + 1 ? yNormOf(geom, vn) : null,
-            );
-        sArr.push({
-          type: 'line',
-          data: bridge,
-          ...shape, // 与主价线同形态
-          connectNulls: true,
-          symbol: 'none',
-          lineStyle: { color: s.color, width: 2, type: [4, 4], opacity: dim ? 0.15 : 0.9 },
-          z: 11,
-          silent: true,
-        });
+      // 平滑折后价由 Chart 的共享控制点 SVG 层绘制；阶梯模式保留原虚线桥。
+      if (p.lineShape !== 'smooth') {
+        for (const [a, b] of gapRuns(s.points)) {
+          const vp = s.points[a - 1].price;
+          const vn = s.points[b + 1].price;
+          if (vp == null || vn == null) continue;
+          const bridge = s.points.map((_, i) =>
+            i === a - 1 ? yNormOf(geom, vp) : i === b + 1 ? yNormOf(geom, vn) : null,
+          );
+          sArr.push({
+            type: 'line',
+            data: bridge,
+            ...shape,
+            connectNulls: true,
+            symbol: 'none',
+            lineStyle: { color: s.color, width: 2, type: [4, 4], opacity: dim ? 0.15 : 0.9 },
+            z: 11,
+            silent: true,
+          });
+        }
       }
     }
     if (priceTypes.rrp) {

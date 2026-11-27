@@ -320,6 +320,26 @@ describe('buildOption', () => {
     expect(mainData[0].label?.show).toBe(true);
   });
 
+  it('平滑模式：ECharts 仅保留标签载体，线段由共享控制点的 SVG 层一次绘制', () => {
+    const pts = [
+      PT({ price: 100 }),
+      PT({ price: null, missing: true }),
+      PT({ price: 120 }),
+      PT({ price: 130 }),
+    ];
+    const s = mkSeries({ points: pts });
+    const scale = computeYAxis({ series: [s], priceTypes: DISC_ONLY, sliderScale: 1 });
+    const geom = mkGeom(scale, 1200, 4, scale.plotHeight + 96 + GRID.bottom, 96);
+    const option = buildOption({
+      geom, series: [s], priceTypes: DISC_ONLY, granularity: 'week', lineShape: 'smooth',
+      labelPlan: { dy: { [s.key]: { 0: -20 } }, names: [] }, gridTop: 96, endpointMarks: new Map(),
+    })!;
+    const arr = option.series as { lineStyle: { opacity?: number }; data: { label: { show: boolean } }[] }[];
+    expect(arr).toHaveLength(1);
+    expect(arr[0].lineStyle.opacity).toBe(0);
+    expect(arr[0].data[0].label.show).toBe(true);
+  });
+
   it('值轴隐藏 + category 轴 + grid 固定边距（DOM 层同源几何的根基）', () => {
     const s = mkSeries({ points: [PT({ price: 100 }), PT({ price: 110 })] });
     const scale = computeYAxis({ series: [s], priceTypes: DISC_ONLY, sliderScale: 1 });

@@ -1143,8 +1143,6 @@ export interface AvoidItem {
   /** 名称项锚点（第三十二轮）：系列首点像素位置，避让推离超阈值时画引线到这 */
   anchorX?: number;
   anchorY?: number;
-  /** 第八十二轮：名称药丸的隐藏态（折线已屏蔽 → 虚线置灰药丸） */
-  hidden?: boolean;
   /** 第196轮整改3（zone 模式恢复）：名称已按带内等距分布放置——渲染层按单行
    *  nowrap 药丸绘制（带宽按名称自适应预留，不换行） */
   zone?: boolean;
@@ -1178,8 +1176,6 @@ export interface AvoidResult {
     maxW?: number;
     anchorX: number;
     anchorY: number;
-    /** 第八十二轮：药丸隐藏态（折线已屏蔽） */
-    hidden?: boolean;
     /** 第196轮整改3：名称带内等距分布项（渲染单行 nowrap） */
     zone?: boolean;
     /** 名称带两行药丸（2026-11-13）：行1 产品名（去配置后缀）/ 品牌词（brand_inline，
@@ -1264,7 +1260,6 @@ export function resolveCollisions(items: AvoidItem[], plotTop: number, bottom?: 
         maxW: it.maxW,
         anchorX: it.anchorX ?? it.left,
         anchorY: it.anchorY ?? top,
-        hidden: it.hidden,
         // 第196轮整改3：仅带内项带 zone 标记（锚定模式字段缺省，不进金测序列化）
         ...(it.zone ? { zone: true as const } : {}),
         // 两行药丸字段（2026-11-13）：仅带 pillSpecOf 的 zone 项携带（缺省不进序列化）

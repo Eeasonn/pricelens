@@ -266,6 +266,23 @@ describe('图层标题 head 版式（稳定版）', () => {
   });
 });
 
+describe('平滑价格线共享控制点', () => {
+  it('Chart 用同一 SVG 轨迹拆实线与缺采虚线，ECharts 不再另画一座桥', async () => {
+    const smoothSeries: Series[] = [{
+      ...series[0],
+      points: series[0].points.map((pt, i) => i === 1 ? { ...pt, price: null, missing: true } : { ...pt }),
+    }];
+    const { container } = render(
+      <Chart {...baseProps} series={smoothSeries} lineShape="smooth" volumeOn={false} /> as ReactElement,
+    );
+    await waitForGeom(container);
+    const paths = container.querySelectorAll('svg[data-testid="smooth-price-lines"] path');
+    expect(paths).toHaveLength(3);
+    expect(container.querySelectorAll('path[data-bridge="true"]')).toHaveLength(1);
+    expect(container.querySelectorAll('path[data-bridge="false"]')).toHaveLength(2);
+  });
+});
+
 describe('悬停卡成本脚行', () => {
   it('悬停有成本的列：主卡多一行「当月成本 模拟 N」', async () => {
     const costs = [400, 400, 400, 400, 400];
@@ -290,7 +307,7 @@ describe('悬停卡成本脚行', () => {
 });
 
 describe('品牌进名称带与悬停卡（2026-11-07 Eason 采纳 A）', () => {
-  it('名称带药丸点击 = 隐藏 / 恢复（onToggleHidden 接线；hiddenKeys 虚线态）', async () => {
+  it('名称带药丸点击 = 隐藏该产品（onToggleHidden 接线）', async () => {
     const onToggle = vi.fn();
     const hiddenKeys = new Set<string>();
     const { container } = render(
@@ -312,6 +329,30 @@ describe('品牌进名称带与悬停卡（2026-11-07 Eason 采纳 A）', () => 
     const pillButton = [...container.querySelectorAll('button[title="点击隐藏该产品"]')][0] as HTMLButtonElement;
     fireEvent.click(pillButton);
     expect(onToggle).toHaveBeenCalledWith(OWN);
+  });
+
+  it('图内名称带不渲染 nameSeries 中的隐藏项', async () => {
+    const hidden: Series = {
+      ...series[0],
+      key: 'CMP__12GB',
+      isOwn: false,
+      brand: 'APPLE',
+      label: 'APPLE iPhone 17 12GB',
+      color: '#1d1d1f',
+    };
+    const { container } = render(
+      <Chart
+        {...baseProps}
+        volumeOn={false}
+        nameSeries={[...series, hidden]}
+        hiddenKeys={new Set([hidden.key])}
+      /> as ReactElement,
+    );
+    await waitForGeom(container);
+    const names = [...container.querySelectorAll('[data-testid="name-pill-text"]')];
+    expect(names).toHaveLength(1);
+    expect(names[0].textContent).toBe('Mate 70 12');
+    expect(container.querySelector('button[title="点击恢复显示该产品"]')).toBeNull();
   });
 
   it('名称带药丸：默认只写型号；悬停 / 聚焦在药丸上方出加粗品牌行（不并入文字）', async () => {

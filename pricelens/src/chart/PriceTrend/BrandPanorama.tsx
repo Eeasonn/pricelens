@@ -415,7 +415,7 @@ export default function BrandPanorama(props: {
       const degraded = nameZoneTwoRowDegraded(pills.map((p) => p.cfg || ''), plotH, (i) => quarter && lifecycleDeltaOf(list[i].skuIds) != null);
       return nameZoneWidthOf(degraded ? pills.map((p) => (p.cfg ? { ...p, name: `${p.name} ${p.cfg}`.trim(), cfg: '' } : p)) : pills);
     };
-    return Math.max(0, ...panelViews.map((p) => widthOf(p.all, scales[p.brand]?.plotHeight ?? Number.POSITIVE_INFINITY)));
+    return Math.max(0, ...panelViews.map((p) => widthOf(p.vis, scales[p.brand]?.plotHeight ?? Number.POSITIVE_INFINITY)));
   }, [panelViews, scales, state.granularity]);
   const tickTexts = useMemo(() => {
     // 共享 Y 轴 = 全图同一份刻度文案；独立 Y 轴 = 各图自己的（共享轴列不出）
