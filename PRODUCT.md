@@ -62,14 +62,15 @@ PriceLens 的核心任务包括：
 1. **价格走势**：多产品与多平台视图、折后价 / RRP、促销带、时间刷选、时点摘要和取证外链。
 2. **量价走势**：价格与周销量联动，支持取价平台选择。
 3. **预警中心**：四类预警规则、阈值和订阅状态。
-4. **配置**：竞品对标矩阵、上一代关系、参考汇率和默认店铺。
-5. **PriceLens Agent**：页头「问 PriceLens」或 `⌘/Ctrl+K` 进入；默认只读，结果可追溯。
+4. **配置**：竞品对标矩阵、参考汇率和默认店铺。上一代关系不在此维护：现由服务器端配置表 `config_tables.xlsx`「上一代配置」页签维护，关系落到配置层级（当前「型号 × 配置」→ 上一代「型号 × 配置」，一个上一代可对多个下一代，竞品也登记），随数据包的 `prevGen` 段下发；配置页本机的「上一代关系」区块与个人配置工作簿的同名页签均已移除。
+5. **PriceLens Agent**：页头「问 PriceAgent」或 `⌘/Ctrl+K` 进入；默认只读，结果可追溯。
 
-正式交付有三个入口，但共享同一源码和产品口径：
+正式交付只有在线版，另有本地开发版，两者共享同一源码和产品口径：
 
 - 在线版：GitHub Pages；
-- 单文件离线版：仓库根目录 `PriceLens.html`；
-- 本地开发版：`http://localhost:5174`。
+- 本地开发版：`npm run dev`，端口以终端打印为准。
+
+离线单文件（仓库根目录 `PriceLens.html`）已于 2026-11-27 退役，不再是交付入口。
 
 旧的独立 Copilot、录制、roadshow 和演示页面是历史素材，不是产品入口，也不能作为正式设计或交互基线。
 
@@ -95,7 +96,7 @@ PriceLens 面向品牌方内部的价格操盘和经营分析，不是面向公�
 
 ## Evidence on Hand
 
-- The repository contains the current React and TypeScript implementation, shared runtime tokens, chart models, tests, and the generated offline single-file build.
+- The repository contains the current React and TypeScript implementation, shared runtime tokens, chart models, tests, and the generated web build (`pricelens/dist`) deployed to GitHub Pages.
 - The current data batch contains 29 countries in the dimension table, 25 enabled countries, 1,253 SKUs, and 95,946 weekly platform-price facts spanning 2026-W19 to 2026-W45.
 - Existing product, UX, roadshow, and research documents are available as historical decision records. Roadshow and recording assets are evidence of exploration, not formal product entry points or visual authority.
 - Evidence quality is incomplete by design: the Agent's demonstration forecast is simulated and must carry an explicit status label. There are no approved customer testimonials or public consumer research materials in the current product evidence set.

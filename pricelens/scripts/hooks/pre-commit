@@ -1,6 +1,7 @@
 #!/bin/sh
 # ============================================================
 # PriceLens 提交前防线（第十八轮）：typecheck → verify → test → build。
+# build = 在线版（GitHub Pages）构建产物 pricelens/dist；离线单文件已退役（2026-11-27）。
 # 启用（仓库根目录执行一次）：git config core.hooksPath pricelens/scripts/hooks
 # 临时跳过：SKIP_CHECK=1 git commit …（仅限纯文档/注释类提交）
 # ============================================================
@@ -21,7 +22,7 @@ npm run --silent verify || exit 1
 echo "[pre-commit] 3/4 test（chartModel 金测）"
 npm run --silent test || exit 1
 
-echo "[pre-commit] 4/4 build（单文件交付产物）"
+echo "[pre-commit] 4/4 build（GitHub Pages 在线版构建产物 dist/）"
 npm run --silent build || exit 1
 
 echo "[pre-commit] 全部通过 ✓"

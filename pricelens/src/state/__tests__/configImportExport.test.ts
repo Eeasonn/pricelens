@@ -1,7 +1,9 @@
 // ============================================================
 // 配置快照导入/导出单测（2026-11-06 稳定版）：
-// - export shape：schemaVersion / exportedAt / appChannel / keys 六键齐
-// - validate：坏 JSON、schema 不符、缺配置项、类型错、未知键一律拒绝（友好错误）
+// - export shape：schemaVersion / exportedAt / appChannel / keys 齐全（不含已退役的 prevGen）
+// - validate：坏 JSON、schema 不符、缺配置项、类型错、未知键一律拒绝（友好错误）；
+//   例外：退场前导出的老配置文件里的 prevGen 键（上一代关系，2026-11-27 迁到服务器端
+//   配置表）被忽略，不拒绝、不落盘
 // - apply round-trip：导出 → 清配置 → 导入 → 恢复；派发 CONFIG_CHANGED_EVENT；
 //   defaultShop 读缓存随广播失效
 // - null 键 = 恢复系统默认（键被移除）
@@ -11,7 +13,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setRole } from '../../access/role';
 import { addAnomalyMark, listAnomalyMarks, readAnomalyRule, saveAnomalyRule } from '../../dataModel/anomaly';
-import { getEffectiveBenchmark, getPrevGenOverrides, saveBenchmark, savePrevGenOverrides } from '../configStore';
+import { getEffectiveBenchmark, saveBenchmark } from '../configStore';
 import { defaultShopOverrideOf, saveDefaultShopOverrides } from '../defaultShopStore';
 import { LPL } from '../lplKeys';
 import {
@@ -66,7 +68,6 @@ const benchRow = {
 
 function seedConfig(): void {
   saveBenchmark([benchRow]);
-  savePrevGenOverrides({ 'own-huawei-pura-90s-pro': 'own-huawei-pura-80-ultra' });
   saveDefaultShopOverrides({ RU: 'ozon-flagship' });
   saveAnomalyRule({ enabled: true, thresholdPct: 30 });
   addAnomalyMark({
@@ -75,8 +76,11 @@ function seedConfig(): void {
   });
 }
 
+/** 上一代关系退役前的 localStorage 键名（lplKeys.cfgPrevGen 已删，这里用字面量钉住「不再落盘」） */
+const LEGACY_PREV_GEN_KEY = 'LPL3.config.prevGen';
+
 function clearAllConfig(): void {
-  for (const key of [LPL.cfgBenchmark, LPL.cfgPrevGen, LPL.cfgDefaultShop, LPL.cfgAnomalyRule, LPL.cfgAnomalyMarks, LPL.cfgMarketRules, LPL.cfgFx]) {
+  for (const key of [LPL.cfgBenchmark, LPL.cfgDefaultShop, LPL.cfgAnomalyRule, LPL.cfgAnomalyMarks, LPL.cfgMarketRules, LPL.cfgFx]) {
     window.localStorage.removeItem(key);
   }
 }
@@ -89,20 +93,25 @@ describe('exportConfigSnapshot · shape', () => {
     expect(snap.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     expect(snap.appChannel).toBe('stable');
     expect(Object.keys(snap.keys).sort()).toEqual(
-      ['anomalyMarks', 'anomalyRule', 'benchmark', 'benchmarkMatrix', 'countryAliases', 'defaultShop', 'fx', 'industryOfCat', 'marketRules', 'modelAliases', 'platformAliases', 'prevGen', 'promoRows', 'seriesRules', 'storeAliases', 'tierLadders'],
+      ['anomalyMarks', 'anomalyRule', 'benchmark', 'benchmarkMatrix', 'countryAliases', 'defaultShop', 'fx', 'industryOfCat', 'marketRules', 'modelAliases', 'platformAliases', 'promoRows', 'seriesRules', 'storeAliases', 'tierLadders'],
     );
     // 导出 = 原始持久化值（种子即落盘内容）
     expect(snap.keys.benchmark).toEqual([benchRow]);
-    expect(snap.keys.prevGen).toEqual({ 'own-huawei-pura-90s-pro': 'own-huawei-pura-80-ultra' });
     expect(snap.keys.defaultShop).toEqual({ RU: 'ozon-flagship' });
     expect(snap.keys.anomalyRule).toEqual({ enabled: true, thresholdPct: 30 });
     expect(snap.keys.anomalyMarks).toHaveLength(1);
   });
 
+  it('上一代关系已退出快照（2026-11-27）：浏览器里残留的旧键不会被导出', () => {
+    window.localStorage.setItem(LEGACY_PREV_GEN_KEY, JSON.stringify({ 'own-huawei-pura-90s-pro': 'own-huawei-pura-80-ultra' }));
+    const snap = exportConfigSnapshot();
+    expect(snap.keys).not.toHaveProperty('prevGen');
+    expect(JSON.stringify(snap)).not.toContain('own-huawei-pura-80-ultra');
+  });
+
   it('空浏览器导出：配置键全为 null（fx 只读历史键无值亦为 null）', () => {
     const snap = exportConfigSnapshot();
     expect(snap.keys.benchmark).toBeNull();
-    expect(snap.keys.prevGen).toBeNull();
     expect(snap.keys.defaultShop).toBeNull();
     expect(snap.keys.anomalyRule).toBeNull();
     expect(snap.keys.anomalyMarks).toBeNull();
@@ -117,7 +126,7 @@ describe('validateImportPayload · 坏文件一律拒绝（不半写入）', () 
     exportedAt: '2026-11-06T10:00:00.000Z',
     appChannel: 'stable',
     keys: {
-      benchmark: null, prevGen: null, defaultShop: null, anomalyRule: null, anomalyMarks: null, fx: null,
+      benchmark: null, defaultShop: null, anomalyRule: null, anomalyMarks: null, fx: null,
     },
   });
 
@@ -155,9 +164,8 @@ describe('validateImportPayload · 坏文件一律拒绝（不半写入）', () 
     expect(res.error).toContain('referenceWorkspace');
   });
 
-  it('类型/结构错：benchmark 非数组、prevGen 值非字符串、defaultShop 值空、anomalyRule 阈值越界、anomalyMarks action 非法、fx 负数', () => {
+  it('类型/结构错：benchmark 非数组、defaultShop 值空、anomalyRule 阈值越界、anomalyMarks action 非法、fx 负数', () => {
     expect(validateImportPayload({ ...base(), keys: { ...base().keys, benchmark: {} } }).error).toContain('benchmark');
-    expect(validateImportPayload({ ...base(), keys: { ...base().keys, prevGen: { m: 3 } } }).error).toContain('prevGen');
     expect(validateImportPayload({ ...base(), keys: { ...base().keys, defaultShop: { RU: '' } } }).error).toContain('defaultShop');
     expect(validateImportPayload({ ...base(), keys: { ...base().keys, anomalyRule: { enabled: true, thresholdPct: 5 } } }).error).toContain('anomalyRule');
     expect(validateImportPayload({
@@ -222,6 +230,25 @@ describe('validateImportPayload · 坏文件一律拒绝（不半写入）', () 
     expect(res.ok).toBe(true);
     expect(res.payload?.keys.benchmark).toEqual([benchRow]);
   });
+
+  it('上一代关系退役（2026-11-27）：prevGen 不再是必含项——新导出（无该键）照常通过', () => {
+    const res = validateImportPayload(base());
+    expect(res.ok).toBe(true);
+    expect(res.payload?.keys).not.toHaveProperty('prevGen');
+  });
+
+  it('上一代关系退役（2026-11-27）：老配置文件带 prevGen 键 → 忽略、不校验、不拒绝', () => {
+    // 退场前导出的文件：prevGen 是合法对象
+    const legacy = { ...base(), keys: { ...base().keys, prevGen: { 'own-huawei-pura-90s-pro': 'own-huawei-pura-80-ultra', 'own-huawei-mate-80-pro': null } } };
+    const res = validateImportPayload(legacy);
+    expect(res.ok).toBe(true);
+    expect(res.payload?.keys).not.toHaveProperty('prevGen');
+    expect(res.payload?.keys.benchmark).toBeNull();
+    // 形状不对也不校验（字段已退役，没有任何消费方）：此前会报「prevGen（上一代关系）…」并拒绝整份
+    const malformed = validateImportPayload({ ...base(), keys: { ...base().keys, prevGen: { m: 3 } } });
+    expect(malformed.ok).toBe(true);
+    expect(malformed.payload?.keys).not.toHaveProperty('prevGen');
+  });
 });
 
 describe('applyImportPayload · round-trip 与权限', () => {
@@ -229,7 +256,6 @@ describe('applyImportPayload · round-trip 与权限', () => {
     seedConfig();
     const snap: ConfigSnapshotV1 = JSON.parse(JSON.stringify(exportConfigSnapshot()));
     clearAllConfig();
-    expect(getPrevGenOverrides()).toEqual({});
     expect(defaultShopOverrideOf('RU')).toBeNull();
 
     const fired = vi.fn();
@@ -244,10 +270,27 @@ describe('applyImportPayload · round-trip 与权限', () => {
     expect(window.localStorage.getItem(LPL.cfgBenchmark)).toEqual(JSON.stringify([benchRow]));
     expect(getEffectiveBenchmark().some((r) => r.competitor_sku_id === benchRow.competitor_sku_id
       && r.country_code === benchRow.country_code && r.own_model_id === benchRow.own_model_id)).toBe(true);
-    expect(getPrevGenOverrides()).toEqual({ 'own-huawei-pura-90s-pro': 'own-huawei-pura-80-ultra' });
     expect(defaultShopOverrideOf('RU')).toBe('ozon-flagship');
     expect(readAnomalyRule()).toEqual({ enabled: true, thresholdPct: 30 });
     expect(listAnomalyMarks()).toHaveLength(1);
+  });
+
+  it('上一代关系退役（2026-11-27）：导入带 prevGen 的老配置文件 → 其余配置照常恢复，prevGen 不落盘', () => {
+    seedConfig();
+    const legacy = JSON.parse(JSON.stringify(exportConfigSnapshot())) as ConfigSnapshotV1 & { keys: { prevGen: unknown } };
+    legacy.keys.prevGen = { 'own-huawei-pura-90s-pro': 'own-huawei-pura-80-ultra' };
+    clearAllConfig();
+
+    const result = applyImportPayload(legacy);
+
+    expect(result.applied).toBe(true);
+    expect(window.localStorage.getItem(LEGACY_PREV_GEN_KEY)).toBeNull();
+    expect(window.localStorage.getItem(LPL.cfgBenchmark)).toEqual(JSON.stringify([benchRow]));
+    expect(defaultShopOverrideOf('RU')).toBe('ozon-flagship');
+    expect(readAnomalyRule()).toEqual({ enabled: true, thresholdPct: 30 });
+    expect(listAnomalyMarks()).toHaveLength(1);
+    // 导入摘要不再出现上一代关系
+    expect(result.summary).not.toHaveProperty('prevGenCount');
   });
 
   it('null 键 = 恢复系统默认（对应 localStorage 键被移除）', () => {
@@ -263,7 +306,6 @@ describe('applyImportPayload · round-trip 与权限', () => {
     const wiped = applyImportPayload(emptySnap);
     expect(wiped.applied).toBe(true);
     expect(window.localStorage.getItem(LPL.cfgBenchmark)).toBeNull();
-    expect(window.localStorage.getItem(LPL.cfgPrevGen)).toBeNull();
     expect(window.localStorage.getItem(LPL.cfgDefaultShop)).toBeNull();
     expect(window.localStorage.getItem(LPL.cfgAnomalyRule)).toBeNull();
     expect(window.localStorage.getItem(LPL.cfgAnomalyMarks)).toBeNull();
@@ -277,7 +319,7 @@ describe('applyImportPayload · round-trip 与权限', () => {
     const result = applyImportPayload(snap);
     expect(result.applied).toBe(false);
     expect(result.reason).toContain('查阅者');
-    for (const key of [LPL.cfgBenchmark, LPL.cfgPrevGen, LPL.cfgDefaultShop, LPL.cfgAnomalyRule, LPL.cfgAnomalyMarks]) {
+    for (const key of [LPL.cfgBenchmark, LPL.cfgDefaultShop, LPL.cfgAnomalyRule, LPL.cfgAnomalyMarks]) {
       expect(window.localStorage.getItem(key)).toBeNull();
     }
   });
@@ -295,10 +337,15 @@ describe('summarizeImportPayload · 预览摘要', () => {
     const summary = summarizeImportPayload(JSON.parse(JSON.stringify(exportConfigSnapshot())) as ConfigSnapshotV1);
     expect(summary.benchmarkTotal).toBe(1);
     expect(summary.benchmarkByCountry).toEqual([{ countryCode: 'RU', count: 1 }]);
-    expect(summary.prevGenCount).toBe(1);
     expect(summary.defaultShopCount).toBe(1);
     expect(summary.anomalyRule).toEqual({ enabled: true, thresholdPct: 30 });
     expect(summary.anomalyMarkCount).toBe(1);
     expect(summary.fxIncluded).toBe(false);
+  });
+
+  it('上一代关系退役（2026-11-27）：摘要不再带 prevGenCount（导入预览不再出现该行）', () => {
+    seedConfig();
+    const summary = summarizeImportPayload(JSON.parse(JSON.stringify(exportConfigSnapshot())) as ConfigSnapshotV1);
+    expect(summary).not.toHaveProperty('prevGenCount');
   });
 });

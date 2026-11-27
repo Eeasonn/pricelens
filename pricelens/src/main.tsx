@@ -6,7 +6,8 @@ import { applyPersistedDataPack } from './data/bootstrap';
 
 // 两段式启动（2026-11-14 数据包机制）：先把持久化的导入数据置换进数据层，
 // 再动态 import App——App 树全部模块（含各模块级数据缓存 Map）都在数据就位后
-// 才初始化。单文件构建由 vite-plugin-singlefile 的 inlineDynamicImports 保序。
+// 才初始化。保序靠的是动态 import 的求值时机（App 是独立 chunk，只在 import()
+// 解析后才求值）；离线单文件退役后（2026-11-27）不再是构建期内联。
 async function bootstrap(): Promise<void> {
   try {
     await applyPersistedDataPack();
@@ -27,7 +28,7 @@ async function bootstrap(): Promise<void> {
         <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;color:#333">
           <div style="max-width:420px;text-align:center;padding:32px;border:1px solid #e5e5e5;border-radius:8px">
             <div style="font-size:15px;font-weight:600;margin-bottom:8px">应用启动失败</div>
-            <div style="font-size:13px;color:#666;line-height:1.6">资源加载出现异常（可能是网络中断或浏览器缓存过期）。请刷新页面重试；若反复出现，请重新获取最新的应用文件。</div>
+            <div style="font-size:13px;color:#666;line-height:1.6">资源加载出现异常（可能是网络中断，或浏览器缓存了旧版本页面）。请刷新页面重试；若反复出现，请强制刷新（⌘⇧R / Ctrl+F5）后再试。</div>
           </div>
         </div>`;
     }

@@ -1,8 +1,42 @@
 import { describe, expect, it } from 'vitest';
 // @ts-ignore 测试运行时读二进制资产（仓库未装 @types/node；仅 vitest 使用）
 import { readFileSync } from 'node:fs';
-import { buildConfigTemplateXlsx, exportConfigWorkbookXlsx, parseConfigWorkbook } from '../configTemplate';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
+import { CONFIG_TEMPLATE_SHEETS, buildConfigTemplateXlsx, exportConfigWorkbookXlsx, parseConfigWorkbook } from '../configTemplate';
 import { validateImportPayload } from '../configImportExport';
+
+/** 工作簿页签名（按 workbook.xml 顺序） */
+const sheetNamesOf = (bytes: Uint8Array): string[] =>
+  Array.from(strFromU8(unzipSync(bytes)['xl/workbook.xml'] ?? new Uint8Array()).matchAll(/<sheet\s+([^>]+?)\s*\/?>/g))
+    .map((match) => match[1]!.match(/(?:^|\s)name="([^"]*)"/)?.[1] ?? '');
+
+/** 模拟退场前导出的旧工作簿：在现有导出产物上补一页「上一代关系」（含数据行）。
+ *  sheetId / rId / 部件名都排在现有页签与 styles 关系之后，不与任何既有部件冲突。 */
+function withLegacyPrevGenSheet(bytes: Uint8Array, rows: string[][]): Uint8Array {
+  const files = unzipSync(bytes) as Record<string, Uint8Array>;
+  const sheetCount = sheetNamesOf(bytes).length;
+  const sheetId = sheetCount + 1; // styles 占 rId{sheetCount+1}
+  const rid = `rId${sheetCount + 2}`;
+  const part = `xl/worksheets/sheet${sheetId}.xml`;
+  const cell = (ref: string, text: string): string => `<c r="${ref}" t="inlineStr"><is><t>${text}</t></is></c>`;
+  const col = (index: number): string => String.fromCharCode(65 + index);
+  files[part] = strToU8(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${
+      rows.map((row, r) => `<row r="${r + 1}">${row.map((value, c) => cell(`${col(c)}${r + 1}`, value)).join('')}</row>`).join('')
+    }</sheetData></worksheet>`,
+  );
+  const patch = (path: string, closing: string, addition: string): void => {
+    const xml = strFromU8(files[path]!);
+    if (!xml.includes(closing)) throw new Error(`${path} 结构不符，无法注入旧页签`);
+    files[path] = strToU8(xml.replace(closing, `${addition}${closing}`));
+  };
+  patch('xl/workbook.xml', '</sheets>', `<sheet name="上一代关系" sheetId="${sheetId}" r:id="${rid}"/>`);
+  patch('xl/_rels/workbook.xml.rels', '</Relationships>',
+    `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${sheetId}.xml"/>`);
+  patch('[Content_Types].xml', '</Types>',
+    `<Override PartName="/${part}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
+  return zipSync(files);
+}
 
 describe('config workbook template', () => {
   it('builds a workbook with all configuration sheets', () => {
@@ -10,7 +44,16 @@ describe('config workbook template', () => {
     expect(bytes.byteLength).toBeGreaterThan(500);
     const snapshot = parseConfigWorkbook(bytes);
     expect(snapshot.schemaVersion).toBe(1);
-    expect(snapshot.keys).toMatchObject({ benchmark: [], prevGen: {}, defaultShop: {}, anomalyRule: { enabled: false, thresholdPct: 50 }, anomalyMarks: [], marketRules: [], fx: null });
+    expect(snapshot.keys).toMatchObject({ benchmark: [], defaultShop: {}, anomalyRule: { enabled: false, thresholdPct: 50 }, anomalyMarks: [], marketRules: [], fx: null });
+  });
+
+  it('页签清单（2026-11-27「上一代关系」退役）：模板不再带该页签，解析结果也不再产出 prevGen', () => {
+    const bytes = buildConfigTemplateXlsx();
+    const names = sheetNamesOf(bytes);
+    expect(names).toEqual([...CONFIG_TEMPLATE_SHEETS]);
+    expect(names).toHaveLength(16);
+    expect(names).not.toContain('上一代关系');
+    expect(parseConfigWorkbook(bytes).keys).not.toHaveProperty('prevGen');
   });
 });
 
@@ -24,7 +67,6 @@ const snapshotBase = () => ({
         { country_code: 'RU', own_model_id: 'own-huawei-watch-ultimate-2', own_romram: '46mm', competitor_sku_id: 'cmp-apple-watch-ultra-4__46mm__ti', sort: 1, source: 'matrix' as const, note: '含逗号, 备注' },
         { country_code: 'RU', own_model_id: 'own-huawei-watch-ultimate-2', own_romram: '46mm', competitor_sku_id: 'cmp-garmin-fenix-8-pro__47mm__black', sort: 2, source: 'matrix' as const, note: undefined },
       ],
-      prevGen: { 'own-huawei-nova-16s': 'own-huawei-nova-15', 'own-huawei-mate-80-pro': null },
       defaultShop: { RU: 'RU:dns:独立站', 'RU::own-huawei-mate-x7': 'RU:ozon:3P' },
       anomalyRule: { enabled: true, thresholdPct: 12 },
       anomalyMarks: [
@@ -61,7 +103,9 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
       { country_code: 'RU', own_model_id: 'own-huawei-watch-ultimate-2', own_romram: '46mm', competitor_sku_id: 'cmp-apple-watch-ultra-4__46mm__ti', sort: 1, source: 'matrix' as const, note: '含逗号, 备注' },
       { country_code: 'RU', own_model_id: 'own-huawei-watch-ultimate-2', own_romram: '46mm', competitor_sku_id: 'cmp-garmin-fenix-8-pro__47mm__black', sort: 2, source: 'matrix' as const, note: undefined },
     ]);
-    expect(parsed.keys.prevGen).toEqual({ 'own-huawei-nova-16s': 'own-huawei-nova-15', 'own-huawei-mate-80-pro': null });
+    // 「上一代关系」页签已退役（2026-11-27）：导出不再带这一页，解析结果也没有 prevGen
+    expect(sheetNamesOf(bytes)).not.toContain('上一代关系');
+    expect(parsed.keys).not.toHaveProperty('prevGen');
     expect(parsed.keys.defaultShop).toEqual({ RU: 'RU:dns:独立站', 'RU::own-huawei-mate-x7': 'RU:ozon:3P' });
     expect(parsed.keys.anomalyRule).toEqual({ enabled: true, thresholdPct: 12 });
     expect(parsed.keys.anomalyMarks).toHaveLength(1);
@@ -87,10 +131,28 @@ describe('exportConfigWorkbookXlsx（2026-11-10 导出配置 = xlsx）', () => {
   });
 
   it('空快照：各分区仅表头 → 与模板解析语义一致（恢复默认）', () => {
-    const bytes = exportConfigWorkbookXlsx({ ...snapshotBase(), keys: { benchmark: [], prevGen: {}, defaultShop: {}, anomalyRule: null, anomalyMarks: [], marketRules: null, fx: null } });
+    const bytes = exportConfigWorkbookXlsx({ ...snapshotBase(), keys: { benchmark: [], defaultShop: {}, anomalyRule: null, anomalyMarks: [], marketRules: null, fx: null } });
     const parsed = parseConfigWorkbook(bytes);
     expect(validateImportPayload(parsed).ok).toBe(true);
-    expect(parsed.keys).toMatchObject({ benchmark: [], prevGen: {}, defaultShop: {}, anomalyRule: null, anomalyMarks: [], marketRules: [], fx: null });
+    expect(parsed.keys).toMatchObject({ benchmark: [], defaultShop: {}, anomalyRule: null, anomalyMarks: [], marketRules: [], fx: null });
+  });
+
+  it('导入旧工作簿（退场前导出、带「上一代关系」页签与数据行）不报错：该页签被忽略，其余页签照常还原', () => {
+    // 上一代关系的权威来源已迁到服务器端配置表 config_tables.xlsx「上一代配置」页签；
+    // 旧工作簿里的这一页不读、不校验、不报错，也不让其余配置跟着失败
+    const legacy = withLegacyPrevGenSheet(exportConfigWorkbookXlsx(snapshotBase()), [
+      ['model_id', 'previous_model_id', 'note'],
+      ['own-huawei-nova-16s', 'own-huawei-nova-15', ''],
+      ['own-huawei-mate-80-pro', '', '置空'],
+    ]);
+    expect(sheetNamesOf(legacy)).toContain('上一代关系');
+    const parsed = parseConfigWorkbook(legacy);
+    expect(parsed.keys).not.toHaveProperty('prevGen');
+    expect(parsed.keys.benchmark).toHaveLength(2);
+    expect(parsed.keys.defaultShop).toEqual({ RU: 'RU:dns:独立站', 'RU::own-huawei-mate-x7': 'RU:ozon:3P' });
+    expect(parsed.keys.anomalyRule).toEqual({ enabled: true, thresholdPct: 12 });
+    expect(parsed.keys.seriesRules).toEqual(snapshotBase().keys.seriesRules);
+    expect(validateImportPayload(parsed).ok).toBe(true);
   });
 
   it('2026-11-18 审计 P1-3/P2-5：带空格平台名不被切碎；矩阵空国家码解析为 null 通配', () => {

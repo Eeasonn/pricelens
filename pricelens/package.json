@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/sync-single.mjs",
+    "build": "vite build",
     "preview": "vite preview",
     "agent-server": "node server/agent-server.mjs",
     "gen": "echo '[deprecated] 造数脚本已被真实数据接入取代：npm run ingest' && node scripts/gen-data.mjs",
@@ -19,7 +19,6 @@
     "ingest": "python3 scripts/ingest_real.py",
     "ingest:za": "python3 scripts/ingest_za_booklet.py",
     "review:za": "python3 scripts/review_za_booklet.py",
-    "portable": "node scripts/build_portable.mjs",
     "server": "python3 -X utf8 server/server.py",
     "providers:gen": "node scripts/gen_provider_presets.mjs",
     "server:bundle": "node scripts/build_server_bundle.mjs"
@@ -46,7 +45,6 @@
     "jsdom": "^30.1.3",
     "typescript": "^5.5.4",
     "vite": "^5.4.3",
-    "vite-plugin-singlefile": "^2.0.2",
     "vitest": "^2.1.9"
   },
   "allowScripts": {

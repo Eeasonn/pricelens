@@ -4,16 +4,14 @@
 //   浮窗（BenchConfigModal）完全同一份数据、两套入口重复；浮窗已补齐
 //   品牌/搜索筛选、↑↓ 排序与「恢复 auto」，本页不再保留竞品矩阵编辑）
 // ⓪ 竞品对标配置（2026-10-20 补回）：当前国家×产业全部我司型号×配置的对标竞品（矩阵/自动/替代/人工）可查可改
-// ① 上一代关系（原②）：行 = 当前国家有数据的我司型号（型号级，与 dim_product.prev_model_id
-//    同口径），下拉选上一代型号（候选 = 上市更早的我司型号）；默认读生效关系
-//    （manual 优先 / dim_product auto 兜底），改后差异存 LPL3.config.prevGen
+// ① 上一代关系区块已移除（2026-11-27 Eason 拍板）：上一代关系到配置层级，权威来源是服务器端
+//    配置表 config_tables.xlsx「上一代配置」页签、随数据包 prevGen 段下发；本页不再提供维护入口
 // ② 汇率：只读——真实数据每行自带采集时汇率，USD 值按行折算；此处展示当前国家本币的月度中位汇率
 // ③ 大促日历：只读展示当前国家 dim_promo 的起始时间与促销深度——看板大促带/事件卡的口径来源
 // 默认店铺支持国家级与产品级两层覆盖，产品级使用 `${countryCode}::${modelId}` 键并优先生效。
 // 保存后 dispatchEvent(CONFIG_CHANGED_EVENT) → 主页立即生效
-// 第一百八十五轮（外部 UX 审计落地）：上一代关系「恢复默认」收窄为只清当前国家
-// 型号的人工维护（clearPrevGenOverridesForModels，其他国家原样保留）；默认平台
-// 店铺的取价说明与实际回退链对齐（自动 = 每周最低在架价：默认店铺→预填主店→默认平台）。
+// 第一百八十五轮（外部 UX 审计落地）：默认平台店铺的取价说明与实际回退链对齐
+// （自动 = 每周最低在架价：默认店铺→预填主店→默认平台）。
 // 2026-11-06（稳定版 RBAC + 导入导出）：页头工具行收敛 = 分区锚点 + 搜索 +
 // 角色切换（演示，正式环境将由账号权限下发）+ 导入（仅 GTM）+ 导出（GTM/查阅者）；
 // 查阅者全部写入控件 disabled 并显示横幅；长说明收进 Tooltip（对齐价格走势密度）。
@@ -24,14 +22,7 @@ import { Button, Empty, Input, message, Modal, Popconfirm, Segmented, Select, Ta
 import { DownloadOutlined, FileExcelOutlined, InfoCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import PageHeader from '../components/PageHeader';
 import { setRole, useRole, type AccessRole } from '../access/role';
-import {
-  autoPrevModelId,
-  clearPrevGenOverridesForModels,
-  effectivePrevModelId,
-  getPrevGenOverrides,
-  notifyConfigChanged,
-  savePrevGenOverrides,
-} from '../state/configStore';
+import { notifyConfigChanged } from '../state/configStore';
 import {
   applyImportPayload,
   exportConfigSnapshot,
@@ -65,7 +56,9 @@ import { CONFIG_CHANGED_EVENT } from '../state/lplKeys';
 import { scopeLabels } from '../dataModel/scope';
 import { color, fontSize, radius, shadow, space } from '../theme/tokens';
 
-// ---------------- ② 上一代关系（型号级，与 dim_product.prev_model_id 同口径） ----------------
+// ---------------- 我司型号行（当前国家有数据的我司型号；产品默认店铺表格的数据源） ----------------
+// 名称（PrevGenRow / prevRows / visiblePrevRows）沿用自与「上一代关系」区块共用的时期；
+// 该区块 2026-11-27 移除后只剩产品默认店铺在用，搜索框也只筛这份型号行。
 
 interface PrevGenRow {
   modelId: string;
@@ -74,7 +67,7 @@ interface PrevGenRow {
   industry: string;
 }
 
-/** 当前国家有数据的我司型号行（型号级去重，按首采日排序）——上一代关系维护用 */
+/** 当前国家有数据的我司型号行（型号级去重，按首采日排序）——产品默认店铺表格用 */
 function ownModelRows(countryCode: string): PrevGenRow[] {
   const seen = new Set<string>();
   const rows: PrevGenRow[] = [];
@@ -117,7 +110,6 @@ const CONFIG_SECTIONS: ReadonlyArray<readonly [string, string]> = [
   ['benchmark', '竞品对标'],
   ['default-shop', '默认店铺'],
   ['anomaly', '异常守卫'],
-  ['prev-gen', '上一代关系'],
   ['fx', '汇率'],
   ['promo', '大促日历'],
   ['rules-dict', '规则与字典'],
@@ -166,14 +158,6 @@ export default function Config() {
   }, [sections]);
   const prevRows = useMemo(() => ownModelRows(state.countryCode), [state.countryCode]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [prevMap, setPrevMap] = useState<Record<string, string | null>>(() =>
-    Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])),
-  );
-  // 国家切换 → prevRows 换一套型号，生效关系随口径重建（第一百二十五轮：
-  // 否则下拉仍按首渲染国家的型号解释，保存会写错行）
-  useEffect(() => {
-    setPrevMap(Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])));
-  }, [prevRows]);
   const labels = scopeLabels({ countryCode: state.countryCode, industry: state.industry });
   const localCurrency = currencyOfCountry(state.countryCode);
   const fxRows = useMemo(
@@ -189,52 +173,19 @@ export default function Config() {
   // 本页各块即改即存的自身广播重读是幂等的（第一百一十五轮：无批量「保存配置」）
   useEffect(() => {
     const reread = (): void => {
-      setPrevMap(Object.fromEntries(prevRows.map((r) => [r.modelId, effectivePrevModelId(r.modelId)])));
       setDefaultShopId(defaultShopOverrideOf(state.countryCode));
       setDefaultShopVersion((v) => v + 1);
     };
     window.addEventListener(CONFIG_CHANGED_EVENT, reread);
     return () => window.removeEventListener(CONFIG_CHANGED_EVENT, reread);
-  }, [prevRows, state.countryCode]);
+  }, [state.countryCode]);
 
-  // 第一百一十五轮（评审）：右上「保存配置」按钮删除——本页各明细编辑即改即存
-  //（对标配置 = BenchConfigModal 保存；上一代关系 = 下拉变更即存），
-  // 不再攒一次批量提交。
-
-  /** 上一代关系单行变更即存：只写与 auto 的差异（无差异 = 清除手动维护），主页即时生效。
-   *  覆盖表是全局单表（跨国共享）——以现存表为基底只重写当前国家各行，其他国家型号
-   *  的手动维护原样保留（第一百二十五轮） */
-  const savePrevRow = (modelId: string, value: string | null): void => {
-    setPrevMap((m) => ({ ...m, [modelId]: value }));
-    const overrides: Record<string, string | null> = { ...getPrevGenOverrides() };
-    for (const r of prevRows) {
-      const cur = (r.modelId === modelId ? value : prevMap[r.modelId]) ?? null;
-      if (cur !== autoPrevModelId(r.modelId)) overrides[r.modelId] = cur;
-      else delete overrides[r.modelId];
-    }
-    savePrevGenOverrides(overrides);
-    notifyConfigChanged();
-    message.success('上一代关系已保存，主页已生效');
-  };
-
-  // 第一百八十五轮（外部 UX 审计落地）：当前国家人工维护的型号数——「恢复默认」
-  // 的确认范围与按钮空态都以此为据（覆盖表全局单表，此页只动当前国家的型号）
-  const manualPrevCount = prevRows.filter(
-    (r) => (prevMap[r.modelId] ?? null) !== autoPrevModelId(r.modelId),
-  ).length;
+  // 第一百八十五轮（评审）：右上「保存配置」按钮删除——本页各明细编辑即改即存
+  //（对标配置 = BenchConfigModal 保存），不再攒一次批量提交。
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase();
   const visiblePrevRows = normalizedSearch
     ? prevRows.filter((row) => `${row.label} ${row.modelId}`.toLocaleLowerCase().includes(normalizedSearch))
     : prevRows;
-
-  /** 「恢复默认」收窄（第一百八十五轮）：只清除当前国家型号的人工维护，
-   *  其他国家型号原样保留（原实现清整份跨国覆盖表，不可撤销） */
-  const restorePrevGenDefault = () => {
-    const removed = clearPrevGenOverridesForModels(prevRows.map((r) => r.modelId));
-    setPrevMap(Object.fromEntries(prevRows.map((r) => [r.modelId, autoPrevModelId(r.modelId)])));
-    notifyConfigChanged();
-    message.success(`已恢复${labels.country} ${removed} 个型号的默认上一代关系`);
-  };
 
   // ---------------- 默认平台店铺（第一百三十七轮）：预填 + 人工覆盖，即改即存，主页取价即时生效 ----------------
   // defaultShopId = 人工覆盖（LPL3.config.defaultShop）；prefillShopId = 维表预填（dim_default_channel.json，
@@ -686,7 +637,7 @@ export default function Config() {
                   })}
                 </div>
               </div>
-              {normalizedSearch && <div style={{ marginTop: space.sm, fontSize: fontSize.caption, color: color.mute }}>搜索同时筛选上一代关系和产品默认店铺；清空搜索可恢复全部产品。</div>}
+              {normalizedSearch && <div style={{ marginTop: space.sm, fontSize: fontSize.caption, color: color.mute }}>搜索仅筛选产品默认店铺；清空搜索可恢复全部产品。</div>}
             </div>
           </Block>
 
@@ -702,88 +653,6 @@ export default function Config() {
             }
           >
             <DataQualityBlock canEdit={canEdit} />
-          </Block>
-
-          {/* ① 上一代关系 */}
-          <Block
-            id="prev-gen"
-            title="上一代关系"
-            extra={
-              <Popconfirm
-                title={`仅清除${labels.country} ${manualPrevCount} 个型号的人工关系？`}
-                description="其他国家的型号不受影响，清除后回到产品主数据的默认关系"
-                okText="确定"
-                cancelText="取消"
-                okButtonProps={{ size: 'small' }}
-                cancelButtonProps={{ size: 'small' }}
-                disabled={!canEdit}
-                onConfirm={restorePrevGenDefault}
-              >
-                <Button
-                  size="small"
-                  disabled={!canEdit || manualPrevCount === 0}
-                  title={!canEdit
-                    ? viewerHint
-                    : manualPrevCount === 0
-                      ? '当前国家没有人工维护的上一代关系'
-                      : undefined}
-                >
-                  恢复默认
-                </Button>
-              </Popconfirm>
-            }
-          >
-            {visiblePrevRows.length ? (
-              <div className="lpl-config-prev-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: space.sm }}>
-                {visiblePrevRows.map((r) => {
-                  const auto = autoPrevModelId(r.modelId);
-                  const manual = (prevMap[r.modelId] ?? null) !== auto;
-                  return (
-                    <div key={r.modelId} style={{ display: 'flex', alignItems: 'center', gap: space.sm, minWidth: 0 }}>
-                      <Tooltip title={`${r.label}（${r.launch} 上市）`}>
-                        <span
-                          style={{
-                            fontSize: fontSize.bodySm,
-                            color: color.ink,
-                            width: 140,
-                            flexShrink: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {r.label}
-                        </span>
-                      </Tooltip>
-                      <Select
-                        size="small"
-                        allowClear
-                        disabled={!canEdit}
-                        placeholder="未维护"
-                        aria-label={`上一代关系：${r.label}`}
-                        style={{ width: 170, flexShrink: 0 }}
-                        value={prevMap[r.modelId] ?? undefined}
-                        options={prevRows
-                          .filter((c) => c.launch < r.launch)
-                          .map((c) => ({ label: c.label, value: c.modelId }))}
-                        onChange={(v) => savePrevRow(r.modelId, v ?? null)}
-                      />
-                      <Tooltip title={manual ? '手动维护' : '来自产品主数据'}>
-                        <Tag
-                          color={manual ? 'blue' : 'default'}
-                          style={{ marginInlineEnd: 0, fontSize: fontSize.caption, lineHeight: '18px', flexShrink: 0 }}
-                        >
-                          {manual ? '手动' : '自动来源'}
-                        </Tag>
-                      </Tooltip>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={normalizedSearch ? '没有匹配的型号' : '暂无产品数据'} />
-            )}
-            {normalizedSearch && <div style={{ marginTop: space.sm, fontSize: fontSize.caption, color: color.mute }}>搜索仅筛选上一代关系型号；清空搜索可恢复当前国家全部型号。</div>}
           </Block>
 
           {/* ② 汇率（只读）：真实数据按行折算，这里展示本币月度中位汇率 */}
@@ -880,14 +749,15 @@ export default function Config() {
           </Block>
 
           {/* 数据包（2026-11-14 Eason「价格数据完全以导入方式承载 + 本地可运行、
-              可快速迁移到其他电脑」）：导入/导出/还原内置——应用单文件 +
-              数据包两文件即可在任意电脑完整运行；查阅者只读 */}
+              可快速迁移到其他电脑」）：导入/导出/还原内置；查阅者只读。
+              离线单文件已退役（2026-11-27）：不再有「应用文件 + 数据包」的迁移说法，
+              导入包只保存在本机浏览器（IndexedDB）或本机服务器 */}
           <Block
             id="data-pack"
             title="数据包"
             extra={
               <span style={{ fontSize: fontSize.caption, color: color.mute }}>
-                价格数据导入承载 · 应用 + 数据包两文件即可迁移到其他电脑
+                价格数据导入承载 · 导入包保存在本机浏览器或本机服务器
               </span>
             }
           >
@@ -937,9 +807,6 @@ export default function Config() {
                 {previewRow('导出时间', `${pendingImport.summary.exportedAt.slice(0, 16).replace('T', ' ')} UTC`)}
                 {previewRow('来源通道', pendingImport.summary.appChannel === 'stable' ? '稳定版' : '迭代版')}
                 {previewRow('竞品对标', benchmarkPreviewText(pendingImport.summary))}
-                {previewRow('上一代关系', pendingImport.summary.prevGenCount > 0
-                  ? `${pendingImport.summary.prevGenCount} 个型号人工维护`
-                  : '无人工维护 → 恢复系统默认')}
                 {previewRow('默认店铺', defaultShopPreviewText(pendingImport.summary))}
                 {previewRow('市场采集规则', pendingImport.summary.marketRuleCount > 0
                   ? `${pendingImport.summary.marketRuleCount} 个国家`

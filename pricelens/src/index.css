@@ -563,13 +563,11 @@ button.lpl-map-card:hover {
   .lpl-alert-row .lpl-alert-name { white-space: normal; }
   .lpl-bm-cfg { width: 100%; }
 
-  /* 配置页两组卡片在手机上占满容器；桌面仍保留每项的可读最小宽度，
-     避免 380/400px 的网格最小值把整页撑出横向滚动。 */
-  .lpl-config-prev-grid,
+  /* 配置页大促日历卡片在手机上占满容器；桌面仍保留每项的可读最小宽度，
+     避免 380px 的网格最小值把整页撑出横向滚动。 */
   .lpl-config-promo-grid {
     grid-template-columns: minmax(0, 1fr) !important;
   }
-  .lpl-config-prev-grid > *,
   .lpl-config-promo-grid > * {
     min-width: 0;
   }

@@ -56,7 +56,8 @@ export interface DimProduct {
   first_week: string; // YYYYWW
   last_week: string;
   countries: string[]; // 有事实行的国家码
-  prev_model_id?: string | null;
+  // prev_model_id（型号级前后代）已退役（2026-11-27）：上一代关系到配置层级，权威来源是
+  // 服务器端配置表 config_tables.xlsx「上一代配置」页签，随数据包 prevGen 段下发（见 PrevGenGroup）
   next_model_id?: string | null;
   /**
    * 维度1（2026-11-17 真实销量对齐，Eason offer/PSI 契约 Category1）：
@@ -241,6 +242,25 @@ export interface FactSalesWeekly {
   /** 维度3（平板柔光 Normal / PaperMatte）：服务器已解析的行携带；缺省 = 未知，
    *  取数时按通配处理（兼容历史包与不带柔光的模拟数据） */
   cat3?: string;
+}
+
+// ---------------- 上一代配置（2026-11-27 Eason 拍板：上一代要到 cat（配置）层级） ----------------
+
+/** 上一代配置目标：[上一代型号 id, 上一代配置组]。配置组 = 该型号 dims.product[].romram
+ *  的取值（空配置归一成 '—'）；上一代可以是竞品型号（"竞品也登记"）。 */
+export type PrevGenTarget = [modelId: string, romram: string];
+
+/** 数据包 v2 顶层段 prevGen 的一行：当前「型号 × 配置组」→ 上一代配置组列表。
+ *  权威来源 = 服务器端配置表 config_tables.xlsx「上一代配置」页签，由 server/prev_gen.py
+ *  解析后进包；一个当前组可对多个上一代，同一上一代可被多个当前组指向。
+ *  老数据包 / 内置静态数据包 / 页签缺省时整段缺失，消费方按「无上一代关系」处理。 */
+export interface PrevGenGroup {
+  /** 当前型号 id，如 own-huawei-mate-x7 */
+  m: string;
+  /** 当前配置组，如 12+512 GB；无配置维度的型号为 '—' */
+  r: string;
+  /** 上一代配置组列表（已去重） */
+  p: PrevGenTarget[];
 }
 
 // ---------------- 图表取数契约（§7.3 显示层聚合口径的输出） ----------------

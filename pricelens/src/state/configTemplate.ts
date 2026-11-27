@@ -4,6 +4,9 @@
 // 这里使用项目已有的 fflate 生成和读取最小 OOXML 工作簿，避免把配置导入
 // 绑定到第三方表格组件。模板与现有 JSON 快照共用同一套字段语义，导入前仍
 // 由 configImportExport.ts 做完整校验，因此表格不会绕过现有的配置边界。
+// 「上一代关系」页签已移除（2026-11-27 Eason 拍板）：上一代关系到配置层级，权威来源
+// 是服务器端配置表 config_tables.xlsx「上一代配置」页签、随数据包 prevGen 段下发，
+// 不再走个人配置工作簿。
 // ============================================================
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import type { ConfigSnapshotV1, MarketDataRuleConfig } from './configImportExport';
@@ -17,7 +20,6 @@ export const CONFIG_TEMPLATE_SHEETS = [
   '默认店铺',
   '产品默认店铺',
   '竞品对标',
-  '上一代关系',
   '异常规则',
   '人工裁定',
   '系列规则',
@@ -51,7 +53,7 @@ const SHEET_DEFINITIONS: SheetData[] = [
       ['默认店铺', '每个国家最多保留一行。channel_id 必须来自当前数据中的渠道维表，例如 RU:dns:独立站。'],
       ['产品默认店铺', '可按国家 × 我司型号覆盖国家默认店铺。键由系统保存为 country_code::own_model_id，同一产品最多一行。'],
       ['竞品对标', '一行表示一个“国家 × 我司型号 × 配置 × 竞品”关系。source 只允许 matrix、substitute、manual、auto。'],
-      ['上一代关系', 'model_id 和 previous_model_id 填产品主数据中的型号 id。previous_model_id 留空表示清除该型号的人工关系。'],
+      ['上一代关系', '不在本表维护：上一代关系已到配置层级，由服务器端配置表 config_tables.xlsx 的「上一代配置」页签维护，随数据包下发。'],
       ['异常规则', '只填写一行。enabled 使用 TRUE 或 FALSE，threshold_pct 使用 10–90 的整数。'],
       ['人工裁定', 'action 只允许 exempt 或 isolate。ts 使用毫秒时间戳，label、price、wow 可留空。'],
       ['市场采集规则', '按国家维护来源类型、时间粒度、固定平台、分期期数和买断/无价格是否参与。ZA 规则由系统门禁保护，未发布事实不会进入运行时。'],
@@ -87,11 +89,6 @@ const SHEET_DEFINITIONS: SheetData[] = [
     name: '竞品对标',
     widths: [18, 24, 22, 24, 12, 14, 40],
     rows: [['country_code', 'own_model_id', 'own_romram', 'competitor_sku_id', 'sort', 'source', 'note']],
-  },
-  {
-    name: '上一代关系',
-    widths: [26, 30, 40],
-    rows: [['model_id', 'previous_model_id', 'note']],
   },
   {
     name: '异常规则',
@@ -261,60 +258,56 @@ export function exportConfigWorkbookXlsx(snapshot: ConfigSnapshotV1): Uint8Array
         row.sort, row.source, row.note ?? '',
       ] as CellValue[]),
     ],
-    上一代关系: [
-      SHEET_DEFINITIONS[5].rows[0],
-      ...Object.entries(keys.prevGen ?? {}).map(([model, previous]) => [model, previous ?? '', ''] as CellValue[]),
-    ],
     异常规则: [
-      SHEET_DEFINITIONS[6].rows[0],
+      SHEET_DEFINITIONS[5].rows[0],
       ...(keys.anomalyRule ? [[keys.anomalyRule.enabled, keys.anomalyRule.thresholdPct, ''] as CellValue[]] : []),
     ],
     人工裁定: [
-      SHEET_DEFINITIONS[7].rows[0],
+      SHEET_DEFINITIONS[6].rows[0],
       ...(keys.anomalyMarks ?? []).map((mark) => [
         mark.countryCode, mark.seriesKey, mark.bucketId, mark.action,
         mark.granularity ?? '', mark.label, mark.price ?? '', mark.wow ?? '', mark.ts, '',
       ] as CellValue[]),
     ],
     系列规则: [
-      SHEET_DEFINITIONS[8].rows[0],
+      SHEET_DEFINITIONS[7].rows[0],
       ...(keys.seriesRules ?? []).map((rule) => [rule.brand, rule.pattern, rule.series] as CellValue[]),
     ],
     型号别名: [
-      SHEET_DEFINITIONS[9].rows[0],
+      SHEET_DEFINITIONS[8].rows[0],
       ...(keys.modelAliases ?? []).map((row) => [row.brand, row.from, row.to] as CellValue[]),
     ],
     对标矩阵: [
-      SHEET_DEFINITIONS[10].rows[0],
+      SHEET_DEFINITIONS[9].rows[0],
       ...(keys.benchmarkMatrix ?? []).map((row) => [
         row.country_code, row.own_model_id, row.own_romram, row.competitor_sku_id, row.sort, row.note ?? '',
       ] as CellValue[]),
     ],
     分档阶梯: [
-      SHEET_DEFINITIONS[11].rows[0],
+      SHEET_DEFINITIONS[10].rows[0],
       ...Object.entries(keys.tierLadders ?? {}).map(([industry, points]) => [industry, points.join(',')] as CellValue[]),
     ],
     大促档期: [
-      SHEET_DEFINITIONS[12].rows[0],
+      SHEET_DEFINITIONS[11].rows[0],
       ...(keys.promoRows ?? []).map((row) => [
         row.country_code, row.promo_name, row.start_date, row.end_date, row.depth_hint,
         row.platforms ? row.platforms.join(',') : '',
       ] as CellValue[]),
     ],
     国家别名: [
-      SHEET_DEFINITIONS[13].rows[0],
+      SHEET_DEFINITIONS[12].rows[0],
       ...Object.entries(keys.countryAliases ?? {}).map(([alias, cc]) => [alias, cc] as CellValue[]),
     ],
     平台别名: [
-      SHEET_DEFINITIONS[14].rows[0],
+      SHEET_DEFINITIONS[13].rows[0],
       ...Object.entries(keys.platformAliases ?? {}).map(([alias, platform]) => [alias, platform] as CellValue[]),
     ],
     店铺类型别名: [
-      SHEET_DEFINITIONS[15].rows[0],
+      SHEET_DEFINITIONS[14].rows[0],
       ...Object.entries(keys.storeAliases ?? {}).map(([alias, storeType]) => [alias, storeType] as CellValue[]),
     ],
     品类映射: [
-      SHEET_DEFINITIONS[16].rows[0],
+      SHEET_DEFINITIONS[15].rows[0],
       ...Object.entries(keys.industryOfCat ?? {}).map(([raw, industry]) => [raw, industry] as CellValue[]),
     ],
   };
@@ -457,7 +450,9 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
   const defaultShopRows = rowsByHeader(sheetByName(files, '默认店铺', sharedStrings));
   const productShopRows = rowsByHeader(sheetByName(files, '产品默认店铺', sharedStrings));
   const benchmarkRows = rowsByHeader(sheetByName(files, '竞品对标', sharedStrings));
-  const prevGenRows = rowsByHeader(sheetByName(files, '上一代关系', sharedStrings));
+  // 「上一代关系」页签不再读取（2026-11-27）：权威来源已迁到服务器端配置表 config_tables.xlsx
+  // 的「上一代配置」页签。退场前导出的旧工作簿里可能还带这一页——本函数按页签名逐个读取，
+  // 没读的页签自然忽略，所以旧工作簿照常导入成功、其中的上一代关系行不生效也不报错。
   const anomalyRuleRows = rowsByHeader(sheetByName(files, '异常规则', sharedStrings));
   const markRows = rowsByHeader(sheetByName(files, '人工裁定', sharedStrings));
   const seriesRuleRows = rowsByHeader(sheetByName(files, '系列规则', sharedStrings));
@@ -513,11 +508,6 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
     source: textValue(get(row, 'source', '来源')) as 'matrix' | 'substitute' | 'manual' | 'auto',
     note: nullableText(get(row, 'note', '备注')) ?? undefined,
   }));
-  const prevGen: Record<string, string | null> = {};
-  for (const row of prevGenRows) {
-    const model = textValue(get(row, 'model_id', '型号 id', '型号ID'));
-    if (model) prevGen[model] = nullableText(get(row, 'previous_model_id', '上一代型号 id', '上一代型号ID'));
-  }
   const firstRule = anomalyRuleRows[0];
   const anomalyRule = firstRule
     ? { enabled: ['true', '1', 'yes', '是', '开启'].includes(textValue(get(firstRule, 'enabled', '启用')).toLowerCase()), thresholdPct: numberValue(get(firstRule, 'threshold_pct', '阈值', 'thresholdPct')) ?? 50 }
@@ -628,7 +618,6 @@ export function parseConfigWorkbook(buffer: ArrayBuffer | Uint8Array): ConfigSna
     appChannel: 'stable',
     keys: {
       benchmark,
-      prevGen,
       defaultShop,
       anomalyRule,
       anomalyMarks,

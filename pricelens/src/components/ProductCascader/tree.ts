@@ -3,7 +3,7 @@
 // 我司：系列 → 产品名（仅展开）→ RAM+ROM（勾选层）
 // 竞品：品牌 → 产品名（仅展开）→ RAM+ROM（勾选层）
 // modelId 约定 = sku_id 前缀（如 `own-pura-90s-pro-max`），与 dim_benchmark.own_model_id、
-// prev/next_model_id 及 aggregate 的 modelId 同一 id 空间（已对真实产物核验）
+// next_model_id 及 aggregate 的 modelId 同一 id 空间（已对真实产物核验）
 // ============================================================
 import { dimProduct, factPriceMonthly, factPriceWeekly } from '../../data';
 import type { DimProduct, Industry } from '../../dataModel/types';

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PriceAgent</title>
     <!-- 内联 favicon（2026-11-01 审计：单文件离线包无 favicon 导致浏览器 404）：
-         data URI 自包含，离线单文件/在线版一致，不新增外部资源 -->
+         data URI 自包含，不新增外部请求（离线单文件已于 2026-11-27 退役，在线版沿用） -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171717'/%3E%3Cpath d='M12 24.5V7.5h6a5.25 5.25 0 0 1 0 10.5h-6' fill='none' stroke='%23ffffff' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
     <style>
       /* 首屏静态占位：数据模块同步解压期间不再是白屏；React 首次 render 会清空容器自然替换 */

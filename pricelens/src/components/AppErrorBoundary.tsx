@@ -11,7 +11,7 @@ interface State {
 }
 
 /**
- * 页面级兜底，避免图表或第三方控件的渲染异常把整个单文件应用变成白屏。
+ * 页面级兜底，避免图表或第三方控件的渲染异常把整个应用变成白屏。
  * 恢复按钮只重置边界状态，不刷新页面，因此用户已经填写的筛选仍会保留。
  */
 export default class AppErrorBoundary extends Component<Props, State> {

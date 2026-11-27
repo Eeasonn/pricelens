@@ -1,9 +1,6 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const port = Number(process.env.PORT || 8787);
 const model = process.env.ARK_MODEL || 'doubao-seed-evolving';
 const baseUrl = (process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/plan/v3').replace(/\/$/, '');
@@ -214,28 +211,16 @@ async function handleRun(req, res) {
   }
 }
 
-async function handleStatic(req, res, pathname) {
-  if (pathname !== '/' && pathname !== '/PriceLens.html') {
-    sendJson(res, 404, { error: 'Not found' });
-    return;
-  }
-  try {
-    const file = await readFile(resolve(root, 'PriceLens.html'));
-    res.writeHead(200, { ...jsonHeaders, 'content-type': 'text/html; charset=utf-8' });
-    res.end(file);
-  } catch {
-    sendJson(res, 404, { error: 'PriceLens.html 不存在，请先 npm run build' });
-  }
-}
-
 export function createAgentServer() {
   return createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (req.method === 'OPTIONS') { res.writeHead(204, jsonHeaders); res.end(); return; }
     if (req.method === 'GET' && url.pathname === '/api/agent/health') { sendJson(res, 200, { ok: Boolean(apiKey), model, provider: 'Ark Agent Plan' }); return; }
     if (req.method === 'POST' && url.pathname === '/api/agent/runs') { await handleRun(req, res); return; }
-    if (req.method === 'GET') { await handleStatic(req, res, url.pathname); return; }
-    sendJson(res, 405, { error: 'Method not allowed' });
+    // 本服务只提供 /api/agent/*。离线单文件已退役（2026-11-27）：不再读取仓库根
+    // PriceLens.html 托管页面，产品入口是 vite dev server（/api/agent 经其代理转发到这里）
+    if (req.method !== 'GET') { sendJson(res, 405, { error: 'Method not allowed' }); return; }
+    sendJson(res, 404, { error: 'Not found' });
   });
 }
 

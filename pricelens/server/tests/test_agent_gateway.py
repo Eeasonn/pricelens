@@ -88,7 +88,9 @@ class AgentGatewayTest(unittest.TestCase):
         threading.Thread(target=cls.upstream.serve_forever, daemon=True).start()
 
         cls.deploy = tempfile.mkdtemp(prefix="pricelens-agent-test-")
-        for name in ("server.py", "ingest_pack.py", "psi_linkage.py", "xlsx_reader.py", "agent_gateway.py"):
+        # 与部署包同一组运行依赖：ingest_pack 运行期 import psi_linkage / prev_gen（上一代配置），
+        # 部署目录缺了它们，任何走到派生的请求都会 ImportError
+        for name in ("server.py", "ingest_pack.py", "psi_linkage.py", "prev_gen.py", "xlsx_reader.py", "agent_gateway.py"):
             shutil.copy(os.path.join(PRICLENS, "server", name), cls.deploy)
         shutil.copy(os.path.join(PRICLENS, "src", "data", "dim_region.json"), cls.deploy)
         shutil.copy(os.path.join(PRICLENS, "src", "agentService", "providers.generated.json"),

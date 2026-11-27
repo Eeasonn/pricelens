@@ -127,7 +127,7 @@ npm --prefix pricelens run design:lint
 npm --prefix pricelens run typecheck
 ```
 
-涉及数据、交互、测试或离线单文件时，再执行：
+涉及数据、交互或测试时，再执行：
 
 ```bash
 npm --prefix pricelens run check
@@ -153,7 +153,6 @@ Detector 的 advisory 是待治理线索；只有 primary 或契约 / lint / typ
 - [ ] Agent 回复仍按结论、事实、计算 / 规则、边界、动作组织。
 - [ ] 已运行 `design:check`、`design:lint`、`typecheck`；适用时运行完整 `check`。
 - [ ] 已说明 detector advisory、数据假设、未覆盖状态和任何有意例外。
-- [ ] 若生成离线交付，已确认 `npm run build` 同步根目录 `PriceLens.html`。
 
 ## 7. 权威优先级
 

@@ -12,7 +12,7 @@
 // ============================================================
 import { beforeEach, describe, expect, it } from 'vitest';
 import { gunzipSync, gzipSync, strFromU8, strToU8 } from 'fflate';
-import { applyDataPack, buildDataPack, currencyOfCountry, dataMeta, dimBenchmark, dimProduct, dimTier, factPriceWeekly, factSalesWeekly, productRowBySku, type PricelensDataPack } from '../index';
+import { applyDataPack, buildDataPack, currencyOfCountry, dataMeta, dimBenchmark, dimProduct, dimTier, factPriceWeekly, factSalesWeekly, prevGenRomramKey, prevGenTargetsFor, productRowBySku, type PricelensDataPack } from '../index';
 import { clearDataPack, loadDataPack, saveDataPack } from '../dataPackStore';
 import { isSimulatedPsiType, salesSourceBadge, salesSourceNote, salesSourceOf, volumeOfConfig } from '../../dataModel/volume';
 import { effectiveSeriesOf } from '../../state/deriveConfig';
@@ -479,5 +479,147 @@ describe('数据包 v3 · 原表模式（应用内归一派生）', () => {
     const again = applyDataPack(pack);
     expect(again.ok).toBe(true);
     expect(dataMeta().packVersion).toBe(3);
+  });
+});
+
+// ============================================================
+// 数据包 prevGen 段（2026-11-27 Eason 拍板：上一代到配置层级）——服务器端配置表
+// config_tables.xlsx「上一代配置」页签解析成「当前配置组 → 上一代配置组」映射随 v2 包
+// 下发；前端落地为 prevGenTargetsFor 查表。老包 / v3 原表包 / 内置静态包没有这一段。
+// ============================================================
+describe('数据包 v2 · prevGen 段（上一代配置映射）', () => {
+  const PREV_GEN = [
+    { m: 'own-huawei-pura-90s-pro', r: '12+256 GB', p: [['own-huawei-pura-80-pro', '12+512 GB'], ['cmp-xiaomi-15', '12+256 GB']] },
+    { m: 'own-huawei-pura-90s-pro', r: '12+512 GB', p: [['own-huawei-pura-80-pro', '12+512 GB']] },
+    { m: 'own-huawei-watch-6', r: '—', p: [['own-huawei-watch-5', '—']] },
+  ];
+  /** 当前内置包 + 指定 prevGen 段（undefined = 不带该键） */
+  const withPrevGen = (prevGen: unknown): PricelensDataPack => {
+    const pack = JSON.parse(JSON.stringify(buildDataPack())) as PricelensDataPack & { prevGen?: unknown };
+    delete pack.prevGen;
+    if (prevGen !== undefined) pack.prevGen = prevGen as PricelensDataPack['prevGen'];
+    return pack;
+  };
+
+  it('内置静态包没有 prevGen 段：查表为空，重导出也不写该键', () => {
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256 GB')).toEqual([]);
+    expect(prevGenTargetsFor('own-huawei-watch-6', '—')).toEqual([]);
+    expect((buildDataPack() as PricelensDataPack).prevGen).toBeUndefined();
+  });
+
+  it('带 prevGen 的包应用后：按 (modelId, romram) 查到上一代配置组（一对多、多对一、竞品目标）', () => {
+    expect(applyDataPack(withPrevGen(PREV_GEN)).ok).toBe(true);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256 GB')).toEqual([
+      ['own-huawei-pura-80-pro', '12+512 GB'],
+      ['cmp-xiaomi-15', '12+256 GB'],
+    ]);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+512 GB')).toEqual([['own-huawei-pura-80-pro', '12+512 GB']]);
+    // 配置级：同型号别的配置组、别的型号同配置都没有映射（不再按型号级或存储规则推断）
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro-max', '12+256 GB')).toEqual([]);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '8+128 GB')).toEqual([]);
+    // 返回的是副本：调用方改动不污染包内映射
+    prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256 GB').length = 0;
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256 GB')).toHaveLength(2);
+  });
+
+  it('配置组键归一：空配置两侧统一成 —（包内 — ↔ 选品空串 / 空白）；非空配置原样比较、不做缩写猜测', () => {
+    expect(applyDataPack(withPrevGen(PREV_GEN)).ok).toBe(true);
+    expect(prevGenRomramKey('')).toBe('—');
+    expect(prevGenRomramKey('   ')).toBe('—');
+    expect(prevGenRomramKey(null)).toBe('—');
+    expect(prevGenRomramKey(undefined)).toBe('—');
+    expect(prevGenRomramKey('—')).toBe('—');
+    expect(prevGenRomramKey('12+512 GB')).toBe('12+512 GB');
+    expect(prevGenRomramKey(' 12+512 GB ')).toBe('12+512 GB');
+    // 主数据里无配置型号的 romram 可能是空串：与包内的 — 是同一个配置组
+    expect(prevGenTargetsFor('own-huawei-watch-6', '')).toEqual([['own-huawei-watch-5', '—']]);
+    expect(prevGenTargetsFor('own-huawei-watch-6', ' — ')).toEqual([['own-huawei-watch-5', '—']]);
+    // '12+256'（shortRomram 缩写）/ '12+256GB'（去空格）都不是配置组键
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256')).toEqual([]);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256GB')).toEqual([]);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', ' 12+256 GB ')).toEqual([
+      ['own-huawei-pura-80-pro', '12+512 GB'],
+      ['cmp-xiaomi-15', '12+256 GB'],
+    ]);
+  });
+
+  it('切包同步置换：换成没有 prevGen 段的包 → 映射清空（老 v1 包、v3 原表包、重导出的内置包同理）', () => {
+    expect(applyDataPack(withPrevGen(PREV_GEN)).ok).toBe(true);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256 GB')).toHaveLength(2);
+    // 服务器包 → 无该段的 v2 包
+    expect(applyDataPack(withPrevGen(undefined)).ok).toBe(true);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256 GB')).toEqual([]);
+    expect(prevGenTargetsFor('own-huawei-watch-6', '—')).toEqual([]);
+    // 无该段的包 → 带映射的包，再切回
+    expect(applyDataPack(withPrevGen(PREV_GEN)).ok).toBe(true);
+    expect(prevGenTargetsFor('own-huawei-watch-6', '—')).toEqual([['own-huawei-watch-5', '—']]);
+    const v1 = { ...withPrevGen(PREV_GEN), v: 1 } as unknown as PricelensDataPack;
+    delete v1.sales;
+    delete v1.salesProductAliases;
+    expect(applyDataPack(v1).ok).toBe(true);
+    // v1 读取路径同样认 prevGen 段（版本只区分销量段）
+    expect(prevGenTargetsFor('own-huawei-watch-6', '—')).toEqual([['own-huawei-watch-5', '—']]);
+    // v3 原表包：应用内派生，没有也不派生这一段
+    expect(applyDataPack({ kind: 'pricelens-data-pack', v: 3, generatedAt: '', offers: [RAW_OFFERS[0]] }).ok).toBe(true);
+    expect(prevGenTargetsFor('own-huawei-watch-6', '—')).toEqual([]);
+    expect((buildDataPack() as { prevGen?: unknown }).prevGen).toBeUndefined();
+  });
+
+  it('形状防御：段非数组 / 条目缺字段 / 目标不是 [型号, 配置] → 丢弃坏的、不整包拒绝；重复项去重合并', () => {
+    const applied = applyDataPack(withPrevGen({
+      not: 'an array',
+    }));
+    expect(applied.ok).toBe(true);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256 GB')).toEqual([]);
+
+    expect(applyDataPack(withPrevGen([
+      null,
+      'junk',
+      { m: 'own-a', r: '—' },                                 // 缺 p
+      { m: 'own-b', p: [] },                                   // 缺 r
+      { r: '—', p: [['own-x', '—']] },                         // 缺 m
+      { m: 'own-c', r: '12+256 GB', p: [
+        ['own-prev-1', '12+512 GB'],
+        ['own-prev-1', '12+512 GB'],                           // 目标重复
+        ['own-prev-1', ' 12+512 GB '],                         // 目标重复（首尾空白）
+        ['own-prev-1'],                                        // 目标缺配置
+        ['own-prev-1', 3],                                     // 目标配置不是字符串
+        ['own-prev-2', '—'],
+        'junk',
+      ] },
+      { m: 'own-c', r: '12+256 GB', p: [['own-prev-3', '—'], ['own-prev-2', '—']] }, // 当前组重复 → 合并去重
+      { m: 'own-d', r: '—', p: [] },                           // 空目标：整条丢弃
+      { m: 'own-e', r: '—', p: [['own-e', '—']] },             // 指向自己：原样保留（消费端按「已在选」去重）
+    ])).ok).toBe(true);
+    expect(prevGenTargetsFor('own-c', '12+256 GB')).toEqual([
+      ['own-prev-1', '12+512 GB'],
+      ['own-prev-2', '—'],
+      ['own-prev-3', '—'],
+    ]);
+    expect(prevGenTargetsFor('own-d', '—')).toEqual([]);
+    expect(prevGenTargetsFor('own-e', '—')).toEqual([['own-e', '—']]);
+    expect(prevGenTargetsFor('own-a', '—')).toEqual([]);
+    expect(prevGenTargetsFor('own-b', '—')).toEqual([]);
+  });
+
+  it('校验失败的包不污染当前映射（先解码校验、后提交）', () => {
+    expect(applyDataPack(withPrevGen(PREV_GEN)).ok).toBe(true);
+    const broken = withPrevGen([{ m: 'own-hijack', r: '—', p: [['own-x', '—']] }]);
+    broken.factPackB64 = 'not-a-valid-base64-gzip!!!';
+    expect(applyDataPack(broken).ok).toBe(false);
+    expect(prevGenTargetsFor('own-hijack', '—')).toEqual([]);
+    expect(prevGenTargetsFor('own-huawei-watch-6', '—')).toEqual([['own-huawei-watch-5', '—']]);
+  });
+
+  it('重导出保真：应用带 prevGen 的包后 buildDataPack 原样带出该段', () => {
+    const pack = withPrevGen(PREV_GEN);
+    expect(applyDataPack(pack).ok).toBe(true);
+    const again = applyDataPack(buildDataPack());
+    expect(again.ok).toBe(true);
+    expect((buildDataPack() as PricelensDataPack).prevGen).toEqual(PREV_GEN);
+    expect(prevGenTargetsFor('own-huawei-pura-90s-pro', '12+256 GB')).toEqual([
+      ['own-huawei-pura-80-pro', '12+512 GB'],
+      ['cmp-xiaomi-15', '12+256 GB'],
+    ]);
   });
 });

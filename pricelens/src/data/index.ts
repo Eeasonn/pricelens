@@ -24,6 +24,8 @@ import type {
   FactPriceMonthly,
   FactPriceWeekly,
   FactSalesWeekly,
+  PrevGenGroup,
+  PrevGenTarget,
   SalesSourceRow,
 } from '../dataModel/types';
 import { normalizeSalesRows } from '../dataModel/salesIngest';
@@ -191,7 +193,10 @@ export const factSalesWeekly: FactSalesWeekly[] = [];
  *  v3（2026-11-18 Eason「原表没有、后加的内容全部配置表化」）：原表模式——只装
  *  offer 原样行（offers，中文字段名原样），维表/事实/派生字段全部由应用内
  *  offerIngest 归一派生；系列规则/型号别名/对标矩阵/分档阶梯/大促档期走配置表
- *  （配置页「导入配置」xlsx 五页签，apply 时读入参与派生）。 */
+ *  （配置页「导入配置」xlsx 五页签，apply 时读入参与派生）。
+ *  prevGen 段（2026-11-27 Eason 拍板：上一代到配置层级）：服务器端配置表
+ *  config_tables.xlsx「上一代配置」页签解析成「当前配置组 → 上一代配置组」映射随
+ *  v2 包下发（server/prev_gen.py）；老包 / v3 原表包 / 内置静态包没有这一段 = 无上一代关系。 */
 export interface PricelensDataPack {
   kind: 'pricelens-data-pack';
   v: 2;
@@ -212,6 +217,8 @@ export interface PricelensDataPack {
   sales?: SalesSourceRow[];
   /** PSI Product 原文 → 内部型号显示名（model_name）别名；解析失败行计入 unmatched */
   salesProductAliases?: Record<string, string>;
+  /** 上一代配置映射（当前「型号 × 配置组」→ 上一代配置组列表）；缺省 = 无上一代关系 */
+  prevGen?: PrevGenGroup[];
 }
 
 /** v3 原表模式包：只装原样数据（offer 行 + PSI 行），派生全部在应用内 */
@@ -327,6 +334,61 @@ export function productRowBySku(skuId: string): DimProduct | undefined {
   return idx.get(skuId);
 }
 
+// ---------------- 上一代配置映射（2026-11-27：随数据包 prevGen 段下发） ----------------
+
+/** 上一代配置映射的配置组键：与包内 prevGen[].r / p[].romram 同一取值（dims.product[].romram），
+ *  只把空白归一成 '—'——服务端进包时把空 romram 记作 '—'（server/prev_gen.py
+ *  prev_gen_pack_groups），而前端 ProductSelection.romram 是主数据原值（可能是空串）；
+ *  查表两侧统一过这一层才对得上。非空值原样比较（不经 shortRomram 缩写）。 */
+export function prevGenRomramKey(romram: string | null | undefined): string {
+  const text = typeof romram === 'string' ? romram.trim() : '';
+  return text === '' ? '—' : text;
+}
+
+const prevGenGroupKey = (modelId: string, romram: string | null | undefined): string =>
+  `${modelId}|${prevGenRomramKey(romram)}`;
+
+/** 数据包 prevGen 段的防御性解析：段缺失 / 非数组 = 空映射；形状不对的条目与目标逐个
+ *  丢弃（辅助段不触发整包放弃，与 sales 段同一宽严度）；同一当前组的目标去重，
+ *  重复出现的当前组（服务端不会产出）合并。 */
+function parsePrevGen(raw: unknown): PrevGenGroup[] {
+  if (!Array.isArray(raw)) return [];
+  const byGroup = new Map<string, PrevGenGroup>();
+  for (const item of raw) {
+    if (item == null || typeof item !== 'object' || Array.isArray(item)) continue;
+    const { m, r, p } = item as { m?: unknown; r?: unknown; p?: unknown };
+    if (typeof m !== 'string' || !m || typeof r !== 'string' || !Array.isArray(p)) continue;
+    const group = byGroup.get(prevGenGroupKey(m, r)) ?? { m, r, p: [] };
+    for (const target of p) {
+      if (!Array.isArray(target) || typeof target[0] !== 'string' || !target[0] || typeof target[1] !== 'string') continue;
+      if (!group.p.some((x) => prevGenGroupKey(x[0], x[1]) === prevGenGroupKey(target[0], target[1]))) {
+        group.p.push([target[0], target[1]]);
+      }
+    }
+    if (group.p.length) byGroup.set(prevGenGroupKey(m, r), group);
+  }
+  return [...byGroup.values()];
+}
+
+/** 当前生效包的 prevGen 段（重导出用；applyDataPack 每次整体置换——含置换成空） */
+let currentPrevGen: PrevGenGroup[] = [];
+let prevGenIndex: Map<string, PrevGenTarget[]> = new Map();
+
+const setPrevGen = (raw: unknown): void => {
+  currentPrevGen = parsePrevGen(raw);
+  prevGenIndex = new Map(currentPrevGen.map((g) => [prevGenGroupKey(g.m, g.r), g.p]));
+};
+
+/**
+ * 「当前配置组 → 上一代配置组」查表（「匹配上一代」的数据源）：返回包内 prevGen 段中
+ * (modelId, romram) 对应的上一代配置组列表；无映射（段缺失 / 老数据包 / 内置静态包 /
+ *  该组未登记）= 空数组。romram 传主数据原值（ProductSelection.romram）即可，空白自动归一。
+ */
+export function prevGenTargetsFor(modelId: string, romram: string | null | undefined): PrevGenTarget[] {
+  const targets = prevGenIndex.get(prevGenGroupKey(modelId, romram));
+  return targets ? [...targets] : [];
+}
+
 /** 事实行数组 → 列式包 gzip+base64（encodeFactPack 与 decodePack 严格对称：
  *  列存本币价（rrp_local/price_local）、fx 正数、五字典去重长文本） */
 function encodeFactPackB64(rows: FactPriceWeekly[]): string {
@@ -383,7 +445,9 @@ function encodeFactPackB64(rows: FactPriceWeekly[]): string {
  *  CONFIG_CHANGED_EVENT 让下游缓存（销量/现价索引等）整包失效。
  *  v3（原表模式）：offers 原样行 → offerIngest 归一派生（维表/事实/系列/分档/
  *  渠道/汇率全部在应用内构建；配置表五页签读入参与派生）→ 编码成规范化包走
- *  同一应用管线。 */
+ *  同一应用管线。
+ *  prevGen 段随包整体置换（切包 / 还原 = 同步换成新包的映射；无段 = 空），
+ *  prevGenTargetsFor 即时反映。 */
 export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['counts'] } | { ok: false; error: string } {
   try {
     const p0 = pack as AnyPricelensDataPack | null;
@@ -480,6 +544,7 @@ export function applyDataPack(pack: unknown): { ok: true; counts: DataPackMeta['
     currentOffersRaw = p0.v === 3 ? (p0 as RawPricelensDataPack).offers : [];
     rebuildFxIndex();
     rebuildProductIndex();
+    setPrevGen(p.prevGen);
     const counts: DataPackMeta['counts'] = {
       factWeekly: factPriceWeekly.length,
       factMonthly: factPriceMonthly.length,
@@ -541,6 +606,9 @@ export function buildDataPack(): PricelensDataPack | RawPricelensDataPack {
     monthly: currentMonthlyRaw,
     sales: currentSalesRaw,
     salesProductAliases: currentSalesAliases,
+    // 上一代配置映射随包带出（保真：服务模式导出的包拿到离线模式导入后仍可「匹配上一代」；
+    // 无映射时不写该键，与服务器无页签 = 整段缺失同一形态）
+    ...(currentPrevGen.length > 0 ? { prevGen: currentPrevGen } : {}),
   };
 }
 

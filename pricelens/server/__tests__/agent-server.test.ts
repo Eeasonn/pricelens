@@ -36,4 +36,16 @@ describe('Agent server request boundary', () => {
     });
     expect(oversizedText.status).toBe(413);
   });
+
+  it('serves the Agent API only and no longer hosts the retired single-file page', async () => {
+    // 离线单文件已退役（2026-11-27）：本服务不再读取仓库根 PriceLens.html 托管页面，
+    // 旧的页面路径与其余非 API 路径一律 404 JSON（产品入口是 vite dev server）
+    for (const path of ['/', '/PriceLens.html']) {
+      const response = await fetch(`${baseUrl}${path}`);
+      expect(response.status).toBe(404);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      const body = await response.json() as { error: string };
+      expect(body.error).toBe('Not found');
+    }
+  });
 });

@@ -4,14 +4,14 @@
 //  - 导入数据包：单文件 JSON（buildDataPack 产物）→ applyDataPack 原位置换 +
 //    IndexedDB 持久化 → 刷新后由两段式启动自动载入；浏览器拒绝持久化时
 //    仅本会话生效（memory 置换仍在，UI 明确提示）；
-//  - 导出当前数据包：当前内存态（内置或已导入）序列化下载——迁移 = 拷
-//    PriceLens.html + 数据包两个文件；
+//  - 导出当前数据包：当前内存态（内置或已导入）序列化下载，可在配置页重新导入；
 //  - 还原内置数据：清持久化 + 刷新（内置数据始终兜底，不会被导入破坏）。
 // 2026-11-18 服务模式（前后端分离）：探测到本机 Python 服务器（server/server.py）
 //    时导入/重派生/还原改走服务器 API——导入 = File 直接做 POST body 流式上传
 //    （前端零内存压力，117MB 级全量包根治「浏览器导不进」）、服务器 Python 引擎
 //    派生 + SQLite 落库、刷新后 bootstrap 从 GET /api/pack 装载 gzip v2 包。
-//    单文件模式（file:// 双击打开）链路原样保留（兜底）。
+//    非服务模式（在线 Pages / 未探测到服务器）走浏览器内置数据 + IndexedDB 导入链路。
+//    离线单文件已退役（2026-11-27）：不再有「应用文件 + 数据包」的拷贝迁移说法。
 // 查阅者（RBAC）：只读——导入/还原置灰（改的是本机数据承载），导出不限制。
 // 数据校验与置换全部在 data/index.ts applyDataPack（先解码校验后整体提交）。
 // ============================================================
@@ -179,7 +179,7 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
     a.download = packFileNameOf(pack.generatedAt);
     a.click();
     URL.revokeObjectURL(url);
-    message.success('数据包已导出（与 PriceLens.html 一起拷贝即可迁移）');
+    message.success('数据包已导出，可在配置页「导入数据包」重新导入');
   };
 
   const onReset = async (): Promise<void> => {
@@ -200,7 +200,7 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
           return;
         }
         // 本机旧包一并清掉（服务模式优先服务器包，但防回退混淆）；清失败不能
-        // 刷新——applyPersistedDataPack 会把没删掉的包重新载入，与单文件分支
+        // 刷新——applyPersistedDataPack 会把没删掉的包重新载入，与非服务模式分支
         // 同一 2026-11-16 语义
         const { cleared } = await clearDataPack();
         if (!cleared) {
@@ -238,9 +238,9 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
         </span>
         {'　'}数据包生成时间：{fmtTime(meta.generatedAt)}
         {'　'}导入应用时间：{fmtTime(meta.appliedAt)}
-        {/* 构建时间（2026-11-17）：分辨「两台机器打开的是不是同一份单文件」——
-            数据烘死在 HTML 里，文件版本 = 数据版本；Windows 缓存旧 HTML 时此值
-            会明显偏旧（强刷/换最新文件即对齐） */}
+        {/* 构建时间（2026-11-17）：分辨「浏览器拿到的是不是同一份构建」——
+            内置数据打在构建产物里，构建时间 = 数据版本；浏览器缓存旧版本页面时
+            此值会明显偏旧（强刷后即对齐） */}
         {'　'}构建时间：{fmtTime(__BUILD_TIME__)}
       </div>
       <div style={infoLine} className="tnum">
@@ -313,9 +313,9 @@ export default function DataPackBlock({ canEdit }: { canEdit: boolean }) {
       <div style={{ ...infoLine, color: 'rgba(0,0,0,0.45)' }}>
         {serviceMode
           ? '服务器模式：数据承载在本机 PriceAgent 服务器（SQLite + data/ 目录），导入不再受浏览器内存限制（117MB 级全量包可直导）；'
-            + '关闭服务器后可直接双击打开单文件 PriceLens.html 走离线兜底（数据以浏览器 IndexedDB 为准）。'
-          : '便携迁移：把 PriceLens.html（应用）与本数据包拷到目标电脑 → 双击打开应用 → 配置页「导入数据包」。导入保存在本机浏览器'
-            + 'IndexedDB，不影响其他人；「还原内置数据」随时可回出厂口径。导入只替换价格/维表数据，不改动个人配置（选品、模板、阈值用'
+            + '未探测到服务器时回落浏览器本机数据（内置数据，或此前导入并持久化的数据包）。'
+          : '导入的数据包保存在本机浏览器 IndexedDB，不影响其他人；「还原内置数据」随时可回出厂口径。'
+            + '导入只替换价格/维表数据，不改动个人配置（选品、模板、阈值用'
             + '「配置导入导出」另行搬运）。'}
       </div>
     </div>

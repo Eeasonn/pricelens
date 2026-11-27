@@ -1,9 +1,12 @@
 // ============================================================
 // 配置快照导入/导出（2026-11-06 稳定版：配置页文件备份/迁移）。
 // 设计正典：docs/design/2026-11-06-access-roles.md（能力矩阵）。
-// - 范围仅配置域 LPL3.config.*（键名见 lplKeys.ts）：benchmark / prevGen /
-//   defaultShop / anomalyRule / anomalyMarks 必含；fx（汇率，只读展示的历史
-//   键）随快照备份、导入时若含则原样写回，UI 不提供编辑入口。
+// - 范围仅配置域 LPL3.config.*（键名见 lplKeys.ts）：benchmark / defaultShop /
+//   anomalyRule / anomalyMarks 必含；fx（汇率，只读展示的历史键）随快照备份、
+//   导入时若含则原样写回，UI 不提供编辑入口。
+// - prevGen（上一代关系）已退出快照（2026-11-27）：权威来源迁到服务器端配置表
+//   config_tables.xlsx「上一代配置」页签、随数据包下发；老快照里的 prevGen 键
+//   导入时忽略（见 validateImportPayload 的 known 清单）。
 // - 明确不进快照：filters（LPL3.filters）、uiMainCombos（LPL3.ui.mainCombos）
 //   与 forecast 工作区键（referenceEventTypes / referenceWorkspace /
 //   intelligenceReview）——稳定导出不含迭代 forecast 配置。
@@ -41,10 +44,9 @@ export interface MarketDataRuleConfig {
   note: string | null;
 }
 
-/** 快照 keys 的五个必含配置键 + 可选 fx；null = 无人工配置（导入时恢复默认） */
+/** 快照 keys 的四个必含配置键 + 可选 fx；null = 无人工配置（导入时恢复默认） */
 export interface ConfigSnapshotKeys {
   benchmark: DimBenchmark[] | null;
-  prevGen: Record<string, string | null> | null;
   defaultShop: Record<string, string> | null;
   anomalyRule: { enabled: boolean; thresholdPct: number } | null;
   anomalyMarks: AnomalyMark[] | null;
@@ -91,7 +93,6 @@ export interface ImportPreviewSummary {
   appChannel: AppChannel;
   benchmarkTotal: number;
   benchmarkByCountry: { countryCode: string; count: number }[];
-  prevGenCount: number;
   defaultShopCount: number;
   defaultShopProductCount: number;
   anomalyRule: { enabled: boolean; thresholdPct: number } | null;
@@ -147,7 +148,6 @@ export function exportConfigSnapshot(): ConfigSnapshotV1 {
     appChannel: 'stable',
     keys: {
       benchmark: (readRaw(LPL.cfgBenchmark) as DimBenchmark[] | null) ?? null,
-      prevGen: (readRaw(LPL.cfgPrevGen) as Record<string, string | null> | null) ?? null,
       defaultShop: (readRaw(LPL.cfgDefaultShop) as Record<string, string> | null) ?? null,
       anomalyRule: (readRaw(LPL.cfgAnomalyRule) as ConfigSnapshotKeys['anomalyRule']) ?? null,
       anomalyMarks: (readRaw(LPL.cfgAnomalyMarks) as AnomalyMark[] | null) ?? null,
@@ -203,20 +203,6 @@ function validateBenchmark(raw: unknown, out: ConfigSnapshotKeys): string | null
     if (r.note != null && typeof r.note !== 'string') return `benchmark（竞品对标）第 ${i + 1} 行备注类型不对`;
   }
   out.benchmark = raw as DimBenchmark[];
-  return null;
-}
-
-function validatePrevGen(raw: unknown, out: ConfigSnapshotKeys): string | null {
-  if (raw == null) {
-    out.prevGen = null;
-    return null;
-  }
-  if (!isPlainObject(raw)) return 'prevGen（上一代关系）必须是对象';
-  for (const [k, v] of Object.entries(raw)) {
-    if (!k) return 'prevGen（上一代关系）存在空型号 id';
-    if (v !== null && !isNonEmptyString(v)) return `prevGen（上一代关系）${k} 的值必须是型号 id 或 null`;
-  }
-  out.prevGen = raw as Record<string, string | null>;
   return null;
 }
 
@@ -522,6 +508,9 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
   if (!isPlainObject(raw.keys)) return invalid('keys（配置内容）缺失或不是对象');
 
   const keys = raw.keys;
+  // prevGen（上一代关系，2026-11-27 退役）：权威来源已迁到服务器端配置表 config_tables.xlsx
+  // 「上一代配置」页签并随数据包下发。它仍留在 known 清单里，只是为了不让退场前导出的
+  // 老配置文件被「未知配置项」整份拒绝——导入时直接忽略（不校验、不落盘）。
   const known = ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks', 'marketRules', 'fx',
     'seriesRules', 'modelAliases', 'benchmarkMatrix', 'tierLadders', 'promoRows',
     'countryAliases', 'platformAliases', 'storeAliases', 'industryOfCat'];
@@ -530,11 +519,11 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
   }
 
   const out: ConfigSnapshotKeys = {
-    benchmark: null, prevGen: null, defaultShop: null, anomalyRule: null, anomalyMarks: null, marketRules: null, fx: null,
+    benchmark: null, defaultShop: null, anomalyRule: null, anomalyMarks: null, marketRules: null, fx: null,
     seriesRules: null, modelAliases: null, benchmarkMatrix: null, tierLadders: null, promoRows: null,
     countryAliases: null, platformAliases: null, storeAliases: null, industryOfCat: null,
   };
-  for (const required of ['benchmark', 'prevGen', 'defaultShop', 'anomalyRule', 'anomalyMarks'] as const) {
+  for (const required of ['benchmark', 'defaultShop', 'anomalyRule', 'anomalyMarks'] as const) {
     if (!Object.prototype.hasOwnProperty.call(keys, required)) {
       return invalid(`keys 缺少配置项 ${required}（本版本导出必含，缺项文件已拒绝）`);
     }
@@ -542,7 +531,6 @@ export function validateImportPayload(raw: unknown): ImportValidationResult {
   const step = (err: string | null): ImportValidationResult | null => (err ? invalid(err) : null);
   const checks: Array<() => string | null> = [
     () => validateBenchmark(keys.benchmark, out),
-    () => validatePrevGen(keys.prevGen, out),
     () => validateDefaultShop(keys.defaultShop, out),
     () => validateAnomalyRule(keys.anomalyRule, out),
     () => validateAnomalyMarks(keys.anomalyMarks, out),
@@ -601,7 +589,6 @@ export function summarizeImportPayload(payload: ConfigSnapshotV1): ImportPreview
     benchmarkByCountry: [...byCountry.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([countryCode, count]) => ({ countryCode, count })),
-    prevGenCount: payload.keys.prevGen ? Object.keys(payload.keys.prevGen).length : 0,
     defaultShopCount: defaultShopKeys.filter((key) => !key.includes('::')).length,
     defaultShopProductCount: defaultShopKeys.filter((key) => key.includes('::')).length,
     anomalyRule: payload.keys.anomalyRule ? { ...payload.keys.anomalyRule } : null,
@@ -633,7 +620,6 @@ export function applyImportPayload(raw: ConfigSnapshotV1): ImportApplyResult {
   const { keys } = checked.payload;
   // 全部校验已通过——此处只做写回（null = 移除键恢复系统默认）
   writeRaw(LPL.cfgBenchmark, keys.benchmark);
-  writeRaw(LPL.cfgPrevGen, keys.prevGen);
   writeRaw(LPL.cfgDefaultShop, keys.defaultShop);
   writeRaw(LPL.cfgAnomalyRule, keys.anomalyRule);
   writeRaw(LPL.cfgAnomalyMarks, keys.anomalyMarks);

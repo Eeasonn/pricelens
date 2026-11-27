@@ -16,7 +16,7 @@ npm --prefix pricelens run design:lint
 npm --prefix pricelens run typecheck
 ```
 
-Run `npm --prefix pricelens run check` when the change affects application behavior, tests, or the generated offline build. A task is complete only when the applicable checks pass and the handoff checklist is satisfied.
+Run `npm --prefix pricelens run check` when the change affects application behavior, tests, or the generated web build (`pricelens/dist`, deployed to GitHub Pages). A task is complete only when the applicable checks pass and the handoff checklist is satisfied.
 
 ## Git 工位与分支契约（2026-11-09）
 

@@ -1582,6 +1582,8 @@ def read_config_tables(path):
             "promoRows": pick("大促档期"),
             # PSI 规格对照的人工覆盖页签（可选）：规则解析不对的 SKU 串在此手填 category
             "psiSkuOverrides": pick("PSI规格"),
+            # 上一代配置（2026-11-27）：当前「型号 × 配置」→ 上一代「型号 × 配置」，见 prev_gen
+            "prevGenRows": pick("上一代配置"),
         }
     except Exception:  # noqa: BLE001 —— 配置表坏档不阻断主链，回退 config.json
         return None
@@ -1797,6 +1799,12 @@ def build_v2_pack(raw_pack, ctx):
     psi_rows = normalize_psi_rows(raw_pack.get("sales"))
     match_rows = build_map_product(cfg.get("matchRows"), _offer_inventory(built))
     apply_human_overrides(built, match_rows)
+    # --- 上一代配置（2026-11-27 Eason 拍板：上一代要到 cat 层级，见 prev_gen）：xlsx「上一代配置」
+    # 页签 × 匹配表 → cfg_prev_gen 落库行 + 包内「配置组 → 上一代配置组」映射（前端「匹配上一代」
+    # 直接查，不再按存储规则猜）；无页签 = 空段，退化为没有上一代关系 ---
+    import prev_gen
+    prev_rows, prev_diag = prev_gen.resolve_prev_gen(cfg.get("prevGenRows"), match_rows)
+    prev_groups, prev_group_diag = prev_gen.prev_gen_pack_groups(prev_rows, built["dims"]["product"])
     psi_sku_rows = psi_linkage.build_map_psi_sku(psi_rows, match_rows, _psi_sku_overrides(cfg.get("psiSkuOverrides")))
     fact_sales_rows, sales_diag = psi_linkage.derive_fact_sales(psi_rows, psi_sku_rows, match_rows)
     sales_fact_rows, dropped_types = psi_linkage.pick_sales_types(fact_sales_rows)
@@ -1818,7 +1826,9 @@ def build_v2_pack(raw_pack, ctx):
     built["mapProduct"] = match_rows
     built["mapPsiSku"] = psi_sku_rows
     built["factSales"] = fact_sales_rows
+    built["prevGenRows"] = prev_rows
     built["configTables"] = cfg
+    built["diag"]["prevGen"] = dict(prev_diag, **prev_group_diag)
     v2 = {
         "kind": "pricelens-data-pack",
         "v": 2,
@@ -1828,6 +1838,7 @@ def build_v2_pack(raw_pack, ctx):
         "monthly": raw_pack.get("monthly") if isinstance(raw_pack.get("monthly"), list) else [],
         "sales": sales_pack_rows,
         "salesProductAliases": aliases,
+        "prevGen": prev_groups,
     }
     return v2, built
 
@@ -1838,7 +1849,7 @@ TABLES = (
     # ODS 原样层（零派生列；extra_json 兜住规范列外字段）
     "ods_offer", "ods_psi",
     # 补录/配置层（人工维护的业务配置；xlsx 权威行规范化落库）
-    "cfg_competitor", "map_price_band", "map_promo", "map_region",
+    "cfg_competitor", "cfg_prev_gen", "map_price_band", "map_promo", "map_region",
     # MAP 匹配层（「我们加的」匹配规则；xlsx 人工行权威，auto 行引擎预填）
     #   map_product = offer 侧匹配表；map_psi_sku = PSI 侧规格对照（SKU 串 → category）
     "map_product", "map_psi_sku",
@@ -1860,8 +1871,9 @@ LEGACY_TABLES = (
 )
 # schema 版本（PRAGMA user_version）：v1/v2 落库从未设置（=0），v3=3、v3.1（map_region
 # 瘦身三列）=4、v3.2（map_product 加 orig_*）=5、v3.3（PSI 关联：map_psi_sku 新表 +
-# fact_sales 加 match_status）=6——版本不符时 _sqlite_clear_and_load 先整体 DROP 再建，防旧结构残留
-SCHEMA_VERSION = 6
+# fact_sales 加 match_status）=6、v3.4（上一代配置：cfg_prev_gen 新表）=7——版本不符时
+# _sqlite_clear_and_load 先整体 DROP 再建，防旧结构残留
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 -- ODS 原样层（数据建模方案 v2 §2：offer 底表 29 规范列 / PSI 表 7 规范列+旧形态 2 列）
@@ -1921,6 +1933,21 @@ CREATE TABLE IF NOT EXISTS cfg_competitor (
     com_category1 TEXT, com_category2 TEXT, com_category3 TEXT, com_category4 TEXT,
     comp_rank REAL, is_active REAL
 );
+-- 上一代配置（2026-11-27 Eason 拍板：上一代要到 cat 层级）：一行 = 当前「型号 × 配置」→
+-- 上一代「型号 × 配置」，xlsx「上一代配置」页签权威；prev_category 留空 = 沿用当前同名值，
+-- 落库为解析后的显式值；一个上一代可对多个下一代，当前侧每个「型号 × 配置」只允许一行。
+-- match_status：matched / inactive / cur_model_not_found / industry_mismatch /
+-- cur_config_not_found / prev_model_not_found / prev_config_not_found / self_reference /
+-- duplicate_current（非 matched、非 inactive = 待处理清单）
+CREATE TABLE IF NOT EXISTS cfg_prev_gen (
+    category TEXT, brand TEXT, model TEXT,
+    category1 TEXT, category2 TEXT, category3 TEXT, category4 TEXT,
+    prev_brand TEXT, prev_model TEXT,
+    prev_category1 TEXT, prev_category2 TEXT, prev_category3 TEXT, prev_category4 TEXT,
+    is_active INTEGER, note TEXT, updated_at TEXT, maintainer TEXT,
+    model_id TEXT, prev_model_id TEXT, match_status TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_cfg_prev_gen_status ON cfg_prev_gen(match_status);
 CREATE TABLE IF NOT EXISTS map_price_band (
     country TEXT, category TEXT, price_band TEXT, band_sort REAL, max_price REAL, min_price REAL
 );
@@ -2065,6 +2092,11 @@ def _sqlite_clear_and_load(conn, raw_pack, built, pack_id, kind="v3-offers"):
           r.get("category4") or None, r.get("info") or None, r.get("model_id") or None,
           r.get("model_source") or None, r.get("parse_source") or None, r.get("countries")]
          for r in ((built.get("mapPsiSku") or []) if isinstance(built, dict) else [])])
+    # 上一代配置（人工行 + 解析结果；match_status 非 matched = 待处理清单）
+    import prev_gen
+    cur.executemany(
+        "INSERT INTO cfg_prev_gen VALUES (" + ",".join("?" * len(prev_gen.COLUMNS)) + ")",
+        [prev_gen.db_row(r) for r in ((built.get("prevGenRows") or []) if isinstance(built, dict) else [])])
     cfg = (built.get("configTables") or {}) if isinstance(built, dict) else {}
     # 补录/配置层：xlsx 权威行规范化落库（v3：竞品配置 17+1 列，不再 row_json 照存）
     comp_rows = cfg.get("competitorRows") or []
@@ -2278,6 +2310,8 @@ def load_v2_pack_to_sqlite(db_path, v2_pack, pack_id):
     built = {
         "dims": v2_pack.get("dims") or {}, "factRows": fact_rows,
         "psi": psi_rows, "mapProduct": [], "mapPsiSku": psi_sku_rows, "factSales": fact_sales_rows,
+        # 外部 v1/v2 包没有 config_tables：上一代配置不在这条路径上重建（包内 prevGen 段原样透传）
+        "prevGenRows": [],
         "configTables": {}, "diag": {"rowsIn": len(fact_rows), "rowsOut": len(fact_rows), "sales": sales_diag},
     }
     os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)

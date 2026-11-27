@@ -1,5 +1,6 @@
 # PriceLens 在线发布：push main 即自动构建并部署到 GitHub Pages。
-# 产物 = pricelens/dist（自包含单文件，无外部资源引用，任意 base path 可用）：
+# 产物 = pricelens/dist（index.html + assets/ 下分离的 js / css，相对 base './'：GitHub Pages
+# 项目子路径 /pricelens/ 与本机服务器根路径都可直接托管；离线单文件已于 2026-11-27 退役）：
 # - 根路径 / = 稳定版（npm run build）。2026-11-27 负责人决策：只对稳定版持续迭代，
 #   演进版（/iterate/ 子路径）退场，不再构建第二通道。
 name: Deploy to GitHub Pages
@@ -43,7 +44,7 @@ jobs:
       - name: Tests
         working-directory: pricelens
         run: npm run test -- --run
-      - name: Build stable channel
+      - name: Build online version
         working-directory: pricelens
         env:
           # 平台预设 GLM 网关地址（仓库 Settings → Secrets and variables → Actions →
@@ -51,7 +52,7 @@ jobs:
           # 构建不注入预设网关，前端维持纯本地引擎，向后兼容。
           VITE_AGENT_API_BASE_URL: ${{ vars.AGENT_GATEWAY_URL }}
         run: npm run build
-      - name: Verify data and build artifacts
+      - name: Verify data and contracts
         working-directory: pricelens
         run: npm run verify
       - name: Upload Pages artifact

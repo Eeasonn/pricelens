@@ -3,18 +3,18 @@
 // 筛选与配置负责人（Agent B）。
 // 图表侧（Agent C）可只读引用：getFxRate。
 // 第一百八十五轮（外部 UX 审计落地）：新增窄域恢复 API——
-// clearBenchmarkEntry（单个配置的对标回默认）与 clearPrevGenOverridesForModels
-// （按型号清单清上一代覆盖），避免「恢复默认」误伤其他国家/型号的人工配置。
+// clearBenchmarkEntry（单个配置的对标回默认），避免「恢复默认」误伤其他国家/型号
+// 的人工配置。
 // ============================================================
 import { useEffect, useState } from 'react';
 import { canEditConfig } from '../access/role';
 import { CONFIG_CHANGED_EVENT, LPL } from './lplKeys';
 import { readBenchmarkMatrix } from './deriveConfig';
-import { dimBenchmark, dimProduct } from '../data';
-import type { DimBenchmark } from '../dataModel/types';
+import { dimBenchmark, dimProduct, prevGenRomramKey, prevGenTargetsFor } from '../data';
+import type { DimBenchmark, DimProduct } from '../dataModel/types';
 import { lowestPriceColorSku } from '../dataModel/aggregate';
 import type { ProductSelection } from './filtersTypes';
-import { modelIdOf, shortRomram } from '../components/ProductCascader/tree';
+import { modelIdOf } from '../components/ProductCascader/tree';
 import { getCurrentCountry } from './currentScope';
 export { getFxRate } from './fx';
 
@@ -197,87 +197,27 @@ export function clearBenchmarkEntry(countryCode: string, modelId: string, romram
   writeJson(LPL.cfgBenchmark, next);
 }
 
-// ---------------- 上一代关系（LPL3.config.prevGen；「匹配上一代」的数据源） ----------------
-
-/** 上一代关系手动覆盖表：modelId → prevModelId（null = 显式置空；缺省键 = 回退 auto） */
-export type PrevGenOverrides = Record<string, string | null>;
-
-/** 手动维护的上一代覆盖表（防御性过滤：值必须是合法型号 id 或 null） */
-export function getPrevGenOverrides(): PrevGenOverrides {
-  const raw = readJson<PrevGenOverrides>(LPL.cfgPrevGen);
-  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const out: PrevGenOverrides = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (v === null) out[k] = null;
-    else if (typeof v === 'string' && v) out[k] = v;
-  }
-  return out;
-}
-
-/** 保存上一代覆盖表；传 null/空表 = 清除手动维护（全部回退 dim_product 的 auto 关系）。
- *  2026-11-06 RBAC：查阅者角色写为 no-op（UI 已门控，此处为纵深防御） */
-export function savePrevGenOverrides(map: PrevGenOverrides | null): void {
-  if (!canEditConfig()) return;
-  if (map == null || Object.keys(map).length === 0) {
-    try {
-      localStorage.removeItem(LPL.cfgPrevGen);
-    } catch {
-      /* 忽略 */
-    }
-    return;
-  }
-  writeJson(LPL.cfgPrevGen, map);
-}
-
-/**
- * 第一百八十五轮（外部 UX 审计落地）：只清除指定型号的上一代人工覆盖（配置页传
- * 当前国家可见的型号清单），其余型号原样保留；清空则整键移除（全部回 auto）。
- * 覆盖表按型号 id 全局单表存储（同型号在多国共用一份关系），按型号清单收窄已是
- * 该结构下最细的粒度。返回实际清除的条数，供调用方在提示里写明范围。
- */
-export function clearPrevGenOverridesForModels(modelIds: readonly string[]): number {
-  if (!canEditConfig()) return 0;
-  const raw = readJson<PrevGenOverrides>(LPL.cfgPrevGen);
-  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return 0;
-  const targets = new Set(modelIds);
-  const rest: PrevGenOverrides = {};
-  let removed = 0;
-  for (const [k, v] of Object.entries(raw)) {
-    if (targets.has(k)) {
-      removed += 1;
-      continue;
-    }
-    rest[k] = v;
-  }
-  if (removed > 0) savePrevGenOverrides(Object.keys(rest).length > 0 ? rest : null);
-  return removed;
-}
-
-/** auto 口径：dim_product.prev_model_id（型号级前后代，同型号各 SKU 共享；行可能缺键） */
-export function autoPrevModelId(modelId: string): string | null {
-  const row = dimProduct.find((p) => modelIdOf(p) === modelId);
-  return row?.prev_model_id ?? null;
-}
-
-/** 生效上一代：手动维护（配置页）优先，未维护回退 dim_product auto */
-export function effectivePrevModelId(modelId: string): string | null {
-  const overrides = getPrevGenOverrides();
-  if (Object.prototype.hasOwnProperty.call(overrides, modelId)) return overrides[modelId];
-  return autoPrevModelId(modelId);
-}
+// ---------------- 上一代配置（「匹配上一代」；数据源 = 数据包 prevGen 段） ----------------
+// 2026-11-27 Eason 拍板：上一代关系要到 cat（配置）层级、不能只到 model，权威来源是服务器端
+// 配置表 config_tables.xlsx「上一代配置」页签（server/prev_gen.py 解析进包）。原先的本机
+// localStorage 覆盖表（LPL3.config.prevGen）、dim_product.prev_model_id 自动兜底与「按存储
+// 规则猜同配置」一并退役——本模块只查包内映射，不再自行推断。
 
 export interface PrevGenMatchResult {
   /** 新增的上一代勾选组（已剔除当前 own 里已有的组） */
   added: ProductSelection[];
-  /** 已选产品中未维护上一代关系的型号名（含上一代=自身的防御情况） */
+  /** 已选产品中在包内查不到可用上一代配置的型号名（型号级去重；含映射指向的配置组
+   *  在当前产品主数据里不存在的情况） */
   missing: string[];
 }
 
 /**
- * 「匹配上一代」：为当前每个已选我司组找生效上一代型号，带出同配置（ROMRAM）组。
- * - ROMRAM 取法：与当前组完全相同 → 缩写相同（12+256 GB vs 12+256）→ 上一代首个配置；
- * - SKU = 该组最低价颜色（lowestPriceColorSku），无价数据回退该配置首个 SKU；
- * - 已在 own 中的上一代组不重复带出（幂等，可反复点击）。
+ * 「匹配上一代」：对每个已选我司组，用 (sel.modelId, sel.romram) 查包内 prevGen 映射
+ * （prevGenTargetsFor）拿上一代配置组并带出。
+ * - 配置组以包内映射为准（一对一 / 一对多 / 上一代为竞品均按映射原样带出），不做任何猜测；
+ * - SKU = 该组最低价颜色（lowestPriceColorSku），无价数据回退该配置组首个产品行；
+ * - 已在 own 里或已带出的上一代组不重复（幂等，可反复点击）；
+ * - 包内无该组映射（含数据包没有 prevGen 段）的型号进 missing。
  */
 export function groupsFromPrevGeneration(own: ProductSelection[]): PrevGenMatchResult {
   const added: ProductSelection[] = [];
@@ -285,50 +225,42 @@ export function groupsFromPrevGeneration(own: ProductSelection[]): PrevGenMatchR
   if (!own.length || !dimProduct.length) return { added, missing };
 
   const modelNameById = new Map<string, string>();
-  const romramsOfModel = new Map<string, string[]>();
+  /** 型号 →（配置组键 → 该配置组首个产品行）：包内给的是归一后的配置组（空配置为 '—'），
+   *  ProductSelection.romram 要用主数据原值才能与选品树的组键对上 */
+  const firstRowOfGroup = new Map<string, Map<string, DimProduct>>();
   for (const p of dimProduct) {
     const mid = modelIdOf(p);
     if (!modelNameById.has(mid)) modelNameById.set(mid, p.model_name);
-    const arr = romramsOfModel.get(mid) ?? [];
-    if (!arr.includes(p.romram)) arr.push(p.romram);
-    romramsOfModel.set(mid, arr);
+    let groups = firstRowOfGroup.get(mid);
+    if (!groups) {
+      groups = new Map();
+      firstRowOfGroup.set(mid, groups);
+    }
+    const groupKey = prevGenRomramKey(p.romram);
+    if (!groups.has(groupKey)) groups.set(groupKey, p);
   }
 
-  const pickRomram = (prevMid: string, cur: string): string | null => {
-    const list = romramsOfModel.get(prevMid) ?? [];
-    if (!list.length) return null;
-    if (list.includes(cur)) return cur;
-    const short = shortRomram(cur);
-    const sameShort = list.find((r) => shortRomram(r) === short);
-    return sameShort ?? list[0];
-  };
+  const selected = new Set(own.map((s) => `${s.modelId}|${prevGenRomramKey(s.romram)}`));
+  const missingSeen = new Set<string>();
 
   for (const sel of own) {
-    const prevMid = effectivePrevModelId(sel.modelId);
-    // 防御：上一代 = 自身（数据环）视为未维护
-    if (!prevMid || prevMid === sel.modelId || !romramsOfModel.get(prevMid)?.length) {
-      missing.push(modelNameById.get(sel.modelId) ?? sel.modelId);
-      continue;
+    let matched = false; // 本组至少命中一个上一代配置组（带出，或已在选）
+    for (const [prevMid, prevRomram] of prevGenTargetsFor(sel.modelId, sel.romram)) {
+      const row = firstRowOfGroup.get(prevMid)?.get(prevGenRomramKey(prevRomram));
+      if (!row) continue; // 映射指向的配置组在当前产品主数据里不存在（防御）
+      matched = true;
+      const key = `${prevMid}|${prevGenRomramKey(row.romram)}`;
+      if (selected.has(key)) continue; // 已选中，不重复带出（幂等）
+      selected.add(key);
+      added.push({ modelId: prevMid, romram: row.romram, skuIds: [lowestPriceColorSku(prevMid, row.romram) ?? row.sku_id] });
     }
-    const romram = pickRomram(prevMid, sel.romram);
-    if (romram == null) {
-      missing.push(modelNameById.get(sel.modelId) ?? sel.modelId);
-      continue;
+    if (!matched) {
+      const name = modelNameById.get(sel.modelId) ?? sel.modelId;
+      if (!missingSeen.has(name)) {
+        missingSeen.add(name);
+        missing.push(name);
+      }
     }
-    if (
-      own.some((s) => s.modelId === prevMid && s.romram === romram) ||
-      added.some((s) => s.modelId === prevMid && s.romram === romram)
-    ) {
-      continue; // 已选中，不重复带出（幂等）
-    }
-    let skuIds: string[] = [];
-    const viaAggregate = lowestPriceColorSku(prevMid, romram);
-    if (viaAggregate) skuIds = [viaAggregate];
-    else {
-      const first = dimProduct.find((p) => modelIdOf(p) === prevMid && p.romram === romram);
-      if (first) skuIds = [first.sku_id];
-    }
-    if (skuIds.length) added.push({ modelId: prevMid, romram, skuIds });
   }
   return { added, missing };
 }

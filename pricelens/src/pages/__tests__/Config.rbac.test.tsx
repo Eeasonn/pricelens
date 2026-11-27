@@ -2,7 +2,7 @@
 // 配置页 RBAC 组件测试（2026-11-06 稳定版：GTM/查阅者权限分组 + 导入导出）：
 // - 默认 gtm：工具行有「导入配置」「导出配置」，无查阅者横幅
 // - 切换查阅者：横幅出现「查阅者不可修改配置，请联系 GTM」；导入入口不渲染；
-//   导出仍可用；竞品「编辑」/ 异常守卫开关 / 上一代下拉 / 默认店铺下拉全部禁用
+//   导出仍可用；竞品「编辑」/ 异常守卫开关 / 默认店铺下拉全部禁用
 // - matrix-only 临时口径（2026-11-10）：竞品「编辑」恒禁用，title 按角色区分
 //   （GTM = MATRIX_READONLY_HINT 统一说明句、查阅者 = 不可修改配置）；
 //   禁用标签色 = color.mute、光标 not-allowed
@@ -125,14 +125,31 @@ describe('配置页 · 默认 GTM', () => {
     expect(currents()[0]!.style.borderBottomWidth).toBe('2px');
     expect(currents()[0]!.style.borderBottomColor).toBe('rgb(23, 23, 23)');
     // 非当前项保持蓝链接（无 aria-current、无墨色）
-    const prevGen = nav!.querySelector('a[href="#prev-gen"]') as HTMLAnchorElement;
-    expect(prevGen.getAttribute('aria-current')).toBeNull();
-    expect(prevGen.style.color).toBe('rgb(0, 112, 243)');
-    // 点击「上一代关系」→ aria-current 跟随移动
-    fireEvent.click(prevGen);
+    const defaultShop = nav!.querySelector('a[href="#default-shop"]') as HTMLAnchorElement;
+    expect(defaultShop.getAttribute('aria-current')).toBeNull();
+    expect(defaultShop.style.color).toBe('rgb(0, 112, 243)');
+    // 点击「默认店铺」→ aria-current 跟随移动
+    fireEvent.click(defaultShop);
     expect(currents()).toHaveLength(1);
-    expect(currents()[0]!.textContent).toBe('上一代关系');
-    expect(prevGen.getAttribute('aria-current')).toBe('page');
+    expect(currents()[0]!.textContent).toBe('默认店铺');
+    expect(defaultShop.getAttribute('aria-current')).toBe('page');
+  });
+
+  // 2026-11-27 Eason 拍板：上一代关系到配置层级，权威来源改为服务器端配置表，配置页本机
+  // 的「上一代关系」区块（子导航项 + 分块 + 下拉）整块移除
+  it('「上一代关系」区块已移除：子导航无该项、无 prev-gen 分块、无上一代下拉', () => {
+    render(<App />);
+    const nav = document.querySelector('nav[aria-label="配置分区"]') as HTMLElement | null;
+    expect(nav).not.toBeNull();
+    expect(Array.from(nav!.querySelectorAll('a')).map((a) => a.textContent)).not.toContain('上一代关系');
+    expect(nav!.querySelector('a[href="#prev-gen"]')).toBeNull();
+    expect(document.getElementById('prev-gen')).toBeNull();
+    expect(screen.queryByText('上一代关系')).toBeNull();
+    expect(document.querySelector('[aria-label^="上一代关系"]')).toBeNull();
+    // 其余分区与分块原样保留（id 与子导航锚点一一对应）
+    for (const id of ['benchmark', 'default-shop', 'anomaly', 'fx', 'promo', 'rules-dict', 'data-pack']) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
   });
 });
 
@@ -148,7 +165,7 @@ describe('配置页 · 切换查阅者（viewer）', () => {
     expect(window.localStorage.getItem(ACCESS_ROLE_KEY)).toBe('viewer');
   });
 
-  it('竞品「编辑」、异常守卫开关、上一代下拉、默认店铺下拉全部禁用', () => {
+  it('竞品「编辑」、异常守卫开关、默认店铺下拉全部禁用', () => {
     render(<App />);
     fireEvent.click(segItem('查阅者'));
     // 竞品对标「编辑」按钮（任意一枚）：禁用 + title 标注查阅者不可改
@@ -159,7 +176,7 @@ describe('配置页 · 切换查阅者（viewer）', () => {
     // 异常守卫开关（页面唯一 switch）
     const guardSwitch = screen.getByRole('switch').closest('.ant-switch');
     expect(guardSwitch?.classList.contains('ant-switch-disabled')).toBe(true);
-    // 上一代关系 / 默认店铺下拉出现禁用态
+    // 默认店铺下拉出现禁用态
     expect(document.querySelectorAll('.ant-select-disabled').length).toBeGreaterThan(0);
   });
 

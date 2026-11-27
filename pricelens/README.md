@@ -6,7 +6,7 @@ PriceLens 只有一个统一产品版本：价格看板、量价走势、预警�
 
 ## Agent 入口
 
-`http://localhost:5174/` 是唯一产品入口：完整看板和 PriceLens Agent 在同一页，页头的「问 PriceLens」按钮会打开 Agent 面板。Agent 请求通过 Vite 的 `/api/agent` 代理转发到本地 Agent 服务，密钥只在服务端读取，不写入前端或仓库。
+`http://localhost:5174/` 是唯一产品入口：完整看板和 PriceLens Agent 在同一页，页头的「问 PriceAgent」按钮会打开 Agent 面板。Agent 请求通过 Vite 的 `/api/agent` 代理转发到本地 Agent 服务，密钥只在服务端读取，不写入前端或仓库。
 
 启动开发环境：
 
@@ -25,9 +25,9 @@ npm install        # 安装依赖（已执行过则跳过）
 npm run ingest     # 真实数据接入：scripts/ingest_real.py（数据再生须连跑 patch_comp_series.py + prefill_default_shops.py）
 python3 scripts/reemit_benchmark.py   # 只重生对标行：改竞品配对规则（ingest_real.pair_configs）后用，不重跑全链；读最终维表重发手机/平板对标，其余行原样保留（幂等；--dry-run 只看差异），随后重跑 build_handoff_config.py
 npm run dev        # 本地开发
-npm run build      # 产出单文件 dist/index.html 并同步覆盖仓库根 PriceLens.html（铁律：单文件版永远最新）
+npm run build      # 产出在线版（GitHub Pages）构建产物 dist/：index.html + assets/ 下分离的 js / css
 npm run typecheck  # tsc --noEmit
-npm run verify     # 聚合契约断言 + 单文件一致性（scripts/verify.mjs，58 项，含竞品配对五条规则守卫）
+npm run verify     # 聚合契约断言（scripts/verify.mjs，57 项，含竞品配对五条规则守卫）
 npm run test       # vitest 金测（快照钉住图表行为）
 npm run design:check # 设计契约、产品上下文、token 和 Impeccable 配置
 npm run design:lint  # Google DESIGN.md linter
@@ -37,13 +37,13 @@ npm run check      # design + typecheck + verify + test + build 全链路
 
 ## 在线版（单一稳定版）
 
-push main 后 GitHub Actions 构建一份单文件并部署到 GitHub Pages（`.github/workflows/deploy.yml`）：
+push main 后 GitHub Actions 构建 `dist/` 并部署到 GitHub Pages（`.github/workflows/deploy.yml`）：
 
 | 网址 | 构建 | 内容 |
 | --- | --- | --- |
-| `https://eeasonn.github.io/pricelens/` | `npm run build` | 稳定版：与离线单文件、本地 dev 同一份源码 |
+| `https://eeasonn.github.io/pricelens/` | `npm run build` | 稳定版：与本地 dev 同一份源码 |
 
-2026-11-27 负责人决策：只对稳定版持续迭代，演进版（大盘走势 / 量价预测 / 情报中心三页、迭代版 Agent 与 `/iterate/` 在线版）退场，不再有第二通道。
+2026-11-27 负责人决策：只对稳定版持续迭代，演进版（大盘走势 / 量价预测 / 情报中心三页、迭代版 Agent 与 `/iterate/` 在线版）退场，不再有第二通道。同日决定离线单文件（仓库根目录 `PriceLens.html`，含 `npm run portable` 便携版）退场：交付只保留在线版，本地开发用 `npm run dev`。
 
 ## 设计执行
 
@@ -57,8 +57,7 @@ hook 已随仓库提交（`scripts/hooks/pre-commit`），克隆后在本仓库�
 git config core.hooksPath pricelens/scripts/hooks
 ```
 
-每次 commit 自动串跑 `typecheck → verify → test → build`（build 最后同步 PriceLens.html），任一失败即拒绝提交；
-verify 末项检查根目录 `PriceLens.html` 与 `dist/index.html` 逐字节一致（手工改过单文件或忘记构建即红）；
+每次 commit 自动串跑 `typecheck → verify → test → build`，任一失败即拒绝提交；
 纯文档/注释类提交可 `SKIP_CHECK=1 git commit …` 临时跳过。
 
 ## 当前默认视图：周 · USD · 我司 + 配置竞品
@@ -108,8 +107,9 @@ verify 末项检查根目录 `PriceLens.html` 与 `dist/index.html` 逐字节一
 
 ## 时间自适应 + 刷选轨道收编（第十九轮）
 
-- **铁律**：`npm run build` / `check` 的最后一步自动把 `dist/index.html` 覆盖到仓库根
-  `PriceLens.html`（`scripts/sync-single.mjs`），单文件离线交付版永远与源码一致。
+- **离线单文件退场（2026-11-27）**：原「铁律」（`npm run build` / `check` 的最后一步把
+  `dist/index.html` 覆盖到仓库根 `PriceLens.html`）随单文件版一并退役；`npm run build`
+  现在只产出 `dist/`（GitHub Pages 在线版），仓库根不再有 `PriceLens.html`。
 - **自适应按钮**（时间格，季/月/周之后，默认开）：开 = 时间范围自动 = 所选产品数据跨度
   ±2 个时间间隔（左缘钳数据起点、右缘钳数据末端 = 当前时间，如跨度 202603–202608 →
   可选 202601–202610），RangePicker 冻结不可选；关 = 回手动。范围推导是纯函数

@@ -81,7 +81,7 @@ describe('配置页 · Agent 模型服务（服务器模式）', () => {
     render(<App />);
     await screen.findAllByRole('tab');
     expect(navLabels()).toEqual([
-      '竞品对标', '默认店铺', '异常守卫', '上一代关系', '汇率', '大促日历', '规则与字典', '数据包', 'Agent 模型服务',
+      '竞品对标', '默认店铺', '异常守卫', '汇率', '大促日历', '规则与字典', '数据包', 'Agent 模型服务',
     ]);
     expect(block()).not.toBeNull();
     expect(within(block()!).getByRole('heading', { name: 'Agent 模型服务' })).toBeTruthy();
@@ -143,7 +143,8 @@ describe('配置页 · 非服务器模式（离线 / 在线 Pages）', () => {
     render(<App />);
     await waitFor(() => expect(nav()).not.toBeNull());
     await waitFor(() => expect(document.getElementById('data-pack')).not.toBeNull());
-    expect(navLabels()).toEqual(['竞品对标', '默认店铺', '异常守卫', '上一代关系', '汇率', '大促日历', '规则与字典', '数据包']);
+    // 「上一代关系」分区 2026-11-27 移除（上一代到配置层级，改由服务器端配置表维护）
+    expect(navLabels()).toEqual(['竞品对标', '默认店铺', '异常守卫', '汇率', '大促日历', '规则与字典', '数据包']);
     expect(block()).toBeNull();
     expect(nav().querySelector('a[href="#agent-service"]')).toBeNull();
     expect(document.querySelector('.aui-model-picker')).toBeNull();

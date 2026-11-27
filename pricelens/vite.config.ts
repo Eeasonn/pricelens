@@ -1,6 +1,5 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import { viteSingleFile } from 'vite-plugin-singlefile';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
@@ -17,22 +16,11 @@ const sharedDataFiles = ['dim_product.json', 'dim_channel.json', 'dim_default_ch
 
 // 单文件离线交付：数据 JSON 构建时内嵌（§1 / §14.1）
 export default defineConfig({
-  plugins: [
-    react(),
-    viteSingleFile(),
-    {
-      // 版本通道退场（2026-11-27）：应用只剩单一稳定版，原「演进版标题 + 通道 meta」
-      // 插件收敛为只写稳定版标记。该 <meta> 是 scripts/build_portable.mjs（便携版装配）
-      // 识别「稳定版单文件产物」的锚点，必须保留；产物与退场前的稳定版逐字节同口径。
-      name: 'pricelens-channel-marker',
-      transformIndexHtml(html) {
-        const marker = '<meta name="pricelens-channel" content="stable">';
-        return html.includes('name="pricelens-channel"')
-          ? html
-          : html.replace('</head>', `${marker}</head>`);
-      },
-    },
-  ],
+  // 相对 base（2026-11-27，离线单文件退役）：产物是 index.html + 分离的 js / css，同一份 dist
+  // 既要落在 GitHub Pages 项目子路径（/pricelens/），也要被本机 Python 服务器在根路径直接托管；
+  // 应用状态全在查询串里、没有路径路由，相对引用没有副作用。dev 下 Vite 把相对 base 当 '/' 处理。
+  base: './',
+  plugins: [react()],
   define: {
     __PRICE_WEEKLY_DATA_VERSION__: JSON.stringify(dataVersion('weekly', ['fact_pack_gzip.b64.txt', 'dim_time.json', ...sharedDataFiles])),
     __PRICE_MONTHLY_DATA_VERSION__: JSON.stringify(dataVersion('monthly', ['fact_price_monthly.json', ...sharedDataFiles])),

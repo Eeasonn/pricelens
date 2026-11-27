@@ -1,7 +1,7 @@
 // ============================================================
 // PriceLens 自查脚本（node scripts/verify.mjs，纯 Node 内置模块）—— 真实数据版（2026-10-20）
 // [1] 维表完整性（ingest_real.py 产物）→ [2] 事实列式包外键/唯一性/汇率一致性/覆盖锚
-// → [3] buildSeries 契约冒烟（用项目自带 tsc 编译临时 TS 后运行）→ [4] 单文件版一致性
+// → [3] buildSeries 契约冒烟（用项目自带 tsc 编译临时 TS 后运行）
 // 全部断言通过 exit 0；任何失败打印 FAIL 并 exit 1。
 // ============================================================
 import { readFileSync, mkdtempSync, writeFileSync, rmSync, symlinkSync, existsSync } from 'node:fs';
@@ -397,24 +397,6 @@ console.log('SMOKE-JSON\\t' + JSON.stringify({ sku, comps, lastPrice: priced[pri
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
-}
-
-// ---------------- 4. 单文件版一致性（铁律：每次构建同步根目录 PriceLens.html） ----------------
-console.log('\n[4] 单文件版一致性（PriceLens.html）');
-{
-  const singlePath = join(ROOT, '..', 'PriceLens.html');
-  const distPath = join(ROOT, 'dist', 'index.html');
-  let ok = false;
-  let detail = '';
-  try {
-    const single = readFileSync(singlePath);
-    const dist = readFileSync(distPath);
-    ok = single.length > 0 && single.equals(dist);
-    detail = `${(single.length / 1024 / 1024).toFixed(2)}MB`;
-  } catch (e) {
-    detail = `读取失败：${e.message.slice(0, 80)}`;
-  }
-  check('根目录 PriceLens.html 存在且与 pricelens/dist/index.html 逐字节一致', ok, detail);
 }
 
 // ---------------- 汇总 ----------------

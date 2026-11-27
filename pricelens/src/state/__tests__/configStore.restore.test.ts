@@ -1,21 +1,16 @@
 // 窄域恢复单测（第一百八十五轮·外部 UX 审计落地）：
 // clearBenchmarkEntry 只把目标「国家×型号×配置」回退维表默认，其他国家/型号/配置
-// 原样保留，快照删空清键，无快照空操作，saveBenchmark(null) 全量语义不变；
-// clearPrevGenOverridesForModels 只清指定型号的上一代覆盖，
-// savePrevGenOverrides(null) 全量语义不变。
+// 原样保留，快照删空清键，无快照空操作，saveBenchmark(null) 全量语义不变。
+// （同批加入的 clearPrevGenOverridesForModels 已随本机上一代关系覆盖表一并退役
+//   （2026-11-27）：上一代关系改由数据包 prevGen 段驱动，见 configStore.prevGen.test.ts）
 // matrix-only 临时口径（2026-11-10）：依赖「人工快照接管生效读取」的 4 个用例以
 // it.skip 保留（快照写入/清除路径本身未删，恢复人工层时解除 skip）。
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
-  autoPrevModelId,
   benchmarkSkuIdsFor,
   clearBenchmarkEntry,
-  clearPrevGenOverridesForModels,
-  effectivePrevModelId,
   getEffectiveBenchmark,
-  getPrevGenOverrides,
   saveBenchmark,
-  savePrevGenOverrides,
 } from '../configStore';
 import { dimBenchmark, dimProduct } from '../../data';
 import { LPL } from '../lplKeys';
@@ -37,10 +32,6 @@ beforeEach(() => {
 const rawBench = (): DimBenchmark[] | null => {
   const raw = mem.get(LPL.cfgBenchmark);
   return raw == null ? null : (JSON.parse(raw) as DimBenchmark[]);
-};
-const rawPrevGen = (): Record<string, string | null> | null => {
-  const raw = mem.get(LPL.cfgPrevGen);
-  return raw == null ? null : (JSON.parse(raw) as Record<string, string | null>);
 };
 
 /** 目标组：R 国 Pura 90s Pro 12+256 GB（维表默认 2 款：iPhone 17 / S26） */
@@ -143,42 +134,5 @@ describe('clearBenchmarkEntry（窄域恢复单个配置的对标）', () => {
 
     expect(mem.get(LPL.cfgBenchmark)).toBeUndefined();
     expect(benchmarkSkuIdsFor(MID, ROM, CC)).toEqual(targetRows.map((r) => r.competitor_sku_id));
-  });
-});
-
-describe('clearPrevGenOverridesForModels（窄域清除上一代覆盖）', () => {
-  it('只清指定型号，其余型号保留；返回实际清除条数', () => {
-    savePrevGenOverrides({ 'own-a': 'own-b', 'own-c': null, 'own-e': 'own-f' });
-
-    const removed = clearPrevGenOverridesForModels(['own-a', 'own-c', 'own-z']);
-
-    expect(removed).toBe(2);
-    expect(rawPrevGen()).toEqual({ 'own-e': 'own-f' });
-    expect(getPrevGenOverrides()).toEqual({ 'own-e': 'own-f' });
-  });
-
-  it('清空后整键移除，生效关系回产品主数据口径', () => {
-    savePrevGenOverrides({ 'own-a': 'own-b' });
-    expect(effectivePrevModelId('own-a')).toBe('own-b');
-
-    const removed = clearPrevGenOverridesForModels(['own-a']);
-
-    expect(removed).toBe(1);
-    expect(mem.get(LPL.cfgPrevGen)).toBeUndefined();
-    expect(effectivePrevModelId('own-a')).toBe(autoPrevModelId('own-a'));
-  });
-
-  it('无覆盖表时是空操作（返回 0、不落盘）', () => {
-    expect(clearPrevGenOverridesForModels(['own-a'])).toBe(0);
-    expect(mem.get(LPL.cfgPrevGen)).toBeUndefined();
-  });
-
-  it('全量 API 原语义不变：savePrevGenOverrides(null) 清整表', () => {
-    savePrevGenOverrides({ 'own-a': 'own-b', 'own-x': null });
-
-    savePrevGenOverrides(null);
-
-    expect(mem.get(LPL.cfgPrevGen)).toBeUndefined();
-    expect(getPrevGenOverrides()).toEqual({});
   });
 });

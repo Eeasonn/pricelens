@@ -6,7 +6,7 @@
 //            干净重建、出包后自动冒烟、版本戳与校验和。
 // npm run server:bundle -- [--no-build] [--with-sales] [--no-smoke] [--with-wheels]
 // 产出 PriceLens-Server-<日期>/
-//   ├─ server.py / ingest_pack.py / xlsx_reader.py …   本机 Python 服务器（server/*.py 全量）
+//   ├─ server.py / ingest_pack.py / xlsx_reader.py / psi_linkage.py / prev_gen.py …   本机 Python 服务器（server/*.py 全量）
 //   ├─ dim_region.json                                地区基座（配置基座，随部署物携带）
 //   ├─ web/                                           前端静态文件（= dist）
 //   ├─ data/                                          数据源（权威）+ 派生产物
@@ -16,7 +16,7 @@
 //   │    ├─ last-import.json    月度数据载体（只带 monthly/别名段，不带上传原包）
 //   │    ├─ sales.csv|.xlsx     销量原始数据（默认不带；--with-sales 才带）
 //   │    ├─ latest-pack.json    派生包（包内 server.py --rebuild 生成）
-//   │    └─ pricelens.db        SQLite v3 四节 12 表（同上）
+//   │    └─ pricelens.db        SQLite v3 四节 13 表（同上）
 //   ├─ 启动PriceLens.bat / 重建数据.bat / 安装依赖.bat
 //   ├─ 使用说明.md / VERSION.txt / SHA256SUMS.txt
 //   └─ 配置表/                 配置表预填参考件
@@ -72,7 +72,9 @@ mkdirSync(dataDir, { recursive: true });
 
 // ---- 服务器本体 + 地区基座 + 前端 ----
 // server/*.py 全量拷贝（xlsx_reader.py = stdlib xlsx 只读器；后续新增模块自动随包，
-// 不再逐个点名——11-26 教训：逐个点名容易漏运行依赖）
+// 不再逐个点名——11-26 教训：逐个点名容易漏运行依赖）。ingest_pack 运行期 import 的
+// psi_linkage.py（PSI 关联）与 prev_gen.py（上一代配置：配置表「上一代配置」页签 →
+// cfg_prev_gen 表 + 派生包 prevGen 段）因此一并随包，不需要在这里登记。
 const serverPy = readdirSync(serverDir).filter((n) => n.endsWith('.py'));
 for (const f of serverPy) copyFileSync(join(serverDir, f), join(outDir, f));
 copyFileSync(join(pricelensRoot, 'src', 'data', 'dim_region.json'), join(outDir, 'dim_region.json'));
@@ -208,14 +210,16 @@ writeFileSync(
     '                        config_tables.xlsx 加「PSI规格对照」页签（psi_product / product_sku / category1~4）手填。',
     '',
     '【配置 · 人工维护】',
-    '  config_tables.xlsx    配置表 + 补录表（匹配表 / 竞品匹配 / 价格档位 / 大促档期）',
+    '  config_tables.xlsx    配置表 + 补录表（匹配表 / 竞品匹配 / 价格档位 / 大促档期 / 上一代配置）',
     '                        ——存在即权威，本文件是内网的唯一权威版本；改完保存即重派生',
+    '                        上一代配置页签：当前「型号 × 配置」→ 上一代「型号 × 配置」，到配置层级；',
+    '                        解析后随派生包的 prevGen 段下发给前端（「匹配上一代」直接查，不再按存储规则猜）',
     '  config.json           其余配置兜底（系列规则 / 对标矩阵 / 阶梯 / 档期 / 字典）',
     '  last-import.json      月度数据载体（运营商月度价格，非销量）——一般不用动',
     '',
     '【派生产物 · 不要手编】',
     '  latest-pack.json      派生数据包（服务器发给前端的那一份）',
-    '  pricelens.db          SQLite 数据库（v3 四节 12 表，可用 DB Browser 打开查看）',
+    '  pricelens.db          SQLite 数据库（v3 四节 13 表，可用 DB Browser 打开查看）',
     '                        对不上的销量行在 fact_sales 里 model_id 为空、match_status 记原因（待处理清单）',
     '',
     '每周替换数据 = 换 offers.csv（价格）+ 放入 sales 文件（销量），其余不动。',
@@ -325,6 +329,16 @@ async function smokeTest() {
     try {
       const pack = await getJson(`http://127.0.0.1:${port}/api/pack`, 30000);
       const front = await fetch(`http://127.0.0.1:${port}/`).then(async (r) => ({ status: r.status, text: await r.text() })).catch(() => ({ status: 0, text: '' }));
+      // 前端入口脚本：离线单文件退役后（2026-11-27）index.html 只是壳，应用在分离的 js 里。
+      // 沿页面实际引用的路径再取一次，验证构建的资源路径（vite base）与服务器路由对得上——
+      // 对不上时服务器 SPA fallback 会回 200 + HTML，只看首页 200 发现不了
+      const entrySrc = /<script\b[^>]*\bsrc="([^"]+)"/.exec(front.text)?.[1] || '';
+      const entry = entrySrc
+        ? await fetch(new URL(entrySrc, `http://127.0.0.1:${port}/`)).then(async (r) => {
+            await r.arrayBuffer();
+            return { status: r.status, type: r.headers.get('content-type') || '' };
+          }).catch(() => ({ status: 0, type: '' }))
+        : { status: 0, type: '' };
       // Agent 模型服务：预置注册表随包、未配置时 /runs 回 fallback 信封（前端落本地引擎）
       const agent = await getJson(`http://127.0.0.1:${port}/api/agent/providers`, 8000);
       const runs = await fetch(`http://127.0.0.1:${port}/api/agent/runs`, {
@@ -335,7 +349,7 @@ async function smokeTest() {
           baseline: { intent: 'query', summary: '冒烟基线', steps: [], cards: [], citations: [], suggestions: [], contextFingerprint: 'smoke' },
         }),
       }).then(async (r) => ({ status: r.status, json: await r.json().catch(() => null) })).catch(() => ({ status: 0, json: null }));
-      return { port, ping, pack: pack.json, front, agent, runs };
+      return { port, ping, pack: pack.json, front, entry, entrySrc, agent, runs };
     } finally {
       child.kill();
       await exited;
@@ -357,7 +371,8 @@ if (noSmoke) {
   if (smoke.pack?.kind !== 'pricelens-data-pack' || smoke.pack?.v !== 2) problems.push('派生包类型/版本不对');
   if (!(dims.product || []).length) problems.push('派生包无产品字典');
   if (!smoke.pack?.factPackB64) problems.push('派生包无事实包');
-  if (smoke.front.status !== 200 || !smoke.front.text.includes('PriceLens')) problems.push(`前端首页异常（HTTP ${smoke.front.status}）`);
+  if (smoke.front.status !== 200 || !smoke.front.text.includes('id="root"')) problems.push(`前端首页异常（HTTP ${smoke.front.status}）`);
+  if (smoke.entry.status !== 200 || !/javascript/i.test(smoke.entry.type)) problems.push(`前端入口脚本取不到或不是 js（页面引用 ${smoke.entrySrc} → HTTP ${smoke.entry.status} ${smoke.entry.type || '无响应'}）：检查构建的资源路径（vite base）与服务器路由`);
   const presets = smoke.agent?.json?.presets || [];
   if (presets.length < 11 || presets[0]?.id !== 'zhipu' || presets[presets.length - 1]?.id !== 'custom') problems.push('Agent 供应商预置不对');
   if (smoke.runs?.status !== 502 || !smoke.runs?.json?.fallback) problems.push(`Agent /runs 未配置时的回退信封不对（HTTP ${smoke.runs?.status}）`);
@@ -376,14 +391,8 @@ const git = (args) => {
 };
 const dirtyFiles = git(['status', '--porcelain']).split('\n').filter(Boolean);
 const pyVer = spawnSync('python3', ['--version'], { encoding: 'utf8' }).stdout.trim();
-// 提交钩子在门禁之后会再同步一次单文件，提交后恒留一处 M PriceLens.html（与 dist/index.html
-// 同源，仅构建标记不同）——只有这一项时如实说明，不写成「未提交文件」吓到内部同事
 const versionDirtyNote = (files) => {
   if (files.length === 0) return '构建时工作区干净';
-  // git status --porcelain 每行是「XY 路径」，首行开头的空格会被外层 trim() 吃掉——逐行 trim 后再比
-  if (files.length === 1 && files[0].trim() === 'M PriceLens.html') {
-    return '构建时工作区干净（PriceLens.html 仅为提交钩子末尾重新同步单文件留下的构建标记差异，与 web/index.html 同源）';
-  }
   return `构建时未提交的文件：\n${files.map((l) => `  ${l}`).join('\n')}`;
 };
 const dims = smoke?.pack?.dims || {};
@@ -424,6 +433,9 @@ const sums = walk(outDir)
   .map((p) => `${sha256(p)}  ${relative(outDir, p).split('\\').join('/')}`);
 writeFileSync(join(outDir, 'SHA256SUMS.txt'), `${sums.join('\n')}\n`, 'utf8');
 const totalMb = walk(outDir).reduce((n, p) => n + statSync(p).size, 0) / 1024 / 1024;
+// 前端静态文件总量（index.html + assets/ 下分离的 js / css）：离线单文件退役后单看
+// index.html 的大小已不代表前端体积
+const distMb = (walk(distDir).reduce((n, p) => n + statSync(p).size, 0) / 1024 / 1024).toFixed(1);
 const manifestHash = createHash('sha256').update(`${sums.join('\n')}\n`).digest('hex').slice(0, 16);
 
 // ---- 使用说明 ----
@@ -459,7 +471,7 @@ const usage = `# PriceLens 服务器版（内部部署）· ${ymd}
 - **价格原始数据**：\`data/offers.csv\`（${inventory.offers}），已在包内重建完成，首次启动即可用。
 - **配置与权威匹配表**：\`data/config.json\`、\`data/config_tables.xlsx\`（${inventory.configTables}）。
 - **月度数据**：${inventory.monthlyRows} 行（运营商月度价格，随包携带）。
-- **派生产物**：\`data/latest-pack.json\`（服务器发给前端的数据包）与 \`data/pricelens.db\`（SQLite，v3 四节 12 表）。
+- **派生产物**：\`data/latest-pack.json\`（服务器发给前端的数据包）与 \`data/pricelens.db\`（SQLite，v3 四节 13 表）。
 - **销量原始数据**：${inventory.sales || '**未带**——量价页的销量为「估算」口径（页面有标注）。真实销量到位后按第 3 节放入即可'}。
 
 ## 3. 替换数据（每周 SOP）
@@ -468,13 +480,13 @@ const usage = `# PriceLens 服务器版（内部部署）· ${ymd}
 |---|---|
 | 价格原始数据 | 用新文件替换 \`data/offers.csv\` |
 | 销量原始数据 | 放入 \`data/sales.csv\` 或 \`data/sales.xlsx\`（格式见 \`data/数据编辑说明.txt\`） |
-| 匹配表 / 竞品 / 档位 / 档期 | 编辑 \`data/config_tables.xlsx\` 对应页签后保存 |
+| 匹配表 / 竞品 / 档位 / 档期 / 上一代配置 | 编辑 \`data/config_tables.xlsx\` 对应页签后保存 |
 | 其余配置 | 编辑 \`data/config.json\` |
 
 保存后约 10-60 秒自动重新派生，浏览器约 15 秒内自动刷新。不想等就双击 \`重建数据.bat\` 立即重建。
 也可以在应用「配置」页用「导入数据包」上传 v3 JSON 数据包，效果相同。
 
-${'## 4. 数据结构（v3 · 四节 12 表）'}
+${'## 4. 数据结构（v3 · 四节 13 表）'}
 
 派生结果落 \`data/pricelens.db\`，可用 DB Browser for SQLite 直接打开查看：
 
@@ -482,6 +494,7 @@ ${'## 4. 数据结构（v3 · 四节 12 表）'}
 |---|---|---|
 | ODS 原始层 | ods_offer、ods_psi | 价格采集、销量原始数据，原样落库 |
 | 补录 / 配置 | cfg_competitor、map_price_band、map_promo、map_region | 竞品配置、价格档位、大促档期、国家匹配 |
+| 补录 / 配置 | cfg_prev_gen | 上一代配置：当前「型号 × 配置」→ 上一代「型号 × 配置」（配置表「上一代配置」页签，到配置层级）；解析后随派生包 \`prevGen\` 段下发，match_status 非 matched / inactive 的行是待处理清单 |
 | MAP | map_product | 匹配表（只对应价格侧：原文 → 产品身份，含人工修订前的原值 orig_*；行上的 psi_product + category1~3 是销量取数键） |
 | MAP | map_psi_sku | PSI 规格对照：一个不同的「Product + Product SKU」串一行，拆出 category1~3（规则每次刷新生成，可人工覆盖） |
 | FACT | fact_price、fact_sales | 价格宽表（39 列）；销量 = 周 × 口径 × 国家 × 型号 × category 求和 |
@@ -510,9 +523,9 @@ ${AGENT_USAGE}
 ## 8. 常见问题
 
 - 端口占用：改环境变量后启动（\`set PRICLENS_PORT=8322 && python -X utf8 server.py\`）。
-- 服务器没起时页面自动回落单文件模式（内置兜底数据，不含本包的数据）。
+- 服务器没起时打不开页面：页面与数据都由本服务器提供，重新双击 \`启动PriceLens.bat\` 后刷新浏览器即可。
 - 替换数据后页面没变：看启动窗口有没有报错（常见是 CSV 列名或编码不对），改好后保存会自动重试。
-- web/index.html 大小 ${mbOf(join(distDir, 'index.html'))} MB（前端 + 内置兜底数据）。
+- web/ 前端静态文件共 ${distMb} MB（index.html + assets/ 下的 js / css；内置兜底数据打在 js 里）。
 `;
 writeFileSync(join(outDir, '使用说明.md'), usage);
 
@@ -531,7 +544,7 @@ if (withWheels) {
 
 console.log(`[server-bundle] 装配完成 → ${outDir}`);
 console.log(`[server-bundle]   ${serverPy.join(' / ')}（纯 stdlib）`);
-console.log(`[server-bundle]   web/（${mbOf(join(distDir, 'index.html'))} MB 单文件 + 静态资源）`);
+console.log(`[server-bundle]   web/（前端静态文件共 ${distMb} MB）`);
 console.log(`[server-bundle]   data/：${inventory.offers} · 配置表 ${inventory.configTables} · 派生包 ${mbOf(join(dataDir, 'latest-pack.json'))} MB · 数据库 ${mbOf(join(dataDir, 'pricelens.db'))} MB`);
 console.log('[server-bundle]   启动PriceLens.bat / 重建数据.bat / 使用说明.md / VERSION.txt / SHA256SUMS.txt');
 console.log(`[server-bundle]   整包 ${totalMb.toFixed(1)} MB · 清单指纹 ${manifestHash}`);
