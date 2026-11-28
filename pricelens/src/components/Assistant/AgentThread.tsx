@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PropsWithChildren, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ActionBarPrimitive, AssistantRuntimeProvider, ComposerPrimitive, MessagePrimitive,
   ThreadPrimitive, useExternalStoreRuntime, type ThreadMessageLike,
 } from '@assistant-ui/react';
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown';
+import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import {
   ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, CloseOutlined,
   CopyOutlined, EditOutlined, ExpandOutlined, FullscreenExitOutlined, PlusOutlined,
@@ -14,6 +15,14 @@ import { color, font, fontSize, motion, radius, selectAccent, selectSoft, select
 import ModelPicker from './ModelPicker';
 import { BRAND_NAME } from '../PriceAgentMark';
 import './agent-thread.css';
+
+export interface AgentToolPart {
+  id: string;
+  name: string;
+  input: Record<string, string>;
+  result?: unknown;
+  status: 'queued' | 'running' | 'success' | 'failed' | 'waiting_for_approval' | 'cancelled';
+}
 
 export interface ThreadMessage {
   id: string;
@@ -26,6 +35,7 @@ export interface ThreadMessage {
   failed?: boolean;
   cancelled?: boolean;
   actionsLocked?: boolean;
+  toolParts?: AgentToolPart[];
 }
 
 interface ThreadController {
@@ -82,10 +92,20 @@ export interface AgentThreadProps<M extends ThreadMessage, S extends ThreadSugge
 
 /** Domain state stays in the channel provider; assistant-ui owns conversation mechanics. */
 export function toThreadMessage(message: ThreadMessage): ThreadMessageLike {
+  const toolParts = (message.toolParts ?? []).map((part) => ({
+    type: 'tool-call' as const,
+    toolCallId: part.id,
+    toolName: part.name,
+    args: part.input,
+    argsText: JSON.stringify(part.input),
+    result: part.result,
+    isPreliminary: part.status === 'queued' || part.status === 'running' || part.status === 'waiting_for_approval',
+    isError: part.status === 'failed',
+  }));
   return {
     id: message.id,
     role: message.role,
-    content: [{ type: 'text', text: message.text }],
+    content: [{ type: 'text', text: message.text }, ...toolParts],
     createdAt: new Date(message.createdAt),
     ...(message.role === 'assistant' ? {
       status: message.streaming ? { type: 'running' as const }
@@ -118,6 +138,44 @@ function MarkdownText() {
     // The assistant can describe sources; it cannot fetch arbitrary remote images.
     img: ({ alt }) => <span>{alt ? `[图片：${alt}]` : '[图片]'}</span>,
   }} />;
+}
+
+const toolLabelOf = (name: string): string => ({
+  'catalog.resolve': '解析产品',
+  'series.query': '读取价格序列',
+  'series.compare': '比较价格',
+  'alerts.query': '读取预警',
+  'alerts.explain': '解释预警',
+  'view.preview': '生成筛选预览',
+}[name] ?? '执行工具');
+
+function ToolPart(part: ToolCallMessagePartProps) {
+  const domainStatus = typeof part.args?.status === 'string' ? part.args.status : part.isError ? 'failed' : part.isPreliminary ? 'running' : 'success';
+  const status = ({ queued: '排队中', running: '进行中', success: '完成', failed: '失败', waiting_for_approval: '等待确认', cancelled: '已取消' } as Record<string, string>)[domainStatus] ?? '完成';
+  return (
+    <div className="aui-tool-part" data-agent-tool={part.toolName} data-tool-status={domainStatus}>
+      <span className="aui-tool-part-label">{toolLabelOf(part.toolName)}</span>
+      <span className="aui-tool-part-status" data-status={part.isError ? 'failed' : part.isPreliminary ? 'running' : 'success'}>{status}</span>
+      {typeof part.result === 'string' && part.result.length > 0 && <span className="aui-tool-part-result">{part.result}</span>}
+    </div>
+  );
+}
+
+function ToolGroup({ startIndex, endIndex, children, hasAttention = false, statuses = [] }: PropsWithChildren<{ startIndex: number; endIndex: number; hasAttention?: boolean; statuses?: readonly AgentToolPart['status'][] }>) {
+  const [open, setOpen] = useState(hasAttention);
+  useEffect(() => setOpen(hasAttention), [hasAttention]);
+  const counts = new Map<AgentToolPart['status'], number>();
+  for (const status of statuses) counts.set(status, (counts.get(status) ?? 0) + 1);
+  const labels: Record<AgentToolPart['status'], string> = { queued: '排队中', running: '运行中', success: '成功', failed: '失败', waiting_for_approval: '等待确认', cancelled: '已取消' };
+  const statusText = statuses.some((status) => status !== 'success')
+    ? (Object.keys(labels) as AgentToolPart['status'][]).flatMap((status) => counts.has(status) ? [`${counts.get(status)} ${labels[status]}`] : []).join(' · ')
+    : '';
+  return (
+    <details className="aui-execution-group" data-agent-execution open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>执行记录{statusText ? ` · ${statusText}` : ''} · {endIndex - startIndex + 1} 项</summary>
+      <div className="aui-execution-group-body">{children}</div>
+    </details>
+  );
 }
 
 function MessageActions({ message, controller, focusComposer }: {
@@ -290,7 +348,11 @@ export function AgentThread<M extends ThreadMessage, S extends ThreadSuggestion>
               return <MessagePrimitive.Root className={`aui-message aui-message-${original.role}`} data-agent-message data-message-locked={original.actionsLocked || undefined}>
                 {original.role === 'assistant' && <div className="aui-message-heading"><strong>{BRAND_NAME}</strong><div className="aui-message-meta">{renderHeader?.(original)}</div></div>}
                 <div className="aui-message-text" data-streaming-text={original.streaming || undefined}>
-                  <MessagePrimitive.Parts components={{ Text: original.role === 'assistant' ? MarkdownText : undefined }} />
+                  <MessagePrimitive.Parts components={{
+                    Text: original.role === 'assistant' ? MarkdownText : undefined,
+                    tools: { Fallback: ToolPart },
+                    ToolGroup: (props) => <ToolGroup {...props} hasAttention={original.toolParts?.some((part) => ['queued', 'running', 'failed', 'waiting_for_approval'].includes(part.status))} statuses={original.toolParts?.map((part) => part.status)} />,
+                  }} />
                 </div>
                 {original.streaming && <div className="aui-stream-status"><span className="aui-progress-mark" aria-hidden />{statusLabel}</div>}
                 {renderMessage(original, { focusComposer })}

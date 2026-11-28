@@ -27,6 +27,11 @@ import {
   displayedConfig,
   hintOf,
   initialDraft,
+  initialTierDraft,
+  applyTierDraftToMains,
+  outlineRunsOf,
+  recommendationLevelsOf,
+  tierSelectionsOf,
   rowViewOf,
   toggleModel,
   type BoardColumn,
@@ -237,9 +242,9 @@ describe('bestConfigHint / displayedConfig / rowViewOf', () => {
     expect(chipHintOf(row, shown, undefined, anchors)).toBe('adjacent');
   });
 
-  it('列宽常量：288 / min 272', () => {
-    expect(BOARD_COL_W).toBe(288);
-    expect(BOARD_COL_MIN_W).toBe(272);
+  it('列宽常量：240 / min 220（去掉价格列与说明文字后收窄）', () => {
+    expect(BOARD_COL_W).toBe(240);
+    expect(BOARD_COL_MIN_W).toBe(220);
   });
 });
 
@@ -343,6 +348,89 @@ describe('cardsFromBoard（方案 A 分配规则）', () => {
     expect(g2[0].compares).toHaveLength(1);
     expect(g2[1].compares).toHaveLength(0);
     expect(cardsFromBoard([], [it2('m9', 100)])).toEqual([]);
+  });
+});
+
+describe('单主产品档位草稿与集合外框', () => {
+  const [A, B, C] = brandsWithModels(3, 2);
+  const anchorM = A.models[0];
+  const otherMain = A.models[1];
+  const bSame = B.models[0];
+  const bFar = B.models[1];
+  const cAdj = C.models[0];
+  const entries = [
+    entry(anchorM, '8+256 GB', 500, THIRD),
+    entry(anchorM, '12+512 GB', 700, FOURTH),
+    entry(otherMain, '8+256 GB', 1300, TOP),
+    entry(bSame, '8+128 GB', 450, THIRD),
+    entry(bSame, '12+512 GB', 710, FOURTH),
+    entry(bFar, '8+128 GB', 150, LOW),
+    entry(cAdj, '8+256 GB', 550, THIRD),
+  ];
+  const cols = build(entries, [A.brand, B.brand, C.brand], A.brand);
+
+  it('单主产品：只替换当前组，新增组只追加，不覆盖已有组', () => {
+    const otherGroup: MainProduct = { id: 'other', main: sel(otherMain, '8+256 GB'), compares: [] };
+    const current: MainProduct = { id: 'current', main: sel(anchorM, '12+512 GB'), compares: [] };
+    const d = initialTierDraft(cols, [current]);
+    d.checked = new Set([bSame]);
+    const updated = applyTierDraftToMains([current, otherGroup], cols, d, { existingId: 'current', newId: 'new' });
+    expect(updated).toHaveLength(2);
+    expect(updated[0].id).toBe('current');
+    expect(updated[0].main?.romram).toBe('12+512 GB');
+    expect(updated[0].compares.map((s) => s.modelId)).toEqual([bSame]);
+    expect(updated[1]).toEqual(otherGroup);
+    const appended = applyTierDraftToMains([current, otherGroup], cols, d, { newId: 'new' });
+    expect(appended.map((card) => card.id)).toEqual(['current', 'other', 'new']);
+  });
+
+  it('最近项按型号归一，同档与相邻档继续提供外层提示', () => {
+    const d = initialTierDraft(cols, [{ id: 'current', main: sel(anchorM, '12+512 GB'), compares: [] }]);
+    const levels = recommendationLevelsOf(cols, d, INDUSTRY);
+    expect(levels.get(selKey(sel(bSame, '12+512 GB')))).toBe('nearest');
+    expect(levels.get(selKey(sel(cAdj, '8+256 GB')))).toBe('nearest');
+    expect(levels.has(selKey(sel(bSame, '8+128 GB')))).toBe(false);
+    expect(levels.has(selKey(sel(anchorM, '12+512 GB')))).toBe(false);
+    expect(levels.has(selKey(sel(bFar, '8+128 GB')))).toBe(false);
+  });
+
+  it('每个品牌分别保留至多两个最近型号，不再全板共享两个最近名额', () => {
+    const [A, B, C] = brandsWithModels(3, 3);
+    const entries = [
+      entry(A.models[0], '8+256 GB', 700, FOURTH),
+      entry(B.models[0], '8+256 GB', 720, FOURTH), entry(B.models[1], '8+256 GB', 710, FOURTH), entry(B.models[2], '8+256 GB', 550, THIRD),
+      entry(C.models[0], '8+256 GB', 690, FOURTH), entry(C.models[1], '8+256 GB', 705, FOURTH), entry(C.models[2], '8+256 GB', 550, THIRD),
+    ];
+    const cols = build(entries, [A.brand, B.brand, C.brand], A.brand);
+    const d = initialTierDraft(cols, [{ id: 'current', main: sel(A.models[0], '8+256 GB'), compares: [] }]);
+    const levels = recommendationLevelsOf(cols, d, INDUSTRY);
+    for (const group of [B, C]) {
+      expect(levels.get(selKey(sel(group.models[0], '8+256 GB')))).toBe('nearest');
+      expect(levels.get(selKey(sel(group.models[1], '8+256 GB')))).toBe('nearest');
+      expect(levels.get(selKey(sel(group.models[2], '8+256 GB')))).toBe('adjacent');
+    }
+    expect(levels.has(selKey(sel(A.models[0], '8+256 GB')))).toBe(false);
+  });
+
+  it('同档与相邻档各保留一个整体外框，最近项嵌套而不拆分外层', () => {
+    expect(outlineRunsOf([
+      { base: 'same', nearest: false }, { base: 'same', nearest: false },
+      { base: 'same', nearest: true }, { base: 'same', nearest: false },
+      { base: 'adjacent', nearest: false }, { base: 'adjacent', nearest: false },
+    ])).toEqual([
+      { level: 'same', start: 0, end: 4, nearest: [{ start: 2, end: 3 }] },
+      { level: 'adjacent', start: 4, end: 6, nearest: [] },
+    ]);
+  });
+
+  it('应用只产出当前一个主产品和显式选择的对比项', () => {
+    const d = initialTierDraft(cols, [{ id: 'current', main: sel(anchorM, '12+512 GB'), compares: [] }]);
+    d.checked = new Set([bSame]);
+    const picked = tierSelectionsOf(cols, d);
+    expect(picked).not.toBeNull();
+    expect(picked!.anchor.sel.romram).toBe('12+512 GB');
+    expect(picked!.compares.map((c) => c.sel.modelId)).toEqual([bSame]);
+    expect(picked!.compares.some((c) => c.sel.modelId === anchorM)).toBe(false);
   });
 });
 

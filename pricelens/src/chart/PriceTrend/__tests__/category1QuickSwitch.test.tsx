@@ -59,13 +59,13 @@ describe('applyCategory1Selection（category1 快切状态）', () => {
 });
 
 describe('category1OptionsOf（药丸配置候选）', () => {
-  it('同型号配置按容量升序，标出当前配置与参考价', () => {
+  it('同型号配置按容量升序，只保留当前配置与配置名，不携带价格', () => {
     const options = category1OptionsOf(mainSel, nodes, 'usd');
     expect(options.map((o) => o.selection.romram)).toEqual(['12+256 GB', '12+512 GB']);
     expect(options[0].current).toBe(true);
     expect(options[1].current).toBe(false);
     expect(options.every((o) => !o.disabled)).toBe(true);
-    expect(options.every((o) => o.priceText.startsWith('$'))).toBe(true);
+    expect(options.every((o) => !('priceText' in o))).toBe(true);
   });
 });
 
@@ -88,6 +88,7 @@ describe('Category1QuickSwitch（药丸交互）', () => {
     const series = { key: seriesKeyOf(mainSel), isOwn: true, brand: 'HUAWEI', label: 'HUAWEI Pura 90s Pro Max', skuIds: mainSel.skuIds, color: '#c7000b', points: [] };
     render(<FiltersProvider><Category1QuickSwitch series={series} nodes={nodes} /></FiltersProvider>);
     fireEvent.click(screen.getByRole('button', { name: /切换 Pura 90s Pro Max 的 category1/ }));
+    expect(screen.getByRole('menu').textContent).not.toContain('$');
     fireEvent.click(await screen.findByRole('menuitemradio', { name: /12\+512 GB/ }));
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem('LPL3.filters') ?? '{}');

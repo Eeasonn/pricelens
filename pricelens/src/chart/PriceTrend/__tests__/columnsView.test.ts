@@ -42,23 +42,10 @@ describe('columnsGridOf（三列网格）', () => {
   });
 });
 
-describe('dashPatternAt（同品牌线型循环）', () => {
-  it('组内首条实线（undefined），其后取虚线节律；节律两两可辨', () => {
-    expect(dashPatternAt(0)).toBeUndefined();
-    const rest = COLUMNS_DASH_PATTERNS.slice(1);
-    expect(new Set(rest.map((p) => p.join(','))).size).toBe(rest.length);
-    rest.forEach((p, i) => expect(dashPatternAt(i + 1)).toEqual([...p]));
-  });
-
-  it('按表长循环；返回副本（改返回值不污染表）；负下标不越界', () => {
-    const n = COLUMNS_DASH_PATTERNS.length;
-    expect(dashPatternAt(n)).toBeUndefined();
-    expect(dashPatternAt(n + 1)).toEqual(dashPatternAt(1));
-    expect(dashPatternAt(2 * n + 3)).toEqual(dashPatternAt(3));
-    expect(dashPatternAt(-1)).toEqual([...COLUMNS_DASH_PATTERNS[n - 1]]);
-    const got = dashPatternAt(1)!;
-    got.push(999);
-    expect(COLUMNS_DASH_PATTERNS[1]).not.toContain(999);
+describe('dashPatternAt（分列与代际统一实线）', () => {
+  it('任何组内序号都不返回产品线型，避免把价格走势误读成不同业务关系', () => {
+    for (const i of [0, 1, 2, 3, 6, 12, -1]) expect(dashPatternAt(i)).toBeUndefined();
+    expect(COLUMNS_DASH_PATTERNS).toEqual([[]]);
   });
 });
 
@@ -108,6 +95,15 @@ describe('线型接线：buildOption / buildLabelPlan', () => {
     expect(arr[1].lineStyle.type).toEqual([4, 4]); // 缺采桥不随线型字段改变、仍是虚线（不造点）
   });
 
+  it('solidMissingBridge：缺采段也保持实线，不用虚线区分产品或代际', () => {
+    const s = mkSeries({ points: pts });
+    const geom = mkGeom([s]);
+    const option = buildOption({ geom, series: [s], priceTypes: DISC_ONLY, granularity: 'week', labelPlan: { dy: {}, names: [] }, gridTop: 96, endpointMarks: buildEndpointMarks([s]), solidMissingBridge: true })!;
+    const arr = option.series as { lineStyle: Record<string, unknown> }[];
+    expect(arr).toHaveLength(2);
+    expect('type' in arr[0].lineStyle).toBe(false);
+    expect('type' in arr[1].lineStyle).toBe(false);
+  });
   it('不带 lineDash 的系列：主线不带 type（实线），既有调用方 option 形状不变', () => {
     const s = mkSeries({ points: pts });
     const geom = mkGeom([s]);

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AgentContextDisclosure, AgentThread, type ThreadMessage } from './AgentThread';
+import { AgentContextDisclosure, AgentThread, toThreadMessage, type ThreadMessage } from './AgentThread';
 
 const ask = vi.fn();
 const stop = vi.fn();
@@ -127,6 +127,39 @@ describe('shared assistant-ui conversation', () => {
     fireEvent.click(screen.getByRole('button', { name: '复制消息' }));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('复制失败'));
     expect(screen.queryByRole('button', { name: '已复制' })).toBeNull();
+  });
+
+  it('converts domain execution cards to native assistant-ui tool-call parts', () => {
+    const converted = toThreadMessage({
+      id: 'answer', role: 'assistant', text: '结论', createdAt: new Date().toISOString(),
+      toolParts: [{ id: 'tool-1', name: 'series.query', input: { status: 'success' }, result: '已返回 6 个产品', status: 'success' }],
+    });
+    expect(converted.content[1]).toMatchObject({
+      type: 'tool-call', toolCallId: 'tool-1', toolName: 'series.query',
+      args: { status: 'success' }, result: '已返回 6 个产品', isPreliminary: false,
+    });
+  });
+
+  it('groups execution parts behind one compact disclosure instead of a long inline explanation', () => {
+    render(<Harness initialMessages={[{
+      id: 'answer', role: 'assistant', text: '结论', createdAt: new Date().toISOString(),
+      toolParts: [{ id: 'tool-1', name: 'series.query', input: { status: 'success' }, result: '已返回 6 个产品', status: 'success' }],
+    }]} />);
+    const execution = document.querySelector<HTMLDetailsElement>('[data-agent-execution]');
+    expect(execution).not.toBeNull();
+    expect(execution?.querySelector('summary')?.textContent).toContain('执行记录');
+    expect(execution?.textContent).not.toContain('输入 筛选 公式 舍入 输出');
+    expect(execution?.open).toBe(false);
+  });
+
+  it.each(['running', 'failed'] as const)('keeps %s execution records visible without restoring long cards', (status) => {
+    render(<Harness initialRunning={status === 'running'} initialMessages={[{
+      id: 'answer', role: 'assistant', text: '结论', createdAt: new Date().toISOString(), streaming: status === 'running',
+      toolParts: [{ id: `tool-${status}`, name: 'series.query', input: { status }, result: status === 'failed' ? '读取失败' : '读取中', status }],
+    }]} />);
+    const execution = document.querySelector<HTMLDetailsElement>('[data-agent-execution]');
+    expect(execution?.open).toBe(true);
+    expect(execution?.querySelectorAll('.lpl-agent-result-card')).toHaveLength(0);
   });
 
   it('closes the modal with Escape, restores background interaction and opener focus', async () => {

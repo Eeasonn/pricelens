@@ -242,7 +242,7 @@ describe('档位筛选（第一百二十三轮：tier_by_country 配置级档位
   });
 });
 
-describe('型号入门价与列排序（选择产品浮窗「档位 · 现价」/ 默认|价格|名称）', () => {
+describe('型号排序（选择产品浮窗：默认 | 价格 | 名称；名称自然倒序）', () => {
   const mkModel = (id: string, label: string, prices: (number | null)[]): ModelNode => ({
     key: id,
     modelId: id,
@@ -293,9 +293,9 @@ describe('型号入门价与列排序（选择产品浮窗「档位 · 现价」
     expect(sortModelNodes([y, x], 'price').map((m) => m.modelId)).toEqual(['x', 'y']);
   });
 
-  it('名称排序：型号名文本自然序', () => {
+  it('名称排序：型号名文本自然倒序', () => {
     const m9 = mkModel('a', 'Mate 9', [1]);
     const m10 = mkModel('b', 'Mate 10', [1]);
-    expect(sortModelNodes([m10, m9], 'name').map((m) => m.label)).toEqual(['Mate 9', 'Mate 10']);
+    expect(sortModelNodes([m9, m10], 'name').map((m) => m.label)).toEqual(['Mate 10', 'Mate 9']);
   });
 });

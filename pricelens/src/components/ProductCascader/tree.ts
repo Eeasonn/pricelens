@@ -208,11 +208,11 @@ export function modelEntryInfo(m: ModelNode, currency: 'usd' | 'local' = 'usd'):
 export type ModelSortMode = 'default' | 'price' | 'name';
 
 /** 型号列排序（选择产品浮窗「默认 | 价格 | 名称」）：默认 = 树内现序（在售在前、
- *  上市新→旧）；价格 = 入门现价升序、无价殿后、同价按名称；名称 = 型号名文本序。 */
+ *  上市新→旧）；价格 = 入门现价升序、无价殿后、同价按名称；名称 = 型号名自然倒序。 */
 export function sortModelNodes(models: ModelNode[], mode: ModelSortMode, currency: 'usd' | 'local' = 'usd'): ModelNode[] {
   const byName = (a: ModelNode, b: ModelNode): number => a.label.localeCompare(b.label, undefined, { numeric: true });
   if (mode === 'default') return models;
-  if (mode === 'name') return [...models].sort(byName);
+  if (mode === 'name') return [...models].sort((a, b) => byName(b, a));
   const priceOf = (m: ModelNode): number | null => modelEntryInfo(m, currency).price;
   return [...models].sort((a, b) => {
     const pa = priceOf(a);

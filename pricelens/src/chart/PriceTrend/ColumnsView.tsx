@@ -8,11 +8,11 @@
 // · 默认共享：查看时间轴（各图底部时间轨、拖任一条全部联动）、区间刷选、Y 轴
 //   （全部图并集算一次受控传入）、跨图悬停十字线；Y 轴可切「独立」（各图自适应、
 //   各自带轴）；时间轴可切「轴同步」关（各图独立调整查看时间）。
-// · 颜色 = 品牌色（brandColorOf，跨品牌分组照样可辨）；组内多条线靠直接标签
-//   （名称带药丸带线型样条）、线型（虚线节律按组内序循环）、tooltip、悬停隔离辨认。
+// · 颜色 = 品牌色（brandColorOf，跨品牌分组照样可辨）；组内多条线靠直接标签、
+//   tooltip 与悬停隔离辨认，不使用产品区分虚线。
 // · 折线全画：不设条数上限、不自动减少、不强制切图（合并线数限制不在这里重现）；
 //   可读性由图例搜索 / 隔离 / 主动隐藏（LegendTools）与标签 / 图体适应承担。
-// · 缺采不造点（buildSeries 同口径：缺采周 null、虚线跨接）；图下为分列价格明细
+// · 缺采不造点（buildSeries 同口径：缺采周 null、实线跨接真实锚点）；图下为分列价格明细
 //   （Dashboard 经 onSeriesWindow 渲染 TrendTables）。
 // ============================================================
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -72,14 +72,11 @@ import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { useConfigVersion } from '../../state/configStore';
 import BrandDot, { brandLabelOf } from '../../components/BrandMark';
 
-/** 组内线型循环：首条实线，其后虚线节律两两可辨；缺采跨接段
- *  恒为 [4, 4] 短虚线桥（opacity .9），不进本表 */
-export const COLUMNS_DASH_PATTERNS: readonly (readonly number[])[] = [[], [10, 5], [2, 4], [12, 4, 2, 4], [6, 3], [16, 4]];
+export const COLUMNS_DASH_PATTERNS: readonly (readonly number[])[] = [[]];
 
-/** 组内第 i 条线的线型（i = 0 实线 → undefined；按循环表取） */
-export function dashPatternAt(i: number): number[] | undefined {
-  const p = COLUMNS_DASH_PATTERNS[((i % COLUMNS_DASH_PATTERNS.length) + COLUMNS_DASH_PATTERNS.length) % COLUMNS_DASH_PATTERNS.length];
-  return p.length ? [...p] : undefined;
+/** 分列与代际不再用线型区分产品；保留旧调用方的统一实线出口。 */
+export function dashPatternAt(_i: number): number[] | undefined {
+  return undefined;
 }
 
 /** 三列网格：≤3 组 = 每组一列；更多组每行最多 3 个、换行 */
@@ -119,7 +116,7 @@ export default function ColumnsView(props: {
   groups: ColumnGroup[];
   /** 代际模式（2026-11-28 三轮返修：代际走共享 Chart，与分列同语言）：
    *  组键 → 该组的代际链。传入后：取数扩展到全部代，每组的系列替换为
-   *  「每链一条拼接序列」（活跃代点全真 + overlap 淡线），线型强制 step。 */
+   *  「每链一条连续生命周期序列」，线型保持 step、全部使用实线。 */
   lineage?: ReadonlyMap<string, LineageChain[]>;
   /** 分组依据（brand 时卡头带品牌点、空态文案按品牌语义；series/tier 只出组名） */
   groupBy: 'brand' | 'series' | 'tier';
@@ -216,17 +213,8 @@ export default function ColumnsView(props: {
       return { series: [], failed: true };
     }
   }, [query, configVersion]);
-  // 线型：组内按选择序赋值（颜色 = 品牌色，同组多条靠虚线节律辨认）
-  const allSeries = useMemo<Series[]>(() => {
-    const order = new Map<string, number>();
-    for (const g of groups) g.sels.forEach((s, i) => order.set(selKey(s), i));
-    return allSeriesRes.series.map((s) => {
-      const sel = sels.find((g) => seriesKeyMatches(s.key, seriesKeyOf(g)));
-      const i = sel ? order.get(selKey(sel)) ?? 0 : 0;
-      const dash = dashPatternAt(i);
-      return dash ? { ...s, lineDash: dash } : s;
-    });
-  }, [allSeriesRes, groups, sels]);
+  // 产品辨识使用品牌色与直接标签，不再按组内序改变线型。
+  const allSeries = useMemo<Series[]>(() => allSeriesRes.series, [allSeriesRes]);
   const weeklySeries = useMemo<Series[]>(() => {
     if (state.granularity === 'week') return allSeries;
     if (query.groups.length === 0) return [];
@@ -370,8 +358,8 @@ export default function ColumnsView(props: {
 
   // ---- 列组图集合：系列归属 = 选择按 selKey 落到组（series.brand 只用于配色，
   //      series/tier 跨品牌组不能按 s.brand 归组） ----
-  // 代际模式：每组系列 = 每链一条拼接序列（活跃代点全真复制 + genLabel 附当代名；
-  //  overlap = 老一代在交接后仍有价的淡线系列）。拼接需要全集桶——用 buckets（下方
+  // 代际模式：每组系列 = 每链一条连续生命周期序列（活跃代点全真复制 + genLabel 附当代名；
+  //  overlap 仅保留在模型与明细中，不额外画线）。拼接需要全集桶——用 buckets（下方
   //  同一份枚举；useMemo 顺序上 buckets 已在前）。
   const lineagePanelSeries = useMemo(() => {
     if (!lineage) return null;
@@ -415,35 +403,7 @@ export default function ColumnsView(props: {
           skuIds: chain.gens[chain.gens.length - 1].sel.skuIds,
           color: brandColorOf(brandKey),
           points,
-          lineDash: dashPatternAt(ci),
         });
-        // overlap：老一代交接后仍有价的淡线（同色系、细虚线、不进图例隐藏语义——
-        // 与主链同生死：键带主链前缀，隐藏主链时 Chart 侧只按精确键匹配故独立；
-        //  图例药丸只列主链，overlap 作主链的陪衬存在）
-        for (const ov of spliced.overlap) {
-          const ovPoints: Series['points'] = buckets.map((b) => {
-            const hit = ov.points.find((x) => x.bucketId === b.id);
-            const ref = genSeriesArr[ov.genIndex]?.points.find((x) => x.bucketId === b.id) ?? null;
-            if (!hit || !ref) {
-              return {
-                bucketId: b.id, xLabel: b.xLabel, anchorDate: '', rrp: null, price: null,
-                missing: true, offer: null, url: '', shopName: null, genLabel: null,
-              };
-            }
-            return { ...ref, genLabel: chain.gens[ov.genIndex]?.label ?? null };
-          });
-          if (!ovPoints.some((x) => !x.missing)) continue;
-          list.push({
-            key: `lineage:${chain.key}#overlap${ov.genIndex}`,
-            isOwn: brandKey === ownBrand(),
-            brand: brandKey,
-            label: `${chain.gens[ov.genIndex]?.label ?? ''}（上一代在售）`,
-            skuIds: [],
-            color: brandColorOf(brandKey),
-            points: ovPoints,
-            lineDash: [2, 3],
-          });
-        }
       });
       out.set(g.key, list);
     }
@@ -890,6 +850,7 @@ export default function ColumnsView(props: {
                         tipDiffBaseKey={baselineHere}
                         legendHoverKey={hoverHere}
                         lineShape={lineShape}
+                        solidMissingBridge
                         markers={
                           lineageHandovers?.get(p.key)
                             ?.map((m) => {

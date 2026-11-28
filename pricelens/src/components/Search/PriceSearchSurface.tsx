@@ -51,6 +51,7 @@ interface Props {
   onApplyPreview?: () => void;
   /** 把当前输入交给 Agent 对话深度分析 */
   onPreviewToAgent?: () => void;
+  onUndoApply?: () => void;
 }
 
 function FilterPreviewBlock({ preview, running, onApply, onToAgent }: {
@@ -138,12 +139,16 @@ export function PriceSearchSurface(props: Props) {
   return <div ref={rootRef} className="lpl-quick-search" role="search" aria-label="看板快速搜索" style={tokens}>
     <div className="lpl-quick-search-shell" data-open={open || undefined}>
       {props.running ? <LoadingOutlined className="lpl-quick-search-leading" aria-hidden /> : <SearchOutlined className="lpl-quick-search-leading" aria-hidden />}
-      <input ref={inputRef} aria-label="AI 快速搜索" aria-haspopup="dialog" aria-controls={open ? 'pricelens-price-search-results' : undefined}
-        aria-expanded={open} aria-describedby={activeId} value={query} placeholder="搜索产品或价格问题"
+      <input ref={inputRef} aria-label="PriceAgent 快速筛选" aria-haspopup="dialog" aria-controls={open ? 'pricelens-price-search-results' : undefined}
+        aria-expanded={open} aria-describedby={activeId} value={query} placeholder="快速筛选：产品 / 国家 / 档位…"
         onFocus={props.onOpen} onChange={(event) => props.onQuery(event.target.value)}
         onKeyDown={(event) => { if (!event.nativeEvent.isComposing && event.keyCode !== 229) props.onKeyDown(event); }} />
       <kbd aria-label={`快捷键 ${props.shortcut}`}>{props.shortcut}</kbd>
     </div>
+    {props.onUndoApply && <div className="lpl-quick-search-feedback" role="status" aria-live="polite">
+      <span>已应用筛选</span>
+      <button type="button" onClick={props.onUndoApply}>撤销</button>
+    </div>}
     {renderedOpen && <div ref={panelRef} id="pricelens-price-search-results" className="lpl-quick-search-panel"
       role="dialog" aria-label="价格走势快速搜索结果" aria-hidden={!open || undefined}
       style={{ ...placement, pointerEvents: open ? 'auto' : 'none' }}>

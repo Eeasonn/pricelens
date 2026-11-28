@@ -7,14 +7,13 @@ import { useFilters } from '../../state/FiltersContext';
 import { remapSelection, selKey, withCompares, withMain } from '../../state/mainSelection';
 import { seriesKeyMatches, seriesKeyOf } from './tableModel';
 import { compareRomram, defaultColorSkuIds, modelNameOf, type RomramNode } from '../../components/ProductCascader/tree';
-import { color, fontSize, formatPrice, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
+import { color, fontSize, radius, selectAccent, selectSoft, selectSoftInk } from '../../theme/tokens';
 import { referencePriceOf } from '../../components/ProductPicker/tierRecommend';
 
 export interface Category1Option {
   selection: ProductSelection;
   current: boolean;
   disabled: boolean;
-  priceText: string;
 }
 
 export function category1OptionsOf(
@@ -32,7 +31,6 @@ export function category1OptionsOf(
         selection: { modelId: node.modelId, romram: node.romram, skuIds: defaultColorSkuIds(node) },
         current: selKey({ modelId: node.modelId, romram: node.romram, skuIds: [] }) === currentKey,
         disabled: price == null,
-        priceText: price != null ? formatPrice(Math.round(price), currency) : '近期无价',
       };
     });
 }
@@ -126,7 +124,7 @@ export default function Category1QuickSwitch({ series, nodes }: { series: Series
       trigger="click"
       placement="bottomLeft"
       zIndex={1500}
-      styles={{ body: { padding: 6, width: 248 } }}
+      styles={{ body: { padding: 6, width: 188 } }}
       content={
         <div ref={menuRef} role="menu" aria-label={`切换 ${modelNameOf(target.modelId)} 的 category1`} onKeyDown={onKeyDown}>
           {options.map((option) => (
@@ -158,7 +156,6 @@ export default function Category1QuickSwitch({ series, nodes }: { series: Series
             >
               <span style={{ width: 14, flexShrink: 0, color: selectAccent }}>{option.current ? <CheckOutlined aria-hidden /> : null}</span>
               <span className="tnum" style={{ flex: 1 }}>{option.selection.romram}</span>
-              <span className="tnum" style={{ color: option.disabled ? color.mute : color.body }}>{option.priceText}</span>
             </button>
           ))}
         </div>

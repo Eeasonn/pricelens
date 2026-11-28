@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ConfigProvider, Segmented, Select, Tooltip } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useFilters } from '../state/FiltersContext';
@@ -21,6 +21,10 @@ import type { ColumnsGroupBy, ViewMode } from '../state/filtersTypes';
  *  ColumnsView 内，只有卡头行是两视图共享的同一容器，切换不位移。 */
 function ViewSwitchRow() {
   const { state, actions } = useFilters();
+  const lineageAvailable = state.granularity === 'quarter';
+  useEffect(() => {
+    if (state.viewMode === 'lineage' && !lineageAvailable) actions.setViewMode('columns');
+  }, [state.viewMode, lineageAvailable, actions]);
   return (
     <div
       data-testid="view-switch-row"
@@ -35,17 +39,20 @@ function ViewSwitchRow() {
       }}
     >
       <ConfigProvider theme={filterBarTheme}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title={lineageAvailable ? '按季度查看产品族生命周期' : '代际仅支持季度'}>
           <span id="lpl-view-mode-label" style={{ fontSize: 12, color: color.mute }}>视图</span>
           <Segmented
             size="small"
             aria-labelledby="lpl-view-mode-label"
             value={state.viewMode}
-            onChange={(v) => actions.setViewMode(v as ViewMode)}
+            onChange={(v) => {
+              if (v === 'lineage' && !lineageAvailable) return;
+              actions.setViewMode(v as ViewMode);
+            }}
             options={[
               { label: '对标', value: 'compare' },
               { label: '分列', value: 'columns' },
-              { label: '代际', value: 'lineage' },
+              { label: '代际', value: 'lineage', disabled: !lineageAvailable },
             ]}
           />
         </span>

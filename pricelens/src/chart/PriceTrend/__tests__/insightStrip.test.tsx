@@ -1,10 +1,10 @@
 // ============================================================
-// 明细表「分析提示」条（InsightStrip）：最多 3 张 + 「另有 N 条」、计算过程就地
-// 展开、忽略写 sessionStorage 并跨挂载保持、追问以含标题的 prompt 调 openAgent。
+// 明细表「分析提示」条：默认仅一条，其余按需展开；计算过程在独立浮层中
+// 呈现；忽略写 sessionStorage，追问以含标题的 prompt 调 openAgent。
 // ============================================================
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { Insight } from '../insights';
 
 const openAgent = vi.fn();
@@ -45,11 +45,13 @@ afterEach(() => {
 });
 
 describe('InsightStrip', () => {
-  it('region 命名；最多 3 张卡，其余收进「另有 N 条」', () => {
+  it('region 命名；默认仅一条主提示，其余按需展开', () => {
     mount(5);
     expect(screen.getByRole('region', { name: '第一组 分析提示' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: /^追问：/ })).toHaveLength(3);
-    fireEvent.click(screen.getByRole('button', { name: '另有 2 条' }));
+    expect(screen.getAllByRole('button', { name: /^追问：/ })).toHaveLength(1);
+    expect(screen.queryByText('产品2 近 4 周降价 7.0%')).toBeNull();
+    expect(screen.queryByText('输入文本')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '另有 4 条' }));
     expect(screen.getAllByRole('button', { name: /^追问：/ })).toHaveLength(5);
   });
 
@@ -58,17 +60,21 @@ describe('InsightStrip', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('计算过程就地展开 输入 → 输出 五步', () => {
+  it('计算过程在带标题的独立浮层按需展开，不挤开明细', () => {
     mount(1);
     const btn = screen.getByRole('button', { name: '计算过程：产品1 近 4 周降价 6.0%' });
     expect(btn.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('输入文本')).toBeNull();
     fireEvent.click(btn);
     expect(btn.getAttribute('aria-expanded')).toBe('true');
-    const list = screen.getByRole('list', { name: '计算过程：产品1 近 4 周降价 6.0%' });
+    const dialog = screen.getByRole('dialog', { name: '计算过程：产品1 近 4 周降价 6.0%' });
+    expect(within(dialog).getByRole('heading', { name: '计算过程' })).toBeTruthy();
+    const list = within(dialog).getByRole('list', { name: '计算步骤' });
     expect(list.textContent).toContain('输入输入文本');
     expect(list.textContent).toContain('输出输出文本');
-    fireEvent.click(btn);
-    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByRole('region').contains(dialog)).toBe(false);
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭计算过程' }));
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('忽略：卡片消失，id 写入 sessionStorage，重新挂载仍隐藏', () => {

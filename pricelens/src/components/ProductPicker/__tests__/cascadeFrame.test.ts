@@ -12,7 +12,11 @@ import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { autoColumnWidth, frameColumnWidth, type CascadeRowItem } from '../../ProductCascader/CascadePanel';
 import { buildProductTree, type BrandNode } from '../../ProductCascader/tree';
-import { cascadeFrameOf } from '../pickerBits';
+import { cascadeFrameOf, modelTagText, nearestSameTierModelId } from '../pickerBits';
+import type { ProductSelection } from '../../../state/filtersTypes';
+
+const sel = (modelId: string, romram = '12+256 GB'): ProductSelection => ({ modelId, romram, skuIds: [] });
+const price = (modelId: string, usd: number | null, tier: string | null) => ({ sel: sel(modelId), usd, tier });
 
 const tree: BrandNode[] = buildProductTree('phone', 'RU');
 const COLS = ['brand', 'series', 'model', 'romram'] as const;
@@ -48,6 +52,31 @@ describe('frameColumnWidth（与自适应列宽同一公式）', () => {
   });
 });
 
+describe('nearestSameTierModelId（按产品对比的同档最近提示）', () => {
+  it('只在主品同档位中找价格最近的型号，不被其他档位的更小价差吸引', () => {
+    const main = sel('own-main');
+    const entries = [
+      price('own-main', 500, '$400-600'),
+      price('cmp-close-other-tier', 490, '$200-400'),
+      price('cmp-close-same-tier', 550, '$400-600'),
+      price('cmp-far-same-tier', 590, '$400-600'),
+    ];
+    expect(nearestSameTierModelId(entries, main)).toBe('cmp-close-same-tier');
+  });
+
+  it('同价并列按型号自然顺序稳定选择；主品无价格或无候选时不出提示', () => {
+    const main = sel('own-main');
+    expect(nearestSameTierModelId([
+      price('own-main', 500, '$400-600'),
+      price('cmp-z', 500, '$400-600'),
+      price('cmp-a', 500, '$400-600'),
+    ], main)).toBe('cmp-a');
+    expect(nearestSameTierModelId([price('own-main', null, null), price('cmp-a', 500, '$400-600')], main)).toBeNull();
+    expect(nearestSameTierModelId([price('own-main', 500, '$400-600')], main)).toBeNull();
+    expect(nearestSameTierModelId([], null)).toBeNull();
+  });
+});
+
 describe('cascadeFrameOf（全量树四列定宽）', () => {
   const frame = cascadeFrameOf(tree, 'usd', { compareCtx: false });
 
@@ -74,6 +103,12 @@ describe('cascadeFrameOf（全量树四列定宽）', () => {
     expect(noTag.brand).toBe(frame.brand);
     expect(noTag.series).toBe(frame.series);
     expect(noTag.romram).toBe(frame.romram);
+  });
+
+  it('产品筛选器不携带价格、档位和型号数量，列宽不随币种变化', () => {
+    const model = tree[0].series[0].models[0];
+    expect(modelTagText(model, 'usd')).toBe('');
+    expect(cascadeFrameOf(tree, 'usd', { compareCtx: false })).toEqual(cascadeFrameOf(tree, 'local', { compareCtx: false }));
   });
 
   it('空树 → 四列均为下限宽', () => {

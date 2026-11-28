@@ -21,6 +21,8 @@
 }
 .lpl-quick-search-shell input::placeholder { color: var(--qs-mute); opacity: 1; }
 .lpl-quick-search kbd { flex-shrink: 0; font-family: var(--qs-mono); font-size: var(--qs-caption); line-height: 1; color: var(--qs-mute); }
+.lpl-quick-search-feedback { display: flex; align-items: center; justify-content: space-between; gap: var(--qs-sm); margin-top: var(--qs-xs); padding: var(--qs-sm) var(--qs-md); border: 1px solid var(--qs-line); border-radius: var(--qs-control-radius); background: var(--qs-canvas); color: var(--qs-body); font-size: var(--qs-caption); }
+.lpl-quick-search-feedback button { min-height: 24px; padding: 0; border: 0; background: transparent; color: var(--qs-link); text-decoration: underline; text-underline-offset: 3px; }
 .lpl-quick-search-panel {
   position: fixed; z-index: 90; display: flex; flex-direction: column; overflow: hidden;
   border-radius: var(--qs-card-radius); background: var(--qs-canvas); box-shadow: var(--qs-shadow);

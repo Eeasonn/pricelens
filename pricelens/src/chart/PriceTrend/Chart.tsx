@@ -262,6 +262,8 @@ export interface ChartProps {
    *  周=阶梯 / 月季=平滑，默认） */
   lineShape?: LineShapeChoice;
   onLineShape?: (v: LineShapeChoice) => void;
+  /** 分列与代际：缺采段也使用实线，避免把线型误读成产品关系。 */
+  solidMissingBridge?: boolean;
   /** 第110轮（评审）：true = 本图自带时间轴日期标签（分离模式每张小图可独立
    *  截图进 PPT）；缺省 false = 时间标签仍由底部刷选条统一承担 */
   showXLabels?: boolean;
@@ -1191,6 +1193,7 @@ export default function Chart(props: ChartProps) {
         focusKey,
         focusKeys: litKeys ?? undefined,
         lineShape,
+        solidMissingBridge: props.solidMissingBridge,
         xLabels: props.showXLabels === true, // 第110轮：分离面板自带时间轴标签
         labelMode,
         gridRight,
@@ -1723,7 +1726,7 @@ export default function Chart(props: ChartProps) {
                 fill="none"
                 stroke={line.color}
                 strokeWidth={2}
-                strokeDasharray={segment.bridge ? '4 4' : line.lineDash?.join(' ')}
+                strokeDasharray={segment.bridge && props.solidMissingBridge !== true ? '4 4' : line.lineDash?.join(' ')}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 opacity={line.dim ? 0.15 : segment.bridge ? 0.9 : 1}

@@ -1,19 +1,12 @@
-// ============================================================
-// 明细表「分析提示」条（2026-11-28，Eason 拍板）：每组表体上方一条，展示
-// insights.ts 按固定阈值算出的提示卡（最多 3 张，其余收进「另有 N 条」）。
-// 卡内动作：定位（高亮并滚到对应时间列）/ 计算过程（就地展开 输入→筛选→
-// 公式→舍入→输出）/ 追问（交给 Agent 对话，仅在用户点击时发起）/ 忽略（本会话
-// 隐藏，sessionStorage 记账）。规则见 .impeccable/surfaces/detail-insight-strip.md
-// ============================================================
 import { useState } from 'react';
-import { Tooltip } from 'antd';
+import { Popover, Tooltip } from 'antd';
 import { CloseOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useAgent } from '../../state/AgentContext';
-import { color, font, radius, shadow, space } from '../../theme/tokens';
+import { color, font, fontSize, radius, shadow, space } from '../../theme/tokens';
 import type { Insight } from './insights';
 
 export const INSIGHT_DISMISS_KEY = 'LPL3.ui.insightDismissed';
-const MAX_VISIBLE = 3;
+const MAX_VISIBLE = 1;
 export const INSIGHT_FOOTNOTE = '规则提示：由当前图表同源数据按固定阈值计算，不调用模型；解释与建议请用「追问」';
 
 function readDismissed(): string[] {
@@ -52,10 +45,51 @@ const actionBtn = {
   border: 'none',
   background: 'none',
   font: 'inherit',
-  fontSize: 12,
+  fontSize: fontSize.caption,
   color: color.link,
   cursor: 'pointer',
 } as const;
+
+function EvidencePopover({ insight, open, onOpenChange }: {
+  insight: Insight;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Popover
+      trigger="click"
+      placement="topLeft"
+      arrow={false}
+      open={open}
+      onOpenChange={onOpenChange}
+      destroyOnHidden
+      styles={{ body: { padding: 0, width: 440, maxWidth: 'calc(100vw - 32px)' } }}
+      content={
+        <section role="dialog" aria-label={`计算过程：${insight.title}`} style={{ padding: space.base }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: space.md, paddingBottom: space.sm, marginBottom: space.sm, borderBottom: `1px solid ${color.hairline}` }}>
+            <h3 style={{ margin: 0, fontSize: fontSize.bodySm, lineHeight: '20px', color: color.ink }}>计算过程</h3>
+            <button type="button" aria-label="关闭计算过程" onClick={() => onOpenChange(false)} style={{ ...actionBtn, color: color.mute }}>
+              <CloseOutlined aria-hidden />
+            </button>
+          </div>
+          <div style={{ marginBottom: space.md, color: color.body, fontSize: fontSize.caption, lineHeight: '20px' }}>{insight.title}</div>
+          <ol aria-label="计算步骤" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: space.sm, maxHeight: 320, overflowY: 'auto' }}>
+            {insight.evidence.map((e) => (
+              <li key={e.step} style={{ display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr)', gap: space.sm, fontSize: fontSize.caption, lineHeight: '20px', color: color.body }}>
+                <span style={{ fontWeight: 600 }}>{e.step}</span>
+                <span className="tnum" style={{ fontFamily: font.family, fontVariantNumeric: 'tabular-nums', minWidth: 0, overflowWrap: 'anywhere' }}>{e.text}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      }
+    >
+      <button type="button" aria-label={`计算过程：${insight.title}`} aria-haspopup="dialog" aria-expanded={open} style={actionBtn}>
+        计算过程
+      </button>
+    </Popover>
+  );
+}
 
 export default function InsightStrip(props: {
   groupTitle: string;
@@ -87,100 +121,74 @@ export default function InsightStrip(props: {
 
   return (
     <div role="region" aria-label={`${groupTitle} 分析提示`} style={{ marginBottom: space.md }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, fontSize: 12, color: color.body }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: space.xs, marginBottom: space.xs, fontSize: fontSize.caption, color: color.body }}>
         <span style={{ fontWeight: 600, color: color.ink }}>分析提示</span>
-        <span className="tnum" style={{ fontFamily: font.family, fontVariantNumeric: 'tabular-nums', color: color.mute }}>
-          {visible.length}
-        </span>
         <Tooltip title={INSIGHT_FOOTNOTE}>
           <button
             type="button"
             aria-label="分析提示规则说明"
             style={{ display: 'inline-flex', alignItems: 'center', padding: 0, border: 'none', background: 'none', cursor: 'help', color: color.mute }}
           >
-            <QuestionCircleOutlined style={{ fontSize: 12 }} />
+            <QuestionCircleOutlined style={{ fontSize: fontSize.caption }} />
           </button>
         </Tooltip>
         {hiddenCount > 0 && (
-          <button type="button" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)} style={{ ...actionBtn, marginLeft: 4 }}>
+          <button type="button" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)} style={{ ...actionBtn, marginLeft: 'auto' }}>
             {expanded ? '收起' : `另有 ${hiddenCount} 条`}
           </button>
         )}
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.sm }}>
-        {shown.map((it) => {
-          const evOpen = openEvidence === it.id;
-          return (
-            <div
-              key={it.id}
-              data-insight-kind={it.kind}
-              style={{
-                flex: '1 1 240px',
-                minWidth: 240,
-                maxWidth: 420,
-                padding: '8px 10px',
-                background: color.canvas,
-                borderRadius: radius.card,
-                boxShadow: shadow.l1,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 6,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, lineHeight: '18px', color: color.ink }}>{it.title}</span>
-                <button
-                  type="button"
-                  aria-label={`忽略：${it.title}`}
-                  title="本次会话内不再显示"
-                  onClick={() => dismiss(it.id)}
-                  style={{ display: 'inline-flex', alignItems: 'center', padding: 2, border: 'none', background: 'none', cursor: 'pointer', color: color.mute, flexShrink: 0 }}
-                >
-                  <CloseOutlined style={{ fontSize: 10 }} />
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 12, rowGap: 2, fontSize: 11, color: color.mute }}>
+      <div style={{ display: 'grid', gap: space.sm }}>
+        {shown.map((it) => (
+          <div
+            key={it.id}
+            data-insight-kind={it.kind}
+            style={{
+              padding: `${space.sm}px ${space.md}px`,
+              background: color.canvas,
+              borderRadius: radius.card,
+              boxShadow: shadow.l1,
+              display: 'grid',
+              gap: space.xs,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: space.sm }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: fontSize.bodySm, fontWeight: 600, lineHeight: '20px', color: color.ink }}>{it.title}</span>
+              <button
+                type="button"
+                aria-label={`忽略：${it.title}`}
+                title="本次会话内不再显示"
+                onClick={() => dismiss(it.id)}
+                style={{ display: 'inline-flex', alignItems: 'center', padding: space.xs, border: 'none', background: 'none', cursor: 'pointer', color: color.mute, flexShrink: 0 }}
+              >
+                <CloseOutlined aria-hidden style={{ fontSize: fontSize.caption }} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: `${space.xs}px ${space.base}px` }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: space.md, rowGap: space.xs, fontSize: fontSize.caption, color: color.mute }}>
                 {it.figures.map((f) => (
                   <span key={f.label} style={{ whiteSpace: 'nowrap' }}>
                     {f.label}{' '}
-                    <span className="tnum" style={{ fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 600, color: color.body }}>
+                    <span className="tnum" style={{ fontFamily: font.family, fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: color.body }}>
                       {f.value}
                     </span>
                   </span>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ display: 'flex', gap: space.md }}>
                 <button type="button" aria-label={`定位：${it.title}`} onClick={() => onLocate(it.bucketId)} style={actionBtn}>
                   定位
                 </button>
-                <button
-                  type="button"
-                  aria-label={`计算过程：${it.title}`}
-                  aria-expanded={evOpen}
-                  onClick={() => setOpenEvidence(evOpen ? null : it.id)}
-                  style={actionBtn}
-                >
-                  计算过程
-                </button>
+                <EvidencePopover insight={it} open={openEvidence === it.id} onOpenChange={(open) => setOpenEvidence(open ? it.id : null)} />
                 {openAgent && (
                   <button type="button" aria-label={`追问：${it.title}`} onClick={() => openAgent?.('dock', insightPrompt(it))} style={actionBtn}>
                     追问
                   </button>
                 )}
               </div>
-              {evOpen && (
-                <ol aria-label={`计算过程：${it.title}`} style={{ margin: 0, padding: '6px 0 0', listStyle: 'none', borderTop: `1px solid ${color.hairline}`, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {it.evidence.map((e) => (
-                    <li key={e.step} style={{ display: 'flex', gap: 6, fontSize: 11, lineHeight: '16px', color: color.body }}>
-                      <span style={{ flexShrink: 0, fontWeight: 600, color: color.mute }}>{e.step}</span>
-                      <span className="tnum" style={{ fontFamily: font.family, fontVariantNumeric: 'tabular-nums', minWidth: 0 }}>{e.text}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );

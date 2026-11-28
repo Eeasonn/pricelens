@@ -95,11 +95,12 @@ const clickSegmented = (root: HTMLElement, text: string): void => {
 
 // 持久化种子：主品卡 = pura-90s-pro 12+256 GB（注入的 prevGen 链尖），对比区空、
 // 自动匹配关——测试只看拼接链，不被矩阵产出干扰
-const seedMains = (): void => {
+const seedMains = (granularity: 'week' | 'quarter' = 'quarter'): void => {
   const tipSku = lowestPriceColorSku(tipRow.model_id, tipRow.romram) ?? tipRow.sku_id;
   localStorage.setItem(LPL.filters, JSON.stringify({
     ...defaultFilters,
     v: 12,
+    granularity,
     countryCode: 'RU',
     industry: 'phone',
     mains: [{
@@ -130,6 +131,16 @@ afterEach(() => {
 });
 
 describe('代际视图（注入 prevGen 的拼接渲染）', () => {
+  itApp('周与月不允许进入代际，只有季度可选', async () => {
+    cleanup();
+    seedMains('week');
+    render(<App />);
+    const row = screen.getByTestId('view-switch-row');
+    const lineageItem = within(row).getByText('代际').closest('.ant-segmented-item');
+    expect(lineageItem?.className).toContain('ant-segmented-item-disabled');
+    expect(screen.queryByTestId('columns-view')).toBeNull();
+  });
+
   itApp('视图切换行出「代际」；切入渲染链行、阶梯标注、交接新一代名、涨跌文本、读屏数据表', async () => {
     render(<App />);
     const row = screen.getByTestId('view-switch-row');
@@ -179,8 +190,8 @@ describe('代际视图（注入 prevGen 的拼接渲染）', () => {
     const win = JSON.parse(window.sessionStorage.getItem('LPL3.view.lineage.windowIds') ?? 'null') as [string, string];
     // 拼接链（90s-pro + 上一代 80-pro）数据域 = 两代最早有价桶 → 最晚。
     // 全数据域起点 202619（周度数据第一批）远早于近 8 周尾窗起点（尾窗逻辑会给 202641 附近）
-    expect(win[0]).toBe('202619');
-    expect(win[1]).toBe('202648');
+    expect(win[0]).toBe('2026Q2');
+    expect(win[1]).toBe('2026Q4');
     // 共享筛选范围不被代际窗口初始化改写（adaptive 默认开时的对标尾窗口径不变）
     const saved = JSON.parse(window.localStorage.getItem('LPL3.filters') ?? '{}');
     expect(saved.rangeStart).not.toBe('202619');

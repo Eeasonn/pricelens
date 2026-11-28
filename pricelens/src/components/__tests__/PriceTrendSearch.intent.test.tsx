@@ -24,7 +24,7 @@ function renderSearch() {
   </AgentProvider></FiltersProvider></PageProvider></AntdApp>);
 }
 
-const input = () => screen.getByLabelText('AI 快速搜索') as HTMLInputElement;
+const input = () => screen.getByLabelText('PriceAgent 快速筛选') as HTMLInputElement;
 const type = (value: string) => {
   fireEvent.focus(input());
   fireEvent.change(input(), { target: { value } });
@@ -45,6 +45,7 @@ describe('PriceTrendSearch · 快速筛选预览', () => {
     renderSearch();
     const before = probe.state!;
     expect(before.viewMode).toBe('compare');
+    expect(input().placeholder).toBe('快速筛选：产品 / 国家 / 档位…');
     type('Mate X7 同档 苹果 三星 按品牌分列');
     const region = await screen.findByRole('region', { name: '筛选预览' });
     expect(within(region).getByText('产品')).toBeTruthy();
@@ -58,6 +59,7 @@ describe('PriceTrendSearch · 快速筛选预览', () => {
     expect(screen.queryByRole('region', { name: '筛选预览' })).toBeNull();
 
     const undo = await screen.findByRole('button', { name: '撤销' });
+    expect(undo.closest('.lpl-quick-search-feedback')).not.toBeNull();
     act(() => { fireEvent.click(undo); });
     await waitFor(() => expect(probe.state!.viewMode).toBe('compare'));
     expect(JSON.stringify(probe.state!.mains.map((card) => card.main))).toBe(JSON.stringify(before.mains.map((card) => card.main)));

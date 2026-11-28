@@ -206,7 +206,7 @@ The range ruler is the shared reading for a dragged period on the price trend an
 
 ### AgentShell and alerts
 
-AgentShell shares the page tokens and card language. User messages may use a right-aligned ink bubble; Agent messages use conclusion text and structured cards. A standard answer is conclusion, facts, calculation or rule, boundary, and action. Alert cards reuse the warning and error semantics and always show the trigger, threshold, before/after values, data status, and evidence state.
+AgentShell shares the page tokens and card language. User messages may use a right-aligned ink bubble; Agent messages use conclusion text and structured cards. A standard answer is conclusion, facts, calculation or rule, boundary, and action. Conversation mechanics use assistant-ui primitives with the external-store runtime; execution activity becomes native tool-call parts in one compact disclosure, not long inline tool cards. Completed activity is collapsed, while running and failed activity remains visible. Domain filter previews, confirmation and undo stay separate from execution logs. Alert cards reuse the warning and error semantics and always show the trigger, threshold, before/after values, data status, and evidence state. Detail insights default to one concise primary card; additional signals and calculation evidence stay behind explicit, on-demand disclosure so the default analysis surface never becomes a wall of explanatory text.
 
 ## Do's and Don'ts
 

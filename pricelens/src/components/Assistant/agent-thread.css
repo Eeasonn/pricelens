@@ -90,7 +90,17 @@
 .aui-panel .lpl-agent-result-card .lpl-agent-card-section[data-agent-card-section="事实"] { padding-top: 0; border-top: 0; }
 .aui-fallback-notice > summary { cursor: pointer; }
 .aui-fallback-notice > [role="note"] { margin-top: var(--aui-xs); }
-.aui-panel [data-agent-execution] { margin-top: var(--aui-md) !important; padding-top: var(--aui-sm); border-top: 1px solid var(--aui-line); }
+.aui-execution-group { margin: var(--aui-md) 0 0; border: 1px solid var(--aui-line); border-radius: var(--aui-control-radius); background: var(--aui-soft); }
+.aui-execution-group > summary { padding: var(--aui-sm) var(--aui-md); color: var(--aui-body); font-size: var(--aui-caption); cursor: pointer; }
+.aui-execution-group[open] > summary { border-bottom: 1px solid var(--aui-line); }
+.aui-execution-group-body { padding: 0 var(--aui-md); background: var(--aui-canvas); border-radius: 0 0 var(--aui-control-radius) var(--aui-control-radius); }
+.aui-tool-part { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--aui-xs) var(--aui-sm); padding: var(--aui-sm) 0; font-size: var(--aui-caption); line-height: 1.5; }
+.aui-tool-part + .aui-tool-part { border-top: 1px solid var(--aui-line); }
+.aui-tool-part-label { color: var(--aui-body); }
+.aui-tool-part-status { color: var(--aui-mute); }
+.aui-tool-part-status[data-status="failed"] { color: var(--aui-error); }
+.aui-tool-part-status[data-status="running"] { color: var(--aui-warning); }
+.aui-tool-part-result { grid-column: 1 / -1; color: var(--aui-mute); overflow-wrap: anywhere; }
 .aui-panel .lpl-agent-result-card table { font-size: var(--aui-caption) !important; line-height: 1.5; font-variant-numeric: tabular-nums; }
 .aui-panel .lpl-agent-result-card th { padding: var(--aui-sm) !important; background: var(--aui-soft); }
 .aui-panel .lpl-agent-result-card td { padding: var(--aui-sm) !important; }

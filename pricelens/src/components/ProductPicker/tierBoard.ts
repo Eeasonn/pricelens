@@ -1,26 +1,5 @@
-// ============================================================
-// 按档位选择看板纯模型（2026-11-27 二轮改版 · 2026-11-28 二版「一行一款」）：
-// 把「同国同产业全部组的现价落档」组织成每品牌一列的勾选板。口径与规则：
-// · 现价与落档 = dataModel/tierPrice（最新有价期全渠道价格点，剔除低于均值 30%
-//   的异常低价后取最低，USD 口径落 tierBandsOf 阶梯）；
-// · 行单位 = 型号（一款一行），型号下挂全部配置（compareRomram 序）；
-//   起售配置 = 有现价配置里 USD 最低者（并列取配置序靠前）——行的位置 / 排序 /
-//   分段一律按起售配置，用户勾选或换配置都不挪行；全部配置无现价的型号进底部
-//   「暂无现价」段（不穿插）；
-// · 列 = 当前国家+产业有组的品牌，品牌顺序 = 选择产品树 fullTree 顺序；
-//   锚定品牌恒在最左列；段内行序 = 起售 USD 降序、同价按型号名；
-// · 蓝框提示（只是提示，不自动勾选）：hintOf 判单个配置（同档 / 相邻档 / 无），
-//   bestConfigHint 在型号全部配置里取最优（同档 > 相邻档；同级取 |USD − 最近锚价|
-//   最小，再并列取起售配置、配置序）；
-// · 显示配置 = ①用户显式选择（配置 chip 换配置 / 勾选时锁定）②非锚行且锚已勾：
-//   最优提示所在配置 ③起售配置；
-// · chip 提示（chipHintOf）：显示配置 ≠ 起售且非显式选择时 chip 挂同档 / 相邻档样式；
-// · 应用（方案 A）：勾选的锚定型号逐行成一组（板上行序），非锚型号按所选配置
-//   |USD 价差| 就近分配（cardsFromBoard）。
-// 不依赖 currentPricesByGroup 的 Map 键格式：一律取 entry.sel / price / tier，
-// 型号与配置的比较走 selKey（mainSelection 同一归一）。
-// 无副作用、无 React；事实表索引在 dataModel/tierPrice 内按调用现算（不缓存）。
-// ============================================================
+// 档位选择模型：现价由 tierPrice 裁定；本模块维护单主产品草稿、型号级比较配置、
+// 排序与提示。用户显式选择的配置始终优先，不因主品切换而漂移。
 import type { Industry } from '../../dataModel/types';
 import { tierBandsOf } from '../../dataModel/aggregate';
 import { neighborBands, type GroupPriceEntry } from '../../dataModel/tierPrice';
@@ -29,6 +8,7 @@ import { selKey } from '../../state/mainSelection';
 import { brandOfModel, compareRomram, modelNameOf } from '../ProductCascader/tree';
 
 export type BoardHint = 'same' | 'adjacent' | null;
+export type TierSortMode = 'price' | 'name';
 
 /** 型号下的一个配置：现价与落档取自批量裁定 */
 export interface BoardConfig {
@@ -115,6 +95,18 @@ export function startConfig(model: BoardModel): BoardConfig {
   return configByKey(model, model.entryKey) ?? model.configs[0];
 }
 
+export function comparisonConfigOf(model: BoardModel, draft: TierDraft | undefined, anchorUsd: number | null): BoardConfig {
+  const chosen = configByKey(model, draft?.chosen.get(model.modelId));
+  if (chosen) return chosen;
+  if (anchorUsd == null) return startConfig(model);
+  let nearest: BoardConfig | undefined;
+  for (const config of model.configs) {
+    if (config.usd == null) continue;
+    if (!nearest || Math.abs(config.usd - anchorUsd) < Math.abs(nearest.usd! - anchorUsd) - 1e-9) nearest = config;
+  }
+  return nearest ?? startConfig(model);
+}
+
 /** 组建看板列（纯函数）：
  *  byGroup = currentPricesByGroup 结果；dataKeys = 该国有数据（financing-aware）组的
  *  selKey 集；brandOrder = fullTree 品牌序；anchorBrand 提到最左列。
@@ -125,6 +117,7 @@ export function buildBoardColumns(
   brandOrder: readonly string[],
   anchorBrand: string,
   industry: Industry,
+  view: { draft?: TierDraft; sortMode?: TierSortMode } = {},
 ): BoardColumn[] {
   // ① 配置归入型号（同 selKey 去重：防键格式差异导致的重复）
   const byModel = new Map<string, Map<string, BoardConfig>>();
@@ -171,26 +164,34 @@ export function buildBoardColumns(
     : brands;
   const byName = (a: BoardModel, b: BoardModel): number =>
     a.name.localeCompare(b.name, undefined, { numeric: true }) || a.modelId.localeCompare(b.modelId);
+  const anchorConfig = view.draft?.anchorKey
+    ? [...byModel.values()].flatMap((configs) => [...configs.values()]).find((config) => config.selKey === view.draft?.anchorKey)
+    : undefined;
   return ordered.map((brand) => {
     const models = byBrand.get(brand) ?? [];
     const sections = new Map<string | null, BoardModel[]>();
-    for (const m of models) {
-      const list = sections.get(m.startBand);
-      if (list) list.push(m);
-      else sections.set(m.startBand, [m]);
+    for (const model of models) {
+      const band = comparisonConfigOf(model, view.draft, anchorConfig?.usd ?? null).band;
+      const list = sections.get(band);
+      if (list) list.push(model);
+      else sections.set(band, [model]);
     }
+    const byPrice = (a: BoardModel, b: BoardModel): number => {
+      const pa = comparisonConfigOf(a, view.draft, anchorConfig?.usd ?? null).usd;
+      const pb = comparisonConfigOf(b, view.draft, anchorConfig?.usd ?? null).usd;
+      if (pa == null || pb == null) return pa == null && pb == null ? byName(a, b) : pa == null ? 1 : -1;
+      return pb - pa || byName(a, b);
+    };
+    const byView = view.sortMode === 'name' ? (a: BoardModel, b: BoardModel) => byName(b, a) : byPrice;
     const priced = [...sections.entries()]
       .filter(([band]) => band != null)
       .sort((a, b) => bandRank(industry, b[0] as string) - bandRank(industry, a[0] as string))
-      .map(([band, list]) => ({
-        band,
-        models: list.sort((a, b) => (b.startUsd as number) - (a.startUsd as number) || byName(a, b)),
-      }));
+      .map(([band, list]) => ({ band, models: list.sort(byView) }));
     const noPrice = sections.get(null);
     return {
       brand,
       anchor: brand === anchorBrand,
-      sections: noPrice ? [...priced, { band: null, models: noPrice.sort(byName) }] : priced,
+      sections: noPrice ? [...priced, { band: null, models: noPrice.sort(byView) }] : priced,
       count: models.length,
     };
   });
@@ -295,10 +296,9 @@ export function chipHintOf(
   return hintOf(displayed.band, anchors.bands, anchors.industry);
 }
 
-/** 看板列宽（2026-11-28 四轮：264 → 288 / min 272——「iPhone 18 Pro Max」「Pura 90s
- *  Pro Max」级别的型号名完整不截断） */
-export const BOARD_COL_W = 288;
-export const BOARD_COL_MIN_W = 272;
+/** 无价格与说明列后的紧凑列宽；名称过长时省略并在 title 中保留全名。 */
+export const BOARD_COL_W = 240;
+export const BOARD_COL_MIN_W = 220;
 
 /** 看板勾选草稿：checked = 已勾型号 id；chosen = 型号 id → 显式选择的配置 selKey */
 export interface BoardDraft {
@@ -417,4 +417,122 @@ export function cardsFromBoard<T extends { sel: ProductSelection; usd: number | 
     }
     return { main: anchor.sel, compares };
   });
+}
+
+export type RecommendationLevel = 'nearest' | 'same' | 'adjacent';
+
+export interface TierDraft {
+  anchorKey: string | null;
+  chosen: ReadonlyMap<string, string>;
+  checked: ReadonlySet<string>;
+}
+
+export function initialTierDraft(columns: readonly BoardColumn[], mains: readonly MainProduct[]): TierDraft {
+  const owner = new Map<string, { modelId: string; key: string }>();
+  for (const { model } of allModels(columns)) {
+    for (const c of model.configs) owner.set(c.selKey, { modelId: model.modelId, key: c.selKey });
+  }
+  const card = mains[0];
+  const anchorKey = card?.main && owner.has(selKey(card.main)) ? selKey(card.main) : null;
+  const chosen = new Map<string, string>();
+  const checked = new Set<string>();
+  if (card?.main && anchorKey) chosen.set(card.main.modelId, anchorKey);
+  for (const sel of card?.compares ?? []) {
+    const hit = owner.get(selKey(sel));
+    if (!hit || hit.modelId === card?.main?.modelId) continue;
+    chosen.set(hit.modelId, hit.key);
+    checked.add(hit.modelId);
+  }
+  return { anchorKey, chosen, checked };
+}
+
+export function tierSelectionsOf(columns: readonly BoardColumn[], draft: TierDraft): { anchor: BoardConfig; compares: BoardConfig[] } | null {
+  let anchor: BoardConfig | null = null;
+  const compares: BoardConfig[] = [];
+  for (const { model } of allModels(columns)) {
+    const shown = configByKey(model, draft.chosen.get(model.modelId)) ?? startConfig(model);
+    if (draft.anchorKey && shown.selKey === draft.anchorKey) anchor = shown;
+    if (draft.checked.has(model.modelId) && model.modelId !== anchor?.sel.modelId) compares.push(shown);
+  }
+  return anchor ? { anchor, compares: compares.filter((config) => config.sel.modelId !== anchor.sel.modelId) } : null;
+}
+
+export function applyTierDraftToMains(
+  mains: readonly MainProduct[],
+  columns: readonly BoardColumn[],
+  draft: TierDraft,
+  ids: { existingId?: string; newId: string },
+): MainProduct[] {
+  const picked = tierSelectionsOf(columns, draft);
+  if (!picked) return [...mains];
+  const card: MainProduct = {
+    id: ids.existingId ?? ids.newId,
+    main: picked.anchor.sel,
+    auto: false,
+    compares: picked.compares.map((c) => c.sel),
+    compareSources: Object.fromEntries(picked.compares.map((c) => [c.selKey, 'tier'])),
+  };
+  if (ids.existingId) return mains.map((item) => item.id === ids.existingId ? card : item);
+  return [...mains, card];
+}
+
+export function recommendationLevelsOf(
+  columns: readonly BoardColumn[],
+  draft: TierDraft,
+  industry: Industry,
+): ReadonlyMap<string, RecommendationLevel> {
+  const picked = tierSelectionsOf(columns, draft);
+  if (!picked || picked.anchor.usd == null || picked.anchor.band == null) return new Map();
+  const anchor = picked.anchor;
+  const band = anchor.band;
+  if (band == null) return new Map();
+  const levels = new Map<string, RecommendationLevel>();
+  const anchorBands = new Set([band]);
+  for (const column of columns) {
+    if (column.anchor) continue;
+    const candidates = column.sections.flatMap((section) => section.models)
+      .map((model) => comparisonConfigOf(model, draft, anchor.usd))
+      .filter((config) => config.usd != null && hintOf(config.band, anchorBands, industry) != null);
+    const nearestKeys = new Set([...candidates]
+      .sort((a, b) => Math.abs(a.usd! - anchor.usd!) - Math.abs(b.usd! - anchor.usd!)
+        || modelNameOf(a.sel.modelId).localeCompare(modelNameOf(b.sel.modelId), undefined, { numeric: true })
+        || a.selKey.localeCompare(b.selKey))
+      .slice(0, 2)
+      .map((config) => config.selKey));
+    for (const config of candidates) {
+      const hint = hintOf(config.band, anchorBands, industry);
+      if (hint) levels.set(config.selKey, nearestKeys.has(config.selKey) ? 'nearest' : hint);
+    }
+  }
+  return levels;
+}
+
+export function recommendationLevelOfModel(model: BoardModel, levels: ReadonlyMap<string, RecommendationLevel>): RecommendationLevel | null {
+  let best: RecommendationLevel | null = null;
+  const priority: Record<RecommendationLevel, number> = { nearest: 3, same: 2, adjacent: 1 };
+  for (const config of model.configs) {
+    const level = levels.get(config.selKey);
+    if (level && (best == null || priority[level] > priority[best])) best = level;
+  }
+  return best;
+}
+
+export function outlineRunsOf(
+  levels: readonly { base: 'same' | 'adjacent' | null; nearest: boolean }[],
+): Array<{ level: 'same' | 'adjacent' | null; start: number; end: number; nearest: Array<{ start: number; end: number }> }> {
+  const runs: ReturnType<typeof outlineRunsOf> = [];
+  levels.forEach((item, index) => {
+    let group = runs[runs.length - 1];
+    if (!group || group.level !== item.base) {
+      group = { level: item.base, start: index, end: index + 1, nearest: [] };
+      runs.push(group);
+    }
+    group.end = index + 1;
+    if (item.nearest) {
+      const nearest = group.nearest[group.nearest.length - 1];
+      if (nearest?.end === index) nearest.end = index + 1;
+      else group.nearest.push({ start: index, end: index + 1 });
+    }
+  });
+  return runs;
 }

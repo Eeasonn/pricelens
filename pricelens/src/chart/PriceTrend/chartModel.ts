@@ -667,6 +667,8 @@ export function buildOption(p: {
   /** 折线形态（第三十八轮，齿轮可选）：step=方形阶梯（默认，价格在期内恒定）；
    *  smooth=平滑曲线（最初形态）。只换线形，数据/标签/避让不受影响 */
   lineShape?: 'step' | 'smooth';
+  /** 缺采跨接段保持实线（分列与代际）；缺省 false = 原短虚线桥 */
+  solidMissingBridge?: boolean;
   /** 第110轮（评审）：分离模式下每张小图自带时间轴标签（单图可整卡截图进 PPT）；
    *  缺省 false = 与旧口径一致（时间标签由底部刷选条统一承担）。开启后 ECharts
    *  自动按宽度抽稀（hideOverlap），标签画在绘图区下缘的既有留白内 */
@@ -771,7 +773,7 @@ export function buildOption(p: {
             ...shape,
             connectNulls: true,
             symbol: 'none',
-            lineStyle: { color: s.color, width: 2, type: [4, 4], opacity: dim ? 0.15 : 0.9 },
+            lineStyle: { color: s.color, width: 2, ...(p.solidMissingBridge ? {} : { type: [4, 4] }), opacity: dim ? 0.15 : 0.9 },
             z: 11,
             silent: true,
           });

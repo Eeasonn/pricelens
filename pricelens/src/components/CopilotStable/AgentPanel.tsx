@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { CheckOutlined, RedoOutlined, UndoOutlined } from '@ant-design/icons';
 import { Button } from 'antd';
-import { AgentContextDisclosure, AgentThread } from '../Assistant/AgentThread';
+import { AgentContextDisclosure, AgentThread, type AgentToolPart } from '../Assistant/AgentThread';
 import { useAgent } from '../../state/AgentContext';
 import { INDUSTRY_LABELS } from '../../dataModel/scope';
 import { modelNameOf } from '../ProductCascader/tree';
@@ -380,7 +380,7 @@ export function PriceAdvantageCard({ card }: { card: PriceAdvantageResultCard })
   </div>;
 }
 
-export function ToolCallCardView({ card }: { card: ToolCallCard }) {
+export function ToolCallCardView({ card, actionOnly = false }: { card: ToolCallCard; actionOnly?: boolean }) {
   const { appliedFilterIds, filterTransactions, applyFilter, undoFilter } = useAgent();
   const actionsLocked = useContext(CardActionsLockedContext);
   const contextStale = useContext(ResultContextStaleContext);
@@ -390,15 +390,17 @@ export function ToolCallCardView({ card }: { card: ToolCallCard }) {
   const applied = transactionId ? appliedFilterIds.has(transactionId) : false;
   const undoDisabled = actionsLocked || !applied;
   const label = ({ queued: '排队中', running: '运行中', success: '已完成', failed: '失败', waiting_for_approval: '等待确认', cancelled: '已取消' } as Record<string, string>)[card.status];
+  const filterActions = <>
+    {card.filterCard && <div style={actionRowStyle}><button type="button" disabled={applyDisabled} title={contextStale ? '当前筛选已变化，请重新生成预览' : actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={applyDisabled} style={{ ...textButtonStyle, opacity: applyDisabled ? 0.5 : 1, cursor: applyDisabled ? 'not-allowed' : 'pointer' }} onClick={() => { if (applyDisabled) return; const result = applyFilter(card.filterCard!); setApplyError(result.ok ? null : result.error ?? '请重新生成预览'); }}>应用筛选</button><button type="button" disabled={undoDisabled} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={undoDisabled} onClick={() => { if (undoDisabled || !transactionId) return; const undone = undoFilter(transactionId); setApplyError(undone ? null : '已有更新的筛选变更，请先撤销最新变更。'); }} style={{ ...textButtonStyle, opacity: undoDisabled ? 0.5 : 1, cursor: undoDisabled ? 'not-allowed' : 'pointer' }}>撤销恢复</button></div>}
+    {applyError && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>应用失败：{applyError}</div>}
+  </>;
+  if (actionOnly) return <div className="aui-tool-filter-result" data-agent-tool-filter={card.id}>{filterActions}<CardActions actions={card.actions} /></div>;
   return <div className="lpl-agent-result-card" style={cardStyle} data-tool-status={card.status}>
     <div className="lpl-agent-card-title" style={cardTitleStyle}><span>{card.tool}</span><span style={mutedBadge}>{label}</span></div>
     <div style={{ marginTop: 7, fontSize: fontSize.caption, color: color.body }}>输入：{card.inputSummary}</div>
     {card.outputSummary && <div style={{ marginTop: 4, fontSize: fontSize.caption, color: color.body }}>输出：{card.outputSummary}</div>}
     {card.error && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>工具失败：{card.error}</div>}
-    {/* R3（三轮返修 m3）：撤销恢复 = undoFilter 的全局副作用，锁定消息上与应用筛选
-        同等禁用 + 回调守卫，不再裸挂 onClick */}
-    {card.filterCard && <div style={actionRowStyle}><button type="button" disabled={applyDisabled} title={contextStale ? '当前筛选已变化，请重新生成预览' : actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={applyDisabled} style={{ ...textButtonStyle, opacity: applyDisabled ? 0.5 : 1, cursor: applyDisabled ? 'not-allowed' : 'pointer' }} onClick={() => { if (applyDisabled) return; const result = applyFilter(card.filterCard!); setApplyError(result.ok ? null : result.error ?? '请重新生成预览'); }}>应用筛选</button><button type="button" disabled={undoDisabled} title={actionsLocked ? '响应口径与当前上下文不一致，动作已锁定' : undefined} aria-disabled={undoDisabled} onClick={() => { if (undoDisabled || !transactionId) return; const undone = undoFilter(transactionId); setApplyError(undone ? null : '已有更新的筛选变更，请先撤销最新变更。'); }} style={{ ...textButtonStyle, opacity: undoDisabled ? 0.5 : 1, cursor: undoDisabled ? 'not-allowed' : 'pointer' }}>撤销恢复</button></div>}
-    {applyError && <div role="alert" style={{ ...warningStyle, color: color.error, background: color.canvasSoft2 }}>应用失败：{applyError}</div>}
+    {filterActions}
     <details style={{ marginTop: 8, fontSize: fontSize.caption, color: color.mute }}><summary tabIndex={0} style={{ cursor: 'pointer' }}>展开明细</summary><div style={{ marginTop: 5 }}>请求工具：{card.tool} · 状态：{card.status}{card.durationMs != null ? ` · 耗时 ${card.durationMs}ms` : ''}</div></details>
     <CardActions actions={card.actions} />
   </div>;
@@ -521,20 +523,6 @@ function FallbackNotice({ reason }: { reason: string }) {
   </details>;
 }
 
-function ExecutionDetails({ tools, streaming }: { tools: ToolCallCard[]; streaming: boolean }) {
-  const failed = tools.filter((card) => card.status === 'failed').length;
-  const [open, setOpen] = useState(streaming || failed > 0);
-  useEffect(() => { setOpen(streaming || failed > 0); }, [streaming, failed]);
-  const success = tools.filter((card) => card.status === 'success').length;
-  const cancelled = tools.filter((card) => card.status === 'cancelled').length;
-  const active = tools.filter((card) => card.status === 'queued' || card.status === 'running' || card.status === 'waiting_for_approval').length;
-  const summary = [`${success} 成功`, failed ? `${failed} 失败` : '', cancelled ? `${cancelled} 已取消` : '', active ? `${active} 进行中` : ''].filter(Boolean).join(' · ');
-  return <details data-agent-execution open={open} onToggle={(event) => setOpen(event.currentTarget.open)} style={{ marginTop: space.md, fontSize: fontSize.caption, color: color.mute }}>
-    <summary style={{ cursor: 'pointer', color: color.body }}>执行记录 · {summary}</summary>
-    {tools.map((card) => <div data-agent-result-card key={card.id}><ToolCallCardView card={card} /></div>)}
-  </details>;
-}
-
 const cardStyle: CSSProperties = { marginTop: space.md, padding: 12, background: color.canvas, border: `1px solid ${color.hairline}`, borderRadius: radius.card, boxShadow: shadow.l1 };
 const cardTitleStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: fontSize.bodySm, fontWeight: 600, color: color.ink };
 const mutedBadge: CSSProperties = { fontSize: fontSize.caption, fontWeight: 400, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '2px 6px', whiteSpace: 'nowrap' };
@@ -544,12 +532,33 @@ const warningStyle: CSSProperties = { marginTop: 8, padding: '6px 8px', backgrou
 const noteStyle: CSSProperties = { marginTop: 8, color: color.mute, fontSize: fontSize.caption, lineHeight: 1.45 };
 const tableHeadStyle: CSSProperties = { textAlign: 'left', color: color.mute, fontWeight: 500, padding: '4px 5px', borderBottom: `1px solid ${color.hairline}` };
 const tableCellStyle: CSSProperties = { padding: '5px', borderBottom: `1px solid ${color.hairline}`, whiteSpace: 'nowrap', color: color.body };
+function cardsOfMessage(message: import('../../state/AgentContext').AgentMessage): AgentResultCard[] {
+  const cardsById = new Map((message.partialCards ?? [])
+    .filter((card) => !message.response || card.kind === 'tool_call')
+    .map((card) => [card.id, card]));
+  for (const card of message.response?.cards ?? []) cardsById.set(card.id, card);
+  return [...cardsById.values()];
+}
+
+function toolPartsOf(cards: ToolCallCard[]): AgentToolPart[] {
+  return cards.map((card) => ({
+    id: card.id,
+    name: card.tool,
+    input: { status: card.status },
+    result: card.outputSummary ?? card.error,
+    status: card.status,
+  }));
+}
+
 export default function AgentPanel() {
   const agent = useAgent();
   const { messages, context, running, setDraft, send } = agent;
   const { go } = usePage();
-  const threadMessages = messages.map((message, index) => ({
-    ...message,
+  const threadMessages = messages.map((message, index) => {
+    const tools = cardsOfMessage(message).filter((card): card is ToolCallCard => card.kind === 'tool_call');
+    return {
+      ...message,
+      toolParts: toolPartsOf(tools),
     // The stable store owns one placeholder per request. Keep its identity while
     // streaming, completing, cancelling and retrying so the transcript never jumps.
     streaming: running && message.role === 'assistant' && !message.response
@@ -558,7 +567,8 @@ export default function AgentPanel() {
         : index === messages.length - 1 && message.kind !== 'proactive' && Boolean(message.prompt)),
     failed: message.status === 'failed' || message.kind === 'error',
     cancelled: message.status === 'cancelled',
-  }));
+    };
+  });
   const suggestions = messages.some((message) => message.response) ? []
     : messages.length ? AGENT_FOLLOWUP_SUGGESTIONS : agentSuggestionsForPage(context.page);
 
@@ -577,12 +587,7 @@ export default function AgentPanel() {
       if (message.role !== 'assistant') return null;
       // Final cards replace streamed previews with the same id. Tool activity is
       // a single disclosure, after the answer; it never repeats the transcript.
-      const cardsById = new Map((message.partialCards ?? [])
-        .filter((card) => !message.response || card.kind === 'tool_call')
-        .map((card) => [card.id, card]));
-      for (const card of message.response?.cards ?? []) cardsById.set(card.id, card);
-      const cards = [...cardsById.values()];
-      const tools = cards.filter((card): card is ToolCallCard => card.kind === 'tool_call');
+      const cards = cardsOfMessage(message);
       const locked = message.staleMismatch === true || message.actionsLocked === true || message.streaming;
       const stale = Boolean(message.contextFingerprint && message.contextFingerprint !== context.fingerprint);
       const fallbackReason = message.fallbackReason ?? message.response?.fallbackReason;
@@ -614,8 +619,8 @@ export default function AgentPanel() {
         {!message.staleMismatch && message.actionsLocked && cards.some((card) => card.kind !== 'tool_call') && <div style={warningStyle}>部分结果 · 尚未完成核对，暂不可应用到看板</div>}
         <ResultContextStaleContext.Provider value={stale}><CardActionsLockedContext.Provider value={locked}>
           {cards.filter((card) => card.kind !== 'tool_call').map((card) => <div data-agent-result-card key={card.id}><ResultCard card={card} /></div>)}
+          {cards.filter((card): card is ToolCallCard => card.kind === 'tool_call' && Boolean(card.filterCard || card.actions?.length)).map((card) => <div data-agent-result-card key={card.id}><ToolCallCardView card={card} actionOnly /></div>)}
           {message.response && <Citations response={message.response} />}
-          {tools.length > 0 && <ExecutionDetails tools={tools} streaming={Boolean(message.streaming)} />}
           {message.response && <div style={{ display: 'flex', flexWrap: 'wrap', gap: space.sm, marginTop: space.md }}>
             {message.response.suggestions.map((suggestion) => {
               const label = suggestionLabel(suggestion);

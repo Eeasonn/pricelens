@@ -80,6 +80,7 @@ import { useFilters } from '../../state/FiltersContext';
 import { useNarrowViewport } from '../../state/useNarrowViewport';
 import { filterBarTheme } from '../FilterBar';
 import { INDUSTRY_LABELS, INDUSTRY_ORDER, industriesOfCountry } from '../../dataModel/scope';
+import { currentPricesByGroup } from '../../dataModel/tierPrice';
 import type { Industry } from '../../dataModel/types';
 import type { MainProduct, ProductSelection } from '../../state/filtersTypes';
 import BrandDot, { brandLabelOf } from '../BrandMark';
@@ -108,7 +109,6 @@ import {
   PANEL_Z,
   RomramChip,
   RowText,
-  StateTag,
   TIP_Z,
   cascadePlacementOf,
   clampPanelPos,
@@ -117,8 +117,9 @@ import {
   useTopEscClose,
   useTreeData,
   cascadeFrameOf,
-  modelTagText,
+  nearestSameTierModelId,
   PICKER_EDGE,
+
 } from './pickerBits';
 import { PANEL_EXIT_MS, prefersReducedMotion } from '../../theme/motion';
 import {
@@ -382,6 +383,10 @@ function LevelSwitchPopover({
   const series = brand?.series.find((s) => s.key === path?.[1]) ?? brand?.series[0];
   const model = series?.models.find((m) => m.modelId === path?.[2]) ?? series?.models[0];
   const activeCard = 'cardId' in ctx ? mains.find((c) => c.id === ctx.cardId) ?? null : null;
+  const comparePrices = useMemo(() => currentPricesByGroup(state.industry, state.countryCode), [state.industry, state.countryCode]);
+  const nearestCompareModelId = useMemo(() => comparesCtx
+    ? nearestSameTierModelId([...comparePrices.values()].map((entry) => ({ sel: entry.sel, usd: entry.price.usd, tier: entry.tier })), activeCard?.main ?? null)
+    : null, [comparesCtx, comparePrices, activeCard]);
 
   /** 主品落位：add-main 建卡；set-main 补选；replace-main 整卡替换（颜色同色优先） */
   const pickConfig = (r: RomramNode): void => {
@@ -569,7 +574,6 @@ function LevelSwitchPopover({
         const s = b.series[0];
         setPath([b.key, s?.key ?? '', s?.models[0]?.modelId ?? '']);
       },
-      trailing: <span style={{ fontSize: 10, color: color.mute, flexShrink: 0 }}>{b.modelCount} 型号</span>,
     }));
     const seriesItems: CascadeRowItem[] = (brand?.series ?? []).map((s) => ({
       key: s.key,
@@ -583,7 +587,6 @@ function LevelSwitchPopover({
       ) : undefined,
     }));
     const sortedModels = sortModelNodes(series?.models ?? [], modelSort, currency);
-    // 配置行构造（第一百五十三轮自 romramItems 抽出）：无配置层级的产品（可用配置
     // 只有 '—'，如 Watch Ultimate 2）型号行即选择叶，直接复用该交互、不再出现
     // 「—」配置列叶子
     const romramRowOf = (r: RomramNode): CascadeRowItem => {
@@ -670,11 +673,11 @@ function LevelSwitchPopover({
         onLabelClick: () => {
           if (!blocked) pickConfig(r);
         },
-        trailing: isCurrent ? <StateTag text="当前" /> : taken ? <StateTag text="已选" /> : undefined,
+        trailing: undefined,
       } satisfies CascadeRowItem;
     };
     const modelItems: CascadeRowItem[] = sortedModels.map((m) => {
-      const tag = modelTagText(m, currency);
+      const nearest = comparesCtx && nearestCompareModelId === m.modelId;
       // 第一百五十三轮：无配置层级的产品（可用配置只有 '—'，如 Watch Ultimate 2）
       // 型号行即选择叶——复用配置行的选择/对比交互与行尾状态，不再出现「—」叶子
       const usable = usableRomrams(m.romrams);
@@ -685,6 +688,7 @@ function LevelSwitchPopover({
           key: m.modelId,
           label: m.label,
           leading: <BrandDot brand={m.brand} />,
+          hint: nearest ? 'nearest' : undefined,
           checkState: leaf.checkState,
           onCheckChange: leaf.onCheckChange,
           onLabelClick: leaf.onLabelClick,
@@ -694,7 +698,6 @@ function LevelSwitchPopover({
                 <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
               )}
               {leaf.trailing}
-              {tag && <span className="tnum" style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{tag}</span>}
             </span>
           ),
         } satisfies CascadeRowItem;
@@ -703,6 +706,7 @@ function LevelSwitchPopover({
         key: m.modelId,
         label: m.label,
         leading: <BrandDot brand={m.brand} />,
+        hint: nearest ? 'nearest' : undefined,
         // 勾选框通用范式：勾型号 = 该产品全部配置（原「＋ 全部型号」按钮）
         checkState: groupCheckState(usable),
         onCheckChange: (next) => toggleGroup([m], next),
@@ -713,7 +717,6 @@ function LevelSwitchPopover({
             {m.eol && (
               <span style={{ fontSize: 10, color: color.mute, border: `1px solid ${color.hairline}`, borderRadius: radius.pill, padding: '0 6px', lineHeight: '16px' }}>退市</span>
             )}
-            {tag && <span className="tnum" style={{ fontSize: 10, color: color.mute, flexShrink: 0, whiteSpace: 'nowrap' }}>{tag}</span>}
           </span>
         ),
       };
@@ -1394,7 +1397,7 @@ function SaveTemplateDialog({
  *  编辑区（两套草稿分别保存，来回切换不丢）。
  *  切产业 = 直接执行；各产业的已选按产业分别保留（会话快照），切回即恢复，
  *  不再弹确认条。 */
-function PickerPanel() {
+export function PickerPanel() {
   const { state, actions } = useFilters();
   const narrow = useNarrowViewport();
   const industry = state.industry;
@@ -1403,6 +1406,7 @@ function PickerPanel() {
   // 按档位应用后组件自行切回按产品。「分析结构」开关随品牌全景退场——选择草稿
   // 恒为 mains，视图（对标/分列）在图表侧切换。
   const [selectMode, setSelectMode] = useState<'product' | 'tier'>('product');
+  const [tierUndo, setTierUndo] = useState<MainProduct[] | null>(null);
   const available = useMemo(() => new Set<Industry>(industriesOfCountry(state.countryCode)), [state.countryCode]);
   const industryOptions = INDUSTRY_ORDER.map((ind) => ({
     label: INDUSTRY_LABELS[ind],
@@ -1446,8 +1450,12 @@ function PickerPanel() {
           />
         </div>
       </div>
+      {tierUndo && <div data-testid="tier-undo" role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, padding: '8px 12px', border: `1px solid ${color.hairline}`, borderRadius: radius.control, color: color.body, fontSize: 12 }}>
+        <span>已应用档位选择</span>
+        <button type="button" onClick={() => { actions.setMains(tierUndo); setTierUndo(null); }} style={{ padding: 0, border: 'none', background: 'none', color: color.link, cursor: 'pointer', font: 'inherit' }}>撤销</button>
+      </div>}
       {selectMode === 'tier' ? (
-        <TierBoardPicker onApplied={() => setSelectMode('product')} />
+        <TierBoardPicker onApplied={(previous) => { setTierUndo(previous); setSelectMode('product'); }} />
       ) : (
         <ComparePanelBody />
       )}

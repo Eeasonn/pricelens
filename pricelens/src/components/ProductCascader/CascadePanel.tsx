@@ -33,6 +33,8 @@ export interface CascadeRowItem {
   onActivate?: () => void;
   /** 点击行文本的附加行为（如平台树：点文字=勾选）；不传则点击仅激活 */
   onLabelClick?: () => void;
+  /** 对比选择时，当前主品同档位里价格最近的型号使用轻量提示框。 */
+  hint?: 'nearest';
   /** 窄屏单列：可下钻行在点击 / → 时进入下一级。焦点不触发，避免连跳两级 */
   onDrill?: () => void;
   active?: boolean;
@@ -211,6 +213,7 @@ function Column({ items, width, last, open, fillFlex, height, header, rowHeight,
           key={item.key}
           role="treeitem"
           aria-label={item.label}
+          data-hint={item.hint ?? undefined}
           aria-selected={Boolean(item.active)}
           aria-checked={item.checkState ? item.checkState === 'checked' : undefined}
           aria-expanded={expandable ? Boolean(item.active) : undefined}
@@ -251,7 +254,9 @@ function Column({ items, width, last, open, fillFlex, height, header, rowHeight,
             padding: `0 ${space.md}px`,
             background: item.active ? selectSoft : 'transparent',
             cursor: item.onActivate || item.onLabelClick ? 'pointer' : 'default',
-            outlineOffset: -2,
+            outline: item.hint === 'nearest' ? `1px solid ${selectAccent}` : undefined,
+            outlineOffset: item.hint === 'nearest' ? 1 : undefined,
+            borderRadius: item.hint === 'nearest' ? radius.control : undefined,
           }}
         >
           {item.checkState && (

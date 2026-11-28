@@ -218,7 +218,7 @@ describe('t428u 返修 R2 · 空预警卡固定结构（DOM 顺序）', () => {
   });
 });
 
-describe('t428u 返修 R3 · 终态后不残留「运行中」工具卡', () => {
+describe('t428u 返修 R3 · 终态执行记录不残留运行状态', () => {
   beforeEach(() => resetTo('/?p=dashboard'));
 
   it('价格优势完成后：无 running/queued 工具卡，流事件卡与完成态步骤卡按工具合并', async () => {
@@ -234,8 +234,7 @@ describe('t428u 返修 R3 · 终态后不残留「运行中」工具卡', () => 
     for (const card of toolCards) {
       expect(['success', 'failed', 'cancelled']).toContain(card.getAttribute('data-tool-status'));
     }
-    // 同一工具不出现双卡：合并后恰好是响应步骤里的 4 个工具
-    const toolNames = toolCards.map((card) => (card.closest('.lpl-agent-result-card')?.querySelector('.lpl-agent-card-title span') ?? null)?.textContent ?? null);
+    const toolNames = toolCards.map((card) => card.getAttribute('data-agent-tool'));
     expect(toolNames.filter(Boolean)).toHaveLength(4);
     expect([...new Set(toolNames)].sort()).toEqual(['catalog.resolve', 'series.compare', 'series.query', 'view.preview']);
   });

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntdApp, message as staticMessage } from 'antd';
 import { dimProduct } from '../data';
 import { buildFilterChanges, buildFilterPatch } from '../agent-stable/core';
 import { parseFilterIntent } from '../agent-stable/intentFilter';
@@ -14,7 +13,7 @@ import type { FiltersState, MainProduct, ProductSelection } from '../state/filte
 import { brandLabelOf } from './BrandMark';
 import { AGENT_STATUS_LABELS, platformShortcutLabel, PRICE_TREND_AI_SUGGESTIONS } from './CopilotStable/agentCopy';
 import { PriceSearchSurface, type SearchFilterPreview } from './Search/PriceSearchSurface';
-import { color, space } from '../theme/tokens';
+
 
 type SearchMode = 'products' | 'ai';
 
@@ -138,9 +137,7 @@ export default function PriceTrendSearch() {
   /** 用户用 ↑↓ 显式选中了某条产品命中：此时 Enter 选产品而非应用预览 */
   const arrowedRef = useRef(false);
   const submittedPromptRef = useRef('');
-  const { message: contextMessage } = AntdApp.useApp();
-  // App 上下文外（单测 / 独立挂载）useApp 返回空壳，回落静态 message
-  const toast = typeof contextMessage?.success === 'function' ? contextMessage : staticMessage;
+  const [undoPatch, setUndoPatch] = useState<Partial<FiltersState> | null>(null);
 
   const hits = useMemo(() => productHits(query, state.countryCode, state.industry).slice(0, query.trim() ? 6 : 4), [query, state.countryCode, state.industry]);
   const trimmed = query.trim();
@@ -255,14 +252,8 @@ export default function PriceTrendSearch() {
     // 撤销只恢复本次补丁涉及的键（取应用前的值）
     const before = Object.fromEntries(keys.map((key) => [key, state[key]])) as Partial<FiltersState>;
     actions.set(next.patch);
+    setUndoPatch(before);
     close();
-    const key = `price-search-apply-${Date.now()}`;
-    void toast.success({
-      key,
-      content: <span>已应用筛选<button type="button"
-        style={{ marginLeft: space.sm, padding: 0, border: 0, background: 'transparent', color: color.link, textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer', font: 'inherit' }}
-        onClick={() => { actions.set(before); toast.destroy(key); }}>撤销</button></span>,
-    });
     return true;
   };
 
@@ -303,7 +294,8 @@ export default function PriceTrendSearch() {
     activeIndex={activeIndex} shortcut={shortcutLabel} running={running} failure={aiFailureMessage} status={aiStatusMessage}
     completed={sameAsSubmitted && runStatus === 'completed'} suggestions={templates}
     preview={trimmed ? previewed?.preview ?? null : null} onApplyPreview={applyPreview} onPreviewToAgent={previewToAgent}
-    onOpen={() => openSearch()} onQuery={(value) => { setQuery(value); openSearch(); }}
+    onUndoApply={undoPatch ? () => { actions.set(undoPatch); setUndoPatch(null); } : undefined}
+    onOpen={() => openSearch()} onQuery={(value) => { setUndoPatch(null); setQuery(value); openSearch(); }}
     onMode={setMode} onActive={setActiveIndex}
     onSelect={(index, skuId) => selectProduct(hits[index], skuId)}
     onSuggestion={(index) => useSuggestion(templates[index])} onSubmit={searchWithAgent}

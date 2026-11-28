@@ -34,3 +34,12 @@ The retained result-card adapters still contain older inline spacing values outs
 ## Completion
 
 Run design:check, design:lint, typecheck, full check and build. Exercise the built channel, narrow viewport, keyboard/composition, send/stop, drafts, result locks and evidence. Screenshots and build artifacts are local verification outputs, not new Git assets.
+
+
+## 2026-11-28 · 原生工具记录与清爽默认态
+
+- `AgentThread` 将领域执行卡转换为 assistant-ui 原生 `tool-call` parts，并通过 `MessagePrimitive.Parts` 的 `tools.Fallback` 与 `ToolGroup` 渲染；不恢复旧的长执行卡，也不使用已弃用的 `makeAssistantToolUI`。
+- 完成态执行记录默认折叠为一个“执行记录 · N 项”容器；运行中、等待确认与失败保持可见。记录仅含工具名、状态和短结果，不展示模型内部推理。
+- 工具卡携带的 `filterCard` 是独立领域结果动作，继续经过 `ToolCallCardView(actionOnly)` 渲染，保留预览、过期锁定、确认、撤销/重做与交易归属；它不是执行日志，不能因记录折叠而消失。
+- 顶部快速筛选沿用 `PriceTrendSearch` 的唯一意图解析、预览、应用与撤销路径；入口文案为“快速筛选：产品 / 国家 / 档位…”，不建立另一套 Agent 状态。
+- 相关回归覆盖原生 part 转换、默认折叠、运行/失败可见、筛选写入与撤销边界。最终页面以无长段解释堆叠、可操作和证据可追查为验收标准。
